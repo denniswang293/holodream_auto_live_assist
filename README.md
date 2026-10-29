@@ -2,7 +2,6 @@
 
 HoloDream 目前只保留 Windows 全螢幕即時 Assist：以 720×404 座標辨識六鍵軌道，按 `S D F J K L` 對應遊戲鍵。輸入啟動時關閉，只有使用者在遊戲前景按下 `Ctrl+Shift+Alt+Q` 並放開組合鍵後才會啟用。
 
-Assist 是實戰輔助工具，辨識和遊戲命中率尚未由獨立人工真值驗證。幾何檔目前標記為 `pending_calibration`；執行 FPS、延遲、事件數和送鍵數不代表準確率。
 
 ## 安裝
 
