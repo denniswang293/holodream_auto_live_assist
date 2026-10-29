@@ -1,0 +1,510 @@
+{
+  "schema_version": 4,
+  "reference_resolution": [
+    720,
+    404
+  ],
+  "lane_count": 6,
+  "key_map": [
+    "S",
+    "D",
+    "F",
+    "J",
+    "K",
+    "L"
+  ],
+  "model_type": "linear",
+  "status": "pending_calibration",
+  "created_at": "2026-10-27T00:49:40.164394+00:00",
+  "updated_at": "2026-10-28T06:01:24.778611+00:00",
+  "source": {
+    "video": "C:\\Users\\USER\\Desktop\\holodream\\output\\live_v6\\run_20261028T053448_966460Z\\live_source_v6.mp4",
+    "video_sha256": "52dd25aa3ae568e520a8547bd4514c5782acb250ac2c952876b857edaf67b81f",
+    "fps": 60.0,
+    "frame_count": 9309
+  },
+  "controls": {
+    "lane_rows": [
+      {
+        "id": "spawn",
+        "band": "spawn",
+        "y": 28.0,
+        "points": [
+          {
+            "x": 317.11,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 331.02633333333335,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 344.9426666666667,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 358.85900000000004,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 372.7753333333333,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 386.69166666666666,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 400.608,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          }
+        ]
+      },
+      {
+        "id": "middle",
+        "band": "middle",
+        "y": 176.75,
+        "points": [
+          {
+            "x": 188.05101080246914,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 245.16162011316874,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 302.27222942386834,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 359.38283873456794,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 416.4934480452675,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 473.6040573559671,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 530.7146666666667,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          }
+        ]
+      },
+      {
+        "id": "hit",
+        "band": "hit",
+        "y": 325.5,
+        "points": [
+          {
+            "x": 58.99202160493826,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 159.29690689300412,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 259.60179218107,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 359.9066774691358,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 460.21156275720165,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 560.5164480452675,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          {
+            "x": 660.8213333333333,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          }
+        ]
+      }
+    ],
+    "outer_rows": [
+      {
+        "y": 28.0,
+        "left": {
+          "x": 317.11,
+          "y": 28.0,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        },
+        "right": {
+          "x": 400.608,
+          "y": 28.0,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        }
+      },
+      {
+        "y": 176.75,
+        "left": {
+          "x": 188.05101080246914,
+          "y": 176.75,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        },
+        "right": {
+          "x": 530.7146666666666,
+          "y": 176.75,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        }
+      },
+      {
+        "y": 325.5,
+        "left": {
+          "x": 58.99202160493827,
+          "y": 325.5,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        },
+        "right": {
+          "x": 660.8213333333333,
+          "y": 325.5,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        }
+      }
+    ],
+    "hit_line": [
+      {
+        "x": 58.99202160493827,
+        "y": 325.5,
+        "origin": "derived_estimate",
+        "confirmed": false,
+        "frame": 1298,
+        "reviewer": "",
+        "method": "retained_lane_projection_at_measured_live_judgment",
+        "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+      },
+      {
+        "x": 660.8213333333333,
+        "y": 325.5,
+        "origin": "derived_estimate",
+        "confirmed": false,
+        "frame": 1298,
+        "reviewer": "",
+        "method": "retained_lane_projection_at_measured_live_judgment",
+        "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+      }
+    ]
+  },
+  "frame_transform": {
+    "native_size": [
+      720,
+      404
+    ],
+    "crop": [
+      0,
+      0,
+      720,
+      404
+    ],
+    "coordinate_space": "native_recorded_source",
+    "preview_only": true
+  },
+  "validation_evidence": null,
+  "notes": "UNVERIFIED live control geometry: judgment bar measured from persistent native-frame edges; lane projection retained and compared with temporal cyan rails at upper/middle/lower heights. Original video geometry and human annotations are not overwritten.",
+  "model_parameters": {
+    "definition": "native frame coordinates; piecewise x per boundary vs y; homography uses normalized frame"
+  },
+  "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+  "derived_from_geometry_sha256": "f1aae5990a73f74be2ef563d1e4487e61c5f57d255e6f0c8454e7d66b633435b",
+  "live_measurement": {
+    "frames": [
+      1298,
+      1396,
+      1495,
+      1594,
+      1693,
+      1792,
+      1891,
+      1990,
+      2089,
+      2188,
+      2287,
+      2386,
+      2485,
+      2584,
+      2683,
+      2782,
+      2881,
+      2980,
+      3079,
+      3178,
+      3277,
+      3375,
+      3474,
+      3573,
+      3672,
+      3771,
+      3870,
+      3969,
+      4068,
+      4167,
+      4266,
+      4365,
+      4464,
+      4563,
+      4662,
+      4761,
+      4860,
+      4959,
+      5058,
+      5157,
+      5256,
+      5354,
+      5453,
+      5552,
+      5651,
+      5750,
+      5849,
+      5948,
+      6047,
+      6146,
+      6245,
+      6344,
+      6443,
+      6542,
+      6641,
+      6740,
+      6839,
+      6938,
+      7037,
+      7136,
+      7235,
+      7333,
+      7432,
+      7531,
+      7630,
+      7729,
+      7828,
+      7927,
+      8026,
+      8125,
+      8224,
+      8323,
+      8428,
+      8527,
+      8626,
+      8725,
+      8824,
+      8923,
+      9022,
+      9121,
+      9220
+    ],
+    "judgment_y": 325.5,
+    "split_sample_judgment_ys": [
+      325.5,
+      325.5,
+      325.5
+    ],
+    "rail_fit_p95_px": [
+      0.608288201259981,
+      0.9317656153163054
+    ],
+    "rail_registration": [
+      {
+        "y": 28.0,
+        "retained_rails": [
+          317.11,
+          400.608
+        ],
+        "measured_rail_fit": [
+          318.5801069273662,
+          401.0030220173242
+        ],
+        "max_difference_px": 1.4701069273662029
+      },
+      {
+        "y": 190.0,
+        "retained_rails": [
+          176.555,
+          542.304
+        ],
+        "measured_rail_fit": [
+          178.0024936397467,
+          541.7573488228456
+        ],
+        "max_difference_px": 1.447493639746682
+      },
+      {
+        "y": 325.5,
+        "retained_rails": [
+          58.99202160493827,
+          660.8213333333333
+        ],
+        "measured_rail_fit": [
+          60.42060104423774,
+          659.487048095365
+        ],
+        "max_difference_px": 1.4285794392994688
+      }
+    ],
+    "status": "AUTO_ESTIMATE_NOT_MANUAL_VALIDATION",
+    "judgment_bar_top_y": 313
+  }
+}

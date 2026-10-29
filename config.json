@@ -1,0 +1,53 @@
+{
+  "reference_resolution": [720, 404],
+  "key_map": ["S", "D", "F", "J", "K", "L"],
+  "playfield": {
+    "top_y": 28,
+    "top_left_x": 346,
+    "top_right_x": 374,
+    "hit_y": 352,
+    "bottom_left_x": 36,
+    "bottom_right_x": 684
+  },
+  "capture": {"fps_target": 120, "crop_game_window": true},
+  "timing": {"offset_ms": 0, "tap_duration_ms": 25},
+  "control": {"dry_run": true, "flick_mode": "unverified", "hold_mode": "unverified"},
+  "detector": {
+    "edge_threshold": 65,
+    "min_area": 55,
+    "min_aspect": 2.0,
+    "min_score": 0.42,
+    "min_lane_width": 0.7,
+    "min_colored_fraction": 0.12,
+    "lane_min_overlap_fraction": 0.15
+  },
+  "gameplay": {
+    "confirm_frames": 3,
+    "hsv_lower": [78, 65, 170],
+    "hsv_upper": [104, 255, 255],
+    "min_cyan_fraction": 0.15,
+    "hud_regions": {"score": [80, 10, 280, 38], "life": [550, 10, 655, 40], "pause": [675, 10, 710, 50]}
+  },
+  "tracker": {
+    "confirm_observations": 5,
+    "max_missed_frames": 8,
+    "max_gap_s": 0.16,
+    "max_u_step": 0.09,
+    "backward_jitter_px": 3.5,
+    "stationary_after_s": 0.20,
+    "stationary_span_px": 5,
+    "max_hit_drift_s": 0.08
+  },
+  "predictor": {
+    "window": 11,
+    "min_observations": 5,
+    "min_duration_s": 0.05,
+    "min_velocity": 20,
+    "max_velocity": 1800,
+    "min_displacement_px": 5,
+    "jitter_px": 3.5,
+    "lookahead_s": 1.5,
+    "max_uncertainty_s": 0.04
+  },
+  "events": {"max_eta_s": 0.45, "min_y": 190, "max_hit_drift_s": 0.06}
+}

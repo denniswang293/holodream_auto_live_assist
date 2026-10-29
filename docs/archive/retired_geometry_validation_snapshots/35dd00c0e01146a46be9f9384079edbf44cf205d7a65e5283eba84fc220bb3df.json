@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "independent_of_models": true,
+  "reference_resolution": [
+    720,
+    404
+  ],
+  "source": {
+    "video": "C:\\Users\\USER\\Desktop\\holodream\\holodream.mp4",
+    "video_sha256": "5460f940aa22875fc75084b3127f64265b1badbe0373e895a4258cc6d6a6bb91",
+    "fps": 60.0,
+    "frame_count": 3553
+  },
+  "points": [],
+  "notes": "No confirmed observations yet. Never fill these labels with model predictions."
+}

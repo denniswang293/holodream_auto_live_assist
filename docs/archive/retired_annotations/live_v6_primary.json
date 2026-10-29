@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "source": {
+    "run": "C:\\Users\\USER\\Desktop\\holodream\\output\\live_v5",
+    "video": "C:\\Users\\USER\\Desktop\\holodream\\output\\live_v5\\live_overlay.mp4",
+    "video_sha256": "27e1c7d67c0ee4fa3414ce8bdb0f81f0ee856dc3ab59986bd3b0ff85f3e8bafd",
+    "mapping_sha256": "eb9dedd9e218fc36048fbb9c741361b01ddc5d04867ccd58952a31ccc578c359",
+    "geometry_sha256": "f1aae5990a73f74be2ef563d1e4487e61c5f57d255e6f0c8454e7d66b633435b",
+    "video_kind": "annotated_overlay_only"
+  },
+  "labels": [],
+  "complete_windows": [],
+  "notes": "Independent manual observations only. No detector labels copied as truth. Host capture time, never video_frame / nominal FPS."
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "source": {
+    "run": "C:\\Users\\USER\\Desktop\\holodream\\output\\live_v6\\run_20261028T180033_579323Z",
+    "video": "C:\\Users\\USER\\Desktop\\holodream\\output\\live_v6\\run_20261028T180033_579323Z\\live_source_v6.mp4",
+    "video_sha256": "45ac36de0028c859144f593fae59244a3b4b712e98f25f01fa1957636010f632",
+    "mapping_sha256": "6303cee59f7455cc878d63b3f1883d0b34473b55eae6535cca5f2355011f163d",
+    "geometry_sha256": "f1aae5990a73f74be2ef563d1e4487e61c5f57d255e6f0c8454e7d66b633435b",
+    "video_kind": "clean_source"
+  },
+  "labels": [],
+  "complete_windows": [],
+  "notes": "Independent manual observations only. No detector labels copied as truth. Host capture time, never video_frame / nominal FPS."
+}
