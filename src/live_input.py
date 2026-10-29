@@ -73,6 +73,10 @@ class TapScheduler:
         self.processing_capture = None
         self.waiting_for_decision = False
         self.pending, self.held = {}, {}
+        # LiveEngine may pause a pending action during a visual dropout. It
+        # must explicitly resume or withdraw the frozen key/deadline; the
+        # scheduler never invents a replacement action.
+        self.suspended = set()
         self.pending_reservations = {}
         self.consumed = set()
         self.recent = deque(maxlen=256)
@@ -173,6 +177,7 @@ class TapScheduler:
                 self._log("canceled", reason, intent)
                 self._remove_pending_reservation(intent.event_id)
             self.pending.clear()
+            self.suspended.clear()
             self.pending_reservations.clear()
             for key in list(self.held):
                 try:
@@ -232,9 +237,20 @@ class TapScheduler:
         if reservation in self.recent:
             self.recent.remove(reservation)
 
+    def suspend(self, event_id):
+        """Pause a pending key-down without discarding its frozen intent."""
+        with self.lock:
+            if event_id in self.pending:
+                self.suspended.add(event_id)
+
+    def resume(self, event_id):
+        with self.lock:
+            self.suspended.discard(event_id)
+
     def withdraw(self, event_id, reason, *, retryable=False):
         with self.lock:
             intent = self.pending.pop(event_id, None)
+            self.suspended.discard(event_id)
             if intent:
                 # A canceled action never pressed this key. Remove its time
                 # reservation even if the event itself cannot be retried.
@@ -290,6 +306,8 @@ class TapScheduler:
             if not self.armed:
                 return
             for event_id, intent in list(self.pending.items()):
+                if event_id in self.suspended:
+                    continue
                 if now < intent.hit_at:
                     continue
                 del self.pending[event_id]

@@ -20,6 +20,8 @@ from .tracker import Tracker
 from .tap_assignment import AnyCoveredKeyRule
 from .hold_visual import path_runs, nearest_run
 
+PROVISIONAL_TAP_LOSS_GRACE_S = .070
+
 
 def track_options(track, now, known_keys, event_cfg, *, allow_range=False, speculative=None,
                   nearline_y=None):
@@ -146,6 +148,12 @@ class LiveEngine:
         self.last_decisions = {}
         self.occlusion_commits = {}
         self.dropout_commits = {}
+        self.edge_fragment_commits = set()
+        self.tap_edge_evidence = {}
+        self.provisional_tap_losses = {}
+        # A reidentified ID is consumed for this session so the same physical
+        # head cannot be scheduled again after its original action fires.
+        self.reidentified_tracker_ids = {}
         self.judgment_bar_top = geometry.document.get('live_measurement',{}).get('judgment_bar_top_y')
         self.gate = GameplayGate(config.get("gameplay"), geometry.reference_resolution)
         tracker_cfg = {**config.get("tracker", {}), "key_map": config["key_map"]}
@@ -174,6 +182,9 @@ class LiveEngine:
 
     def invalidate(self, reason="invalid_frame"):
         self.scheduler.disarm(reason)
+        self.edge_fragment_commits.clear()
+        self.tap_edge_evidence.clear()
+        self.provisional_tap_losses.clear()
         self.gate.streak, self.gate.state = 0, "UNCERTAIN"
         # Do not recycle IDs on resuming or lose emergency de-duplication state.
         self.tracker.update([], self.last_capture, playing=False)
@@ -264,6 +275,164 @@ class LiveEngine:
                 return False
         return True
 
+    def _can_start_provisional_tap_loss(self, tr, intent, now):
+        """Only coast an already scheduled ordinary colored Tap at early y."""
+        p = tr.prediction
+        valid_eta = (p.hit_time is not None and p.eta is not None and p.uncertainty is not None and
+                     all(math.isfinite(value) for value in (p.hit_time,p.eta,p.uncertainty)) and
+                     p.hit_time > now)
+        if (not self.tap_rule or intent.note_type != 'tap' or not tr.was_confirmed or
+                tr.status != 'lost' or tr.missed != 1 or tr.kind != 'tap' or
+                tr.candidate.appearance not in ('cyan_bar','yellow_bar') or
+                intent.keys[0] not in tr.candidate.candidate_keys or
+                not valid_eta or not 0 <= now-tr.last_time <= PROVISIONAL_TAP_LOSS_GRACE_S):
+            return False
+        y = tr.history[-1][1] if tr.history else math.inf
+        return 230*self.pixel_scale_y <= y <= 250*self.pixel_scale_y and now < intent.hit_at
+
+    def _edge_fragment_commit(self, tr, event_id, intent, now):
+        """Freeze an existing Tap deadline across a matching thin edge fragment.
+
+        This path cannot create an input. It requires a previously scheduled,
+        confirmed cyan/yellow Tap and one same-track latest-position outlier
+        that still overlaps the validated note body and key lane.
+        """
+        evidence = self.tap_edge_evidence.get(event_id)
+        if not evidence:
+            return None
+        c = tr.candidate
+        if (evidence['intent'] is not intent or
+                evidence['generation'] != self.scheduler.arm_generation or
+                evidence['first_time'] != tr.first_time or
+                intent.note_type != 'tap' or evidence['note_type'] != 'tap' or
+                not tr.was_confirmed or tr.status not in ('tentative','lost') or
+                tr.prediction.reason != 'latest_position_outlier' or tr.missed > 1 or
+                c.note_type not in ('tap','unknown') or
+                c.appearance not in ('cyan_bar','yellow_bar') or
+                evidence['appearance'] not in ('cyan_bar','yellow_bar') or
+                not 0 <= now-evidence['timestamp'] <= .10 or
+                now > intent.hit_at+self.scheduler.max_lateness or
+                not tr.history):
+            return None
+        old_span = evidence['span']
+        span = (c.u_min,c.u_max)
+        if not (math.isfinite(span[0]) and math.isfinite(span[1]) and
+                0 <= span[0] < span[1] <= 1):
+            return None
+        overlap = max(0.,min(span[1],old_span[1])-max(span[0],old_span[0]))
+        if overlap < .5*min(span[1]-span[0],old_span[1]-old_span[0]):
+            return None
+        lane = self.config['key_map'].index(intent.keys[0])
+        old_key_overlap = max(0.,min(old_span[1],(lane+1)/6)-max(old_span[0],lane/6))
+        if old_key_overlap < .1*(old_span[1]-old_span[0]):
+            return None
+        _, old_y, _, old_h = evidence['bbox']
+        _, y, _, height = c.bbox
+        jitter = self.config.get('tracker',{}).get('backward_jitter_px',3.5)
+        center_y = tr.history[-1][1]
+        if (height > max(4*self.pixel_scale_y,old_h*.5) or
+                y < old_y-jitter or y+height > old_y+old_h+jitter or
+                abs(center_y-evidence['center_y']) > 25*self.pixel_scale_y or
+                not 230*self.pixel_scale_y <= center_y <= self.trigger_y+3*self.pixel_scale_y):
+            return None
+        return (intent,self.scheduler.arm_generation,
+                intent.hit_at+self.scheduler.max_lateness,old_span,
+                evidence['appearance'],evidence['bbox'],evidence['note_type'])
+
+    def _edge_fragment_commit_still_valid(self, tr, commit, now):
+        """Keep the frozen Tap through same-track fragment recovery/expansion."""
+        intent,generation,expires,old_span,old_appearance,_,old_type=commit
+        c=tr.candidate
+        evidence=self.tap_edge_evidence.get(intent.event_id)
+        if (not evidence or generation!=self.scheduler.arm_generation or now>expires or
+                evidence['intent'] is not intent or evidence['first_time']!=tr.first_time or
+                tr.status in ('rejected','completed') or c.note_type not in ('tap','unknown') or
+                old_type!='tap' or intent.note_type!='tap' or
+                old_appearance not in ('cyan_bar','yellow_bar') or
+                c.appearance not in ('cyan_bar','yellow_bar') or
+                not tr.history):
+            return False
+        span=(c.u_min,c.u_max)
+        if not (math.isfinite(span[0]) and math.isfinite(span[1]) and 0<=span[0]<span[1]<=1):
+            return False
+        overlap=max(0.,min(span[1],old_span[1])-max(span[0],old_span[0]))
+        if overlap < .5*min(span[1]-span[0],old_span[1]-old_span[0]):
+            return False
+        lane=self.config['key_map'].index(intent.keys[0])
+        key_overlap=max(0.,min(span[1],(lane+1)/6)-max(span[0],lane/6))
+        center_y=tr.history[-1][1]
+        return (key_overlap>0 and
+                abs(center_y-evidence['center_y'])<=25*self.pixel_scale_y and
+                center_y<=self.trigger_y+3*self.pixel_scale_y and
+                center_y<=self.geometry.hit_y)
+
+    def _provisional_tap_reconfirmed(self, tr, event_id, coast, now):
+        intent = self.scheduler.pending.get(event_id)
+        c = tr.candidate
+        if (intent is not coast['intent'] or coast['generation'] != self.scheduler.arm_generation or
+                now > coast['expires_at'] or now > intent.hit_at+self.scheduler.max_lateness or
+                tr.status != 'confirmed' or tr.missed or
+                tr.prediction.reason not in ('','outside_lookahead') or
+                tr.kind != 'tap' or c.note_type != 'tap' or
+                c.appearance not in ('cyan_bar','yellow_bar') or
+                intent.keys[0] not in c.candidate_keys or not tr.history or
+                tr.history[-1][1] > self.geometry.hit_y):
+            return False
+        if c.appearance != coast['appearance'] and {c.appearance,coast['appearance']} != {'cyan_bar','yellow_bar'}:
+            return False
+        span = (c.u_min,c.u_max)
+        old = coast['span']
+        overlap = max(0.,min(span[1],old[1])-max(span[0],old[0]))
+        return (math.isfinite(span[0]) and math.isfinite(span[1]) and
+                overlap >= .5*min(span[1]-span[0],old[1]-old[0]))
+
+    def _matches_provisional_reidentification(self, tr, event_id, coast, now):
+        """Match a new tracker ID to a coasting, already scheduled Tap.
+
+        This is deliberately local to the old Tap's saved trajectory. It does
+        not widen the scheduler's same-key/time de-duplication window or alter
+        any prediction/deadline. A match suppresses only the new ID's offer;
+        the old ID keeps its original key and deadline under normal gates.
+        """
+        intent = coast['intent']
+        if (event_id == intent.event_id or intent.note_type != 'tap' or
+                coast.get('generation') != self.scheduler.arm_generation or
+                intent.event_id not in self.scheduler.pending or
+                now > intent.hit_at+self.scheduler.max_lateness or
+                tr.status != 'confirmed' or tr.missed or tr.kind not in ('tap', 'unknown') or
+                tr.candidate.note_type not in ('tap', 'unknown') or
+                tr.candidate.appearance not in ('cyan_bar', 'yellow_bar') or
+                not tr.history or intent.keys[0] not in tr.candidate.candidate_keys):
+            return False
+        if tr.candidate.appearance != coast['appearance'] and {
+                tr.candidate.appearance, coast['appearance']} != {'cyan_bar', 'yellow_bar'}:
+            return False
+        span = (tr.candidate.u_min, tr.candidate.u_max)
+        old_span = coast['span']
+        if not (all(math.isfinite(v) for v in (*span, *old_span)) and
+                0 <= span[0] < span[1] <= 1 and 0 <= old_span[0] < old_span[1] <= 1):
+            return False
+        overlap = max(0., min(span[1], old_span[1])-max(span[0], old_span[0]))
+        if overlap < .60*min(span[1]-span[0], old_span[1]-old_span[0]):
+            return False
+        dt = tr.last_time-coast['last_time']
+        if not 0 < dt <= .30:
+            return False
+        expected_y = coast['center_y'] + max(0., coast['velocity'])*dt
+        observed_y = tr.history[-1][1]
+        return abs(observed_y-expected_y) <= 18*self.pixel_scale_y
+
+    def _keep_absent_provisional_tap(self, event_id, coast, finished,
+                                     present_ids, finished_tracks, finished_past_ids):
+        """Keep a frozen Tap only inside its original scheduler deadline."""
+        return (event_id not in present_ids and event_id not in finished_tracks and
+                event_id not in finished_past_ids and
+                self._keep_coasting_provisional_tap(coast,finished))
+
+    def _keep_coasting_provisional_tap(self, coast, finished):
+        return (coast['generation'] == self.scheduler.arm_generation and
+                finished <= coast['intent'].hit_at+self.scheduler.max_lateness)
+
     def _update_held_holds(self, work, now):
         if not self.hold_enabled:
             return
@@ -343,6 +512,7 @@ class LiveEngine:
                 self._update_held_holds(work,finished)
             ready = []
             retained = {}
+            reidentified = {}
             present_ids = set()
             finished_tracks = {f"{self.session_id}:{tr.track_id}":tr for tr in self.tracker.finished}
             finished_past_ids = {event_id for event_id,tr in finished_tracks.items()
@@ -356,9 +526,102 @@ class LiveEngine:
                 if tr.track_id in self.recycled_ids:
                     self.scheduler.withdraw(event_id, "recycled_track_id")
                     continue
+                coast = self.provisional_tap_losses.get(event_id)
+                pending = self.scheduler.pending.get(event_id)
+                if (pending and tr.status == 'confirmed' and not tr.missed and
+                        pending.note_type == 'tap' and tr.candidate.note_type == 'tap' and
+                        tr.candidate.appearance in ('cyan_bar','yellow_bar') and tr.history):
+                    self.tap_edge_evidence[event_id] = {
+                        'intent':pending,'generation':self.scheduler.arm_generation,
+                        'first_time':tr.first_time,'timestamp':tr.last_time,
+                        'span':(tr.candidate.u_min,tr.candidate.u_max),
+                        'appearance':tr.candidate.appearance,'bbox':tr.candidate.bbox,
+                        'note_type':tr.candidate.note_type,'center_y':tr.history[-1][1],
+                    }
+                if coast:
+                    if self._provisional_tap_reconfirmed(tr,event_id,coast,frame.captured_at):
+                        self.provisional_tap_losses.pop(event_id,None)
+                        self.scheduler.resume(event_id)
+                        active_events.add(event_id)
+                        retained[tr.track_id] = coast['intent'].keys,""
+                        self.scheduler._log('provisional_loss_resumed',
+                                            'same_track_reconfirmed_original_key_and_deadline',
+                                            coast['intent'])
+                        continue
+                    if (pending is coast['intent'] and
+                            self._keep_coasting_provisional_tap(coast,finished)):
+                        # Once a confirmed Tap has an original key/deadline,
+                        # temporary tracker loss must not erase that action.
+                        # Resume it under the scheduler's normal freshness,
+                        # focus and PLAYING checks; never infer a new key/time.
+                        self.scheduler.resume(event_id)
+                        active_events.add(event_id)
+                        retained[tr.track_id] = coast['intent'].keys,""
+                        self.scheduler._log('provisional_loss_retained',
+                                            'same_track_missing_original_key_and_deadline',
+                                            coast['intent'])
+                        continue
+                    self.provisional_tap_losses.pop(event_id,None)
+                    if pending is coast['intent']:
+                        self.scheduler.resume(event_id)
+                    continue
+                if tr.track_id in self.reidentified_tracker_ids:
+                    reidentified[tr.track_id] = self.reidentified_tracker_ids[tr.track_id]
+                # A fragmented/recreated ID can still be the same physical
+                # head. Keep the old pending intent and suppress this new ID
+                # only when color, selected-lane coverage, span, and projected
+                # vertical position all match the saved trajectory.
+                if (tr.track_id not in reidentified and state == 'PLAYING' and
+                        focused and roi_valid and not stale):
+                    for old_event_id, old_coast in self.provisional_tap_losses.items():
+                        if self._matches_provisional_reidentification(
+                                tr, event_id, old_coast, finished):
+                            reidentified[tr.track_id] = old_event_id
+                            self.reidentified_tracker_ids[tr.track_id] = old_event_id
+                            self.scheduler.consumed.add(event_id)
+                            old_intent = old_coast['intent']
+                            self.scheduler.resume(old_event_id)
+                            active_events.add(old_event_id)
+                            self.scheduler._log('track_reidentified',
+                                f'same_physical_tap_keep_old_key_and_deadline;new_track_id={tr.track_id}',
+                                old_intent)
+                            break
+                if pending and self._can_start_provisional_tap_loss(tr,pending,finished):
+                    expires_at = min(tr.last_time+PROVISIONAL_TAP_LOSS_GRACE_S,
+                                     pending.hit_at+self.scheduler.max_lateness)
+                    if frame.captured_at <= expires_at:
+                        self.provisional_tap_losses[event_id] = {
+                            'intent':pending, 'generation':self.scheduler.arm_generation,
+                            'expires_at':expires_at,
+                            'span':(tr.candidate.u_min,tr.candidate.u_max),
+                            'appearance':tr.candidate.appearance,
+                            'last_time':tr.last_time,
+                            'center_y':tr.history[-1][1],
+                            'velocity':(tr.prediction.velocity if
+                                        tr.prediction.velocity is not None and
+                                        math.isfinite(tr.prediction.velocity) else 0.0),
+                        }
+                        self.scheduler.resume(event_id)
+                        active_events.add(event_id)
+                        retained[tr.track_id] = pending.keys,""
+                        self.scheduler._log('provisional_loss_started',
+                                            f'early_confirmed_tap;grace_ms='
+                                            f'{max(0.,(expires_at-frame.captured_at)*1000):.1f}',pending)
+                        continue
                 commit = self.occlusion_commits.get(event_id)
+                if pending and not commit:
+                    edge_commit = self._edge_fragment_commit(tr,event_id,pending,frame.captured_at)
+                    if edge_commit:
+                        self.occlusion_commits[event_id] = edge_commit
+                        self.edge_fragment_commits.add(event_id)
+                        commit = edge_commit
+                        self.scheduler._log('edge_fragment_commit',
+                                            'same_confirmed_tap_latest_position_outlier',pending)
                 if commit and event_id in self.scheduler.pending:
-                    if (self._commit_still_valid(tr,commit,finished) and state=='PLAYING' and
+                    still_valid = (self._edge_fragment_commit_still_valid(tr,commit,frame.captured_at)
+                                   if event_id in self.edge_fragment_commits else
+                                   self._commit_still_valid(tr,commit,finished))
+                    if (still_valid and state=='PLAYING' and
                             focused and roi_valid and not stale):
                         active_events.add(event_id)
                         retained[tr.track_id] = commit[0].keys,""
@@ -410,6 +673,9 @@ class LiveEngine:
                               allow_range=True,speculative=self.speculative,
                               nearline_y=self.trigger_y-25*self.pixel_scale_y)
                            for tr in ready}
+                for track_id in reidentified:
+                    if track_id in options:
+                        options[track_id] = (), 'reidentified_same_physical_tap'
                 if self.hold_enabled:
                     # One connected green body can yield a wide head plus
                     # narrow edge fragments. Keep the widest physical span.
@@ -439,6 +705,9 @@ class LiveEngine:
             else:
                 decisions = {tr.track_id:track_decision(tr,finished,self.known_keys,self.config.get("events",{}))
                              for tr in ready}
+            for track_id in reidentified:
+                if track_id in decisions:
+                    decisions[track_id] = (), 'reidentified_same_physical_tap'
             self.last_decisions = {**decisions,**retained}
             for tr in ready:
                 event_id = f"{self.session_id}:{tr.track_id}"
@@ -484,6 +753,14 @@ class LiveEngine:
                         self.hold_spans[event_id] = ((tr.candidate.u_min,tr.candidate.u_max),intent.hit_at)
                     ordinary_tap = (tr.candidate.appearance in ('cyan_bar','yellow_bar') and
                                     tr.candidate.note_type=='tap' and not hold)
+                    if (accepted and ordinary_tap and tr.status=='confirmed' and tr.history):
+                        self.tap_edge_evidence[event_id] = {
+                            'intent':intent,'generation':self.scheduler.arm_generation,
+                            'first_time':tr.first_time,'timestamp':tr.last_time,
+                            'span':(tr.candidate.u_min,tr.candidate.u_max),
+                            'appearance':tr.candidate.appearance,'bbox':tr.candidate.bbox,
+                            'note_type':tr.candidate.note_type,'center_y':tr.history[-1][1],
+                        }
                     grace = self.tap_dropout_grace_s if ordinary_tap else self.dropout_grace_s
                     minimum_y = self.tap_dropout_min_y if ordinary_tap else self.dropout_min_y
                     if (accepted and grace and
@@ -512,6 +789,33 @@ class LiveEngine:
                         "assigned_key_temporarily_unstable"))
                     self.scheduler.withdraw(event_id, reason or "not_created_while_armed",retryable=retryable)
             for event_id in list(self.scheduler.pending):
+                coast = self.provisional_tap_losses.get(event_id)
+                if coast and event_id not in active_events:
+                    if self._keep_absent_provisional_tap(event_id,coast,finished,
+                            present_ids,finished_tracks,finished_past_ids):
+                        self.scheduler.resume(event_id)
+                        active_events.add(event_id)
+                        self.scheduler._log('provisional_loss_retained',
+                                            'track_id_absent_original_key_and_deadline',coast['intent'])
+                    else:
+                        self.provisional_tap_losses.pop(event_id,None)
+                        self.scheduler.withdraw(event_id,'provisional_loss_expired',retryable=True)
+                        continue
+                edge_commit = self.occlusion_commits.get(event_id)
+                if (event_id in self.edge_fragment_commits and event_id not in active_events and
+                        event_id not in present_ids):
+                    if (edge_commit and event_id not in finished_past_ids and
+                            edge_commit[1] == self.scheduler.arm_generation and
+                            frame.captured_at <= edge_commit[2] and
+                            finished <= edge_commit[0].hit_at+self.scheduler.max_lateness and
+                            state == 'PLAYING' and focused and roi_valid and not stale):
+                        active_events.add(event_id)
+                        self.scheduler._log('edge_fragment_retained',
+                                            'same_confirmed_tap_pending_original_deadline',edge_commit[0])
+                    else:
+                        self.edge_fragment_commits.discard(event_id)
+                        self.scheduler.withdraw(event_id,'edge_fragment_commit_expired')
+                        continue
                 if (event_id not in active_events and event_id not in present_ids and
                         event_id not in finished_past_ids and
                         self._dropout_still_valid(event_id,finished)):
@@ -528,8 +832,17 @@ class LiveEngine:
                     self.scheduler.withdraw(event_id, "no_current_eligible_observation")
             self.occlusion_commits = {event_id:commit for event_id,commit in self.occlusion_commits.items()
                                       if event_id in self.scheduler.pending and commit[1]==self.scheduler.arm_generation}
+            self.edge_fragment_commits.intersection_update(self.scheduler.pending)
             self.dropout_commits = {event_id:commit for event_id,commit in self.dropout_commits.items()
                                     if event_id in self.scheduler.pending and commit[1]==self.scheduler.arm_generation}
+            self.provisional_tap_losses = {
+                event_id:coast for event_id,coast in self.provisional_tap_losses.items()
+                if event_id in self.scheduler.pending and coast['generation']==self.scheduler.arm_generation
+            }
+            self.tap_edge_evidence = {
+                event_id:evidence for event_id,evidence in self.tap_edge_evidence.items()
+                if event_id in self.scheduler.pending and evidence['generation']==self.scheduler.arm_generation
+            }
             self.scheduler.poll()
             live_holds = set(self.scheduler.pending) | {intent.event_id for _,intent in self.scheduler.held.values()}
             self.hold_spans = {event_id:value for event_id,value in self.hold_spans.items()

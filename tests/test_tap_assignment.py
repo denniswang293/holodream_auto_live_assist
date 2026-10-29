@@ -84,7 +84,7 @@ def test_batch_matching_reserves_only_choice_for_other_note(setup_rule,make_cand
     choices = decide(rule,[wide,narrow],s)
     assert choices=={1:(('D',),''),2:(('F',),'')}
     assert decide(rule,[narrow,wide],s)==choices
-    third = track(make_candidate,3,['D','F'],.30,.49)
+    third = track(make_candidate,3,['D','F'],.35,.54)
     assert decide(rule,[wide,narrow,third],s)[3]==((),'tap_key_conflict')
 
 
