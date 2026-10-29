@@ -27,7 +27,7 @@ python -m pip install -r requirements-live.txt
 
 進入遊戲並確認遊戲視窗在前景後，按 `Ctrl+Shift+Alt+Q`、放開組合鍵以啟用，再按一次關閉。`Esc` 或 `F12` 停止 Assist 並釋放按住的鍵。失焦、暫停、ROI／遊戲狀態無效或影格逾時都會解除輸入；恢復後要再次手動啟用。
 
-每次執行都會在 `output/assist_720/` 建立新的 run 資料夾，包含 `live_run.json`、`live_diagnostics.md`、事件／影格／送鍵 CSV，以及選擇錄影時的影片檔。
+每次執行都會在 `output/assist/` 建立新的 run 資料夾，包含 `live_run.json`、`live_diagnostics.md`、事件／影格／送鍵 CSV，以及選擇錄影時的影片檔。
 
 ## 目前保留的測試
 

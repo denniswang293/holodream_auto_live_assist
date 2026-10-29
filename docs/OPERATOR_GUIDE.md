@@ -20,4 +20,4 @@ Assist 擷取遊戲所在顯示器的完整畫面，不提供 ROI 或辨識解�
 
 ## 輸出
 
-每次執行在 `output/assist_720/run_*/` 建立新目錄。`live_run.json`、`live_events.csv`、`live_frames.csv`、`live_key_actions.csv` 和 `live_diagnostics.md` 記錄執行狀態。啟動時選擇錄影後，另會產生來源、overlay 與 `live_video_index.csv`。這些檔案是執行診斷紀錄，不是人工真值或命中率證明。
+每次執行在 `output/assist/run_*/` 建立新目錄。`live_run.json`、`live_events.csv`、`live_frames.csv`、`live_key_actions.csv` 和 `live_diagnostics.md` 記錄執行狀態。啟動時選擇錄影後，另會產生來源、overlay 與 `live_video_index.csv`。這些檔案是執行診斷紀錄，不是人工真值或命中率證明。

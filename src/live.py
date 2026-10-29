@@ -1,4 +1,4 @@
-"""Full-screen Windows Assist with an explicit manual input latch."""
+﻿"""Full-screen Windows Assist with an explicit manual input latch."""
 from __future__ import annotations
 
 import argparse
@@ -290,7 +290,7 @@ def main():
     parser.add_argument("--config", type=Path, default=Path("config.json"))
     parser.add_argument("--live-config", type=Path, default=Path("config/live_assist_v5.json"))
     parser.add_argument("--geometry", type=Path, default=Path("config/geometry_live_assist.json"))
-    parser.add_argument("--out", type=Path, default=Path("output/assist_720"))
+    parser.add_argument("--out", type=Path, default=Path("output/assist"))
     parser.add_argument("--backend", choices=("auto", "dxcam", "mss"), default="auto")
     parser.add_argument("--record-overlay", action="store_true",
                         help="Record overlay and clean source asynchronously")

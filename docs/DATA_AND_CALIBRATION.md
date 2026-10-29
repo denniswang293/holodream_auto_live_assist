@@ -10,7 +10,7 @@
 
 ## 執行產物
 
-`output/assist_720/` 儲存新的 Assist run、CSV 診斷資料，以及使用者選擇錄影時的來源／overlay 影片。大型輸出屬本機執行產物，不是程式來源。舊人工標註、評估資料和 Shadow run 已移出現行工作流程並封存於 `docs/archive/`，不會被 Assist 載入或覆寫。
+`output/assist/` 儲存新的 Assist run、CSV 診斷資料，以及使用者選擇錄影時的來源／overlay 影片。大型輸出屬本機執行產物，不是程式來源。舊人工標註、評估資料和 Shadow run 已移出現行工作流程並封存於 `docs/archive/`，不會被 Assist 載入或覆寫。
 
 ## 指標解讀
 

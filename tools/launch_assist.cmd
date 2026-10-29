@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 cd /d "%~dp0.."
 echo Live Tap and visual Hold assist. Input starts OFF.
 echo Ctrl+Shift+Alt+Q toggles input; Esc or F12 stops and releases keys.
@@ -12,5 +12,5 @@ set "holodream_assist_record=N"
 set /p "holodream_assist_record=Record overlay + clean source for diagnostics? Y/N [N]: "
 set "holodream_assist_record_flag="
 if /i "%holodream_assist_record%"=="Y" set "holodream_assist_record_flag=--record-overlay"
-python -m src.live --config config.json --live-config config/live_assist_v5.json --geometry config/geometry_live_assist.json %holodream_assist_record_flag% --out output/assist_720
+python -m src.live --config config.json --live-config config/live_assist_v5.json --geometry config/geometry_live_assist.json %holodream_assist_record_flag% --out output/assist
 pause
