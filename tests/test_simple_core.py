@@ -165,6 +165,40 @@ def test_intent_rejection_is_logged_with_its_offer_reason():
     scheduler.close()
 
 
+def test_pending_amend_replaces_deadline_once_with_new_revision():
+    clock, _, rows, scheduler = armed_scheduler()
+    transitions = []
+    manager = TapIntentManager(transitions.append, amend_enabled=True, freeze_window_ms=10,
+                               max_amend_step_ms=40, max_total_amend_ms=80)
+    first = TapProposal("session:simple:amend", 8, "F", 10.20, .01, "first")
+    accepted, rejected = manager.schedule({8: first}, scheduler, 10.0)
+    assert accepted and not rejected
+    clock.now = 10.02
+    scheduler.update_context(10.02, "PLAYING", True, True)
+    amended = TapProposal(first.note_uid, 8, "F", 10.22, .012, "updated")
+    manager.schedule({8: amended}, scheduler, 10.02)
+    intent = scheduler.pending[first.note_uid]
+    assert intent.hit_at == pytest.approx(10.22)
+    assert intent.revision == 1
+    assert manager.intents[first.note_uid].revision == 1
+    assert any(row.get("state") == "AMENDED" for row in transitions if row.get("note_uid") == first.note_uid)
+    scheduler.close()
+
+
+def test_pending_amend_freeze_window_does_not_move_deadline():
+    clock, _, _, scheduler = armed_scheduler()
+    transitions = []
+    manager = TapIntentManager(transitions.append, amend_enabled=True, freeze_window_ms=30)
+    first = TapProposal("session:simple:freeze", 9, "F", 10.20, .01, "first")
+    manager.schedule({9: first}, scheduler, 10.0)
+    clock.now = 10.18
+    scheduler.update_context(10.18, "PLAYING", True, True)
+    manager.schedule({9: TapProposal(first.note_uid, 9, "F", 10.21, .01, "late")}, scheduler, 10.18)
+    assert scheduler.pending[first.note_uid].hit_at == pytest.approx(10.20)
+    assert any(row.get("reason") == "deadline_freeze_window" for row in transitions)
+    scheduler.close()
+
+
 def test_intent_manager_freezes_key_and_deadline_after_acceptance():
     clock, _, rows, scheduler = armed_scheduler()
     transitions = []

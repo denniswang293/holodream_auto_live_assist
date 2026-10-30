@@ -4,6 +4,23 @@
   "max_frame_age_ms": 60,
   "max_input_lateness_ms": 15,
   "input_advance_px": 30,
+  "tap_deadline_amend": {
+    "enabled": true,
+    "freeze_window_ms": 30,
+    "max_amend_step_ms": 40,
+    "max_total_amend_ms": 80
+  },
+  "judgment_calibration_v2": {
+    "enabled": true,
+    "mode": "shadow",
+    "min_samples": 20,
+    "offset_ms": 0
+  },
+  "hold_tracker_v2": {
+    "enabled": true,
+    "min_head_observations": 2,
+    "dropout_grace_ms": 120
+  },
   "hold_visual": {
     "enabled": true,
     "path_appearances": [

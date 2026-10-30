@@ -36,6 +36,7 @@ class ActionIntent:
     note_type: str = "tap"
     path_u: float | None = None
     path_appearance: str | None = None
+    revision: int = 0
 
 
 @dataclass(frozen=True)
@@ -103,10 +104,20 @@ class TapScheduler:
         self.sent_holds = 0
 
     def _log(self, action, reason="", intent=None, key=""):
+        note_type = intent.note_type if intent else ""
+        if note_type == "hold":
+            lifecycle = {"scheduled": "HOLD_SCHEDULED", "key_down": "HOLD_DOWN",
+                         "hold_end": "HOLD_TAIL_SEEN", "key_up": "HOLD_UP",
+                         "canceled": "HOLD_REJECTED"}.get(action, "")
+        else:
+            lifecycle = {"scheduled": "SCHEDULED", "key_down": "FIRED",
+                         "key_up": "RELEASED", "canceled": "CANCELED",
+                         "abstain": "REJECTED"}.get(action, "")
         self.on_log({"action": action, "reason": reason, "timestamp": self.clock(),
                      "event_id": intent.event_id if intent else "", "key": key,
                      "scheduled_hit": intent.hit_at if intent else "", "armed": self.armed,
-                     "note_type": intent.note_type if intent else ""})
+                     "note_type": note_type, "lifecycle_state": lifecycle,
+                     "revision": intent.revision if intent else 0})
 
     def _ready(self, now):
         return not self._readiness_failure(now)
@@ -248,6 +259,32 @@ class TapScheduler:
                     self.pending_reservations[intent.event_id] = updated
             self.pending[intent.event_id] = intent
             return OfferResult(True, "accepted", intent.event_id, now)
+
+    def amend_pending(self, intent, *, expected_revision=0, freeze_window_s=0.0):
+        """Atomically replace a pending deadline while preserving its key."""
+        with self.lock:
+            now = self.clock()
+            current = self.pending.get(intent.event_id)
+            if current is None:
+                return OfferResult(False, "pending_intent_missing", intent.event_id, now)
+            if current.revision != expected_revision:
+                return OfferResult(False, "stale_intent_revision", intent.event_id, now)
+            if current.keys != intent.keys:
+                return OfferResult(False, "pending_key_is_frozen", intent.event_id, now)
+            if now >= current.hit_at - max(0.0, freeze_window_s):
+                return OfferResult(False, "deadline_freeze_window", intent.event_id, now)
+            if not math.isfinite(intent.hit_at) or not now < intent.hit_at <= now + .45:
+                return OfferResult(False, "invalid_amended_deadline", intent.event_id, now)
+            if intent.revision <= current.revision:
+                return OfferResult(False, "non_monotonic_intent_revision", intent.event_id, now)
+            reservation = self.pending_reservations.get(intent.event_id)
+            if reservation is not None:
+                self._remove_pending_reservation(intent.event_id)
+            self.recent.append((intent.keys[0], intent.hit_at))
+            self.pending_reservations[intent.event_id] = (intent.keys[0], intent.hit_at)
+            self.pending[intent.event_id] = intent
+            self._log("amended", f"revision={intent.revision}", intent, intent.keys[0])
+            return OfferResult(True, "amended", intent.event_id, now)
 
     def _remove_pending_reservation(self, event_id):
         reservation = self.pending_reservations.pop(event_id,None)

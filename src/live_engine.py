@@ -20,6 +20,8 @@ from .overlay import render
 from .tracker import Tracker
 from .tap_assignment import AnyCoveredKeyRule
 from .hold_visual import path_runs, nearest_run
+from .judgment_time import JudgmentTimeEstimator
+from .hold_tracker import HoldTracker
 from .simple_core import SimpleAssistCore
 from .simple_tracker import is_simple_tap
 
@@ -171,6 +173,13 @@ class LiveEngine:
                     type(self.speculative.get('tap_last_chance_single_fit',False)) is bool):
                 raise ValueError("Speculative Tap uncertainty/drift/observation limits are outside supported range")
         self.input_advance_px = float(config.get("live",{}).get("input_advance_px",0)) if self.tap_rule else 0.0
+        judgment_cfg = config.get("live", {}).get("judgment_calibration_v2", {})
+        self.judgment_time = JudgmentTimeEstimator(
+            enabled=judgment_cfg.get("enabled", False),
+            mode=judgment_cfg.get("mode", "shadow"),
+            offset_ms=judgment_cfg.get("offset_ms", 0),
+            input_latency_ms=judgment_cfg.get("input_latency_ms", 0),
+            min_samples=judgment_cfg.get("min_samples", 20))
         self.pixel_scale_y = geometry.reference_resolution[1]/404
         self.pixel_scale_x = geometry.reference_resolution[0]/720
         if not (math.isfinite(self.input_advance_px) and 0 <= self.input_advance_px <= 40*self.pixel_scale_y):
@@ -215,6 +224,12 @@ class LiveEngine:
         if not (32*self.pixel_scale_y<=self.hold_path_px<=100*self.pixel_scale_y and .06<=self.hold_release_gap_s<=.25):
             raise ValueError('Hold path and release limits are outside supported range')
         self.hold_ids = set()
+        hold_tracker_cfg = config.get("live", {}).get("hold_tracker_v2", {})
+        self.hold_tracker_v2 = HoldTracker(
+            min_path_px=self.hold_path_px,
+            min_head_observations=hold_tracker_cfg.get("min_head_observations", 2),
+            max_gap_s=max(.08, self.hold_release_gap_s),
+            dropout_grace_ms=hold_tracker_cfg.get("dropout_grace_ms", 120)) if hold_tracker_cfg.get("enabled", False) else None
         self.hold_colors = {}
         self.hold_watch = {}
         self.hold_spans = {}
@@ -279,7 +294,8 @@ class LiveEngine:
             particle_cfg=particle_cfg, hit_y=self.trigger_y,
             event_cfg=config.get("events", {}),
             min_y=float(config.get("events", {}).get("min_y",190*self.pixel_scale_y)),
-            known_keys=self.known_keys)
+            known_keys=self.known_keys,
+            timing_cfg=config.get("live", {}).get("tap_deadline_amend", {}))
         self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}
         self.track_births, self.recycled_ids = {}, set()
@@ -299,6 +315,8 @@ class LiveEngine:
         self.tracker.finished.clear()
         self.simple_core.tracker.update([], self.last_capture, playing=False)
         self.simple_tracks = []
+        if self.hold_tracker_v2:
+            self.hold_tracker_v2.reset()
 
     def _commit_still_valid(self,tr,commit,now):
         """A committed deadline uses its validated fit, not a noisy new fit.
@@ -811,9 +829,13 @@ class LiveEngine:
             prediction_before = self.tracker.elapsed
             phase = time.perf_counter()
             simple_candidates = [c for c in candidates if is_simple_tap(c)]
-            hold_candidates = ([c for c in candidates
-                if self.hold_enabled and c.appearance in self.hold_path_colors and
-                c.hold_path_px >= self.hold_path_px] if state == "PLAYING" else [])
+            hold_candidates = []
+            if self.hold_enabled and state == "PLAYING":
+                raw_holds = [c for c in candidates if c.appearance in self.hold_path_colors and
+                             (c.hold_path_px > 0 or c.path_bbox is not None)]
+                hold_candidates = (self.hold_tracker_v2.observe(raw_holds, frame.captured_at)
+                                   if self.hold_tracker_v2 else
+                                   [c for c in raw_holds if c.hold_path_px >= self.hold_path_px])
             simple_started = time.perf_counter()
             self.simple_tracks = self.simple_core.tracker.update(
                 simple_candidates, frame.captured_at, playing=state == "PLAYING")
@@ -1134,7 +1156,8 @@ class LiveEngine:
                 if self.hold_enabled:
                     for tr in ready:
                         if (tr.candidate.appearance in self.hold_path_colors and
-                                tr.candidate.hold_path_px>=self.hold_path_px):
+                                (self.hold_tracker_v2 is not None or
+                                 tr.candidate.hold_path_px >= self.hold_path_px)):
                             event_id=f"{self.session_id}:{tr.track_id}"
                             self.hold_ids.add(event_id)
                             self.hold_colors.setdefault(event_id,tr.candidate.appearance)
@@ -1467,6 +1490,7 @@ class LiveEngine:
                         "resolution_basis": "simple_confirmed_tap",
                         "simple_core_state": transition.get("state", ""),
                         "simple_core_reason": transition.get("reason", ""),
+                        "revision": transition.get("revision", intent.revision if intent else 0),
                         "lane_span": (f"{tr.candidate.u_min:.6f}:{tr.candidate.u_max:.6f}" if tr else
                             f"{intent.lane_span[0]:.6f}:{intent.lane_span[1]:.6f}" if intent else
                             f"{proposal.lane_span[0]:.6f}:{proposal.lane_span[1]:.6f}" if proposal else ""),
