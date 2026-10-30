@@ -3,7 +3,7 @@
   "keyboard_input_mode": "scan_code",
   "max_frame_age_ms": 60,
   "max_input_lateness_ms": 15,
-  "input_advance_px": 15,
+  "input_advance_px": 30,
   "hold_visual": {
     "enabled": true,
     "path_appearances": [

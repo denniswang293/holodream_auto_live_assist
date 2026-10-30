@@ -44,6 +44,8 @@ class SimpleTrack:
     appearance_anchor: str = ""
     particle_filter: ParticlePredictor | None = None
     last_association: dict = field(default_factory=dict)
+    particle_rejection_streak: int = 0
+    particle_reinitializations: int = 0
 
     @property
     def bbox(self):
@@ -197,6 +199,25 @@ class SimpleTracker:
                                    key=lambda k: order.index(k) if k in order else len(order))
         prediction_started = time.perf_counter()
         track.prediction = track.particle_filter.update(track.history, self.hit_y)
+        if track.prediction.measurement_status == "REJECTED_MEASUREMENT":
+            track.particle_rejection_streak += 1
+        else:
+            track.particle_rejection_streak = 0
+        if track.particle_rejection_streak >= 3:
+            # The Simple Tracker has already accepted three consecutive
+            # observations using position, lane span, and motion continuity.
+            # Rebuild only the particle posterior from its latest seven
+            # accepted observations when its measurement gate keeps rejecting
+            # those same observations. This recovers stale PF position state
+            # without changing planner ETA or uncertainty limits.
+            replacement = ParticlePredictor(self.particle_cfg, seed=self.seed,
+                track_id=track.track_id, physical_hit_y=self.hit_y)
+            replacement_prediction = replacement.update(track.history[-7:], self.hit_y)
+            track.particle_rejection_streak = 0
+            if replacement_prediction.measurement_status == "INITIALIZED":
+                track.particle_filter = replacement
+                track.prediction = replacement_prediction
+                track.particle_reinitializations += 1
         self.elapsed += time.perf_counter() - prediction_started
         if y > self.cfg.get("completion_y", 325.5):
             track.status, track.reason = "completed", "past_physical_completion_line"

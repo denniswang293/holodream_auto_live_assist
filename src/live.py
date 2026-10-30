@@ -29,7 +29,9 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "physical_track_uid", "source_track_ids", "reidentified_from_id",
                 "confirmed_note_type", "current_observation_type", "identity_state",
                 "association_score", "measurement_quality", "note_uid",
-                "simple_core_state", "simple_core_reason", "lane_span", "crossing_y"]
+                "simple_core_state", "simple_core_reason", "lane_span", "crossing_y",
+                "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
+                "simple_track_status", "particle_rejection_streak", "particle_reinitializations"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
@@ -150,7 +152,9 @@ def run(args):
             key_log.write(row)
             if "engine" in engine_holder:
                 engine_holder["engine"].record_scheduler_action(row)
-            if row["action"] in ("armed","disarmed","arm_rejected","arm_requested"):
+            if row["action"] in ("armed","disarmed","arm_rejected","arm_requested",
+                                  "arm_waiting_for_fresh_frame","arm_resumed_on_fresh_frame",
+                                  "decision_wait","decision_resumed"):
                 print(f"INPUT {row['action']}: {row['reason']}",flush=True)
             elif row['action']=='key_down':
                 print(f"{row['note_type'].upper()} sent: {row['key']}",flush=True)

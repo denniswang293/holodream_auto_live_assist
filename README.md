@@ -16,7 +16,7 @@ python -m pip install -r requirements-live.txt
 
 啟動後等待遊戲進入 PLAYING，並確認遊戲視窗在前景。Assist 初始為停用狀態；按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次可停用。`Esc` 或 `F12` 停止程式並釋放按住的鍵。失焦、暫停或影格過期時會解除輸入。
 
-程式使用 720×404 座標、`S D F J K L` 六鍵及 `config/geometry_live_assist.json`。Tap 目標使用 y=310.5（判定線上移 15 px）；Hold 依可見尾端放鍵。
+程式使用 720×404 座標、`S D F J K L` 六鍵及 `config/geometry_live_assist.json`。Tap 目標使用 y=295.5（判定線上移 30 px）；Hold 依可見尾端放鍵。
 
 ## 輸出與資料
 

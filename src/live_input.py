@@ -72,6 +72,9 @@ class TapScheduler:
         self.context = (-math.inf, "NOT_PLAYING", False, False)
         self.processing_capture = None
         self.waiting_for_decision = False
+        self.decision_wait_started_at = None
+        self.waiting_for_arm_frame = False
+        self.arm_frame_wait_started_at = None
         self.pending, self.held = {}, {}
         # LiveEngine may pause a pending action during a visual dropout. It
         # must explicitly resume or withdraw the frozen key/deadline; the
@@ -128,14 +131,6 @@ class TapScheduler:
                     self.context[0] < captured_at <= now and now-captured_at <= self.max_age):
                 self.processing_capture = captured_at
 
-    def _fresh_decision_in_progress(self, now):
-        captured, state, focused, roi = self.context
-        current = self.processing_capture
-        return (self.armed and state == 'PLAYING' and focused and roi and
-                current is not None and captured < current <= now and
-                now-captured > self.max_age and now-current <= self.max_age and
-                self.focus_check() and not self.modifiers_check())
-
     def toggle(self):
         with self.lock:
             if self.armed or self.arm_requested:
@@ -171,6 +166,9 @@ class TapScheduler:
             self.armed = self.arm_requested = False
             self.processing_capture = None
             self.waiting_for_decision = False
+            self.decision_wait_started_at = None
+            self.waiting_for_arm_frame = False
+            self.arm_frame_wait_started_at = None
             self.last_reason = reason
             for intent in self.pending.values():
                 self.consumed.add(intent.event_id)
@@ -271,23 +269,44 @@ class TapScheduler:
             now = self.clock()
             failure = self._readiness_failure(now)
             if failure:
-                if self._fresh_decision_in_progress(now):
-                    # No key-down may use the expired decision. Retain the
-                    # existing latch only while the in-flight capture itself
-                    # is fresh; a true stall/focus loss still disarms below.
-                    if not self.waiting_for_decision:
-                        self.waiting_for_decision = True
-                        self._log('decision_wait',
-                                  f'old_decision_ms={(now-self.context[0])*1000:.2f};'
-                                  f'inflight_capture_ms={(now-self.processing_capture)*1000:.2f};key_down_paused')
+                captured, state, focused, roi = self.context
+                if (self.arm_requested and failure == 'validated_capture_expired' and
+                        state == 'PLAYING' and focused and roi and self.focus_check()):
+                    # Keep the manual Arm request pending across a brief capture
+                    # gap. The latch remains OFF until a fresh, valid frame is
+                    # processed; focus/gameplay checks still cancel it.
+                    if not self.waiting_for_arm_frame:
+                        self.waiting_for_arm_frame = True
+                        self.arm_frame_wait_started_at = now
+                        self._log('arm_waiting_for_fresh_frame',
+                                  f'decision_age_ms={(now-captured)*1000:.2f}')
+                    if now-self.arm_frame_wait_started_at <= .2:
+                        return
+                if (self.armed and failure == 'validated_capture_expired' and
+                        state == 'PLAYING' and focused and roi and self.focus_check()):
+                    # Pause input during a brief capture gap without dropping
+                    # the manual Arm latch. Holds are released by disarm below;
+                    # no new key-down is allowed until a fresh frame arrives.
                     self._release_due(now)
-                    return
+                    if not self.held:
+                        if not self.waiting_for_decision:
+                            self.waiting_for_decision = True
+                            self.decision_wait_started_at = now
+                            self._log('decision_wait',
+                                      f'old_decision_ms={(now-captured)*1000:.2f};key_down_paused')
+                        if now-self.decision_wait_started_at <= .2:
+                            return
                 if self.armed or self.arm_requested:
                     self._log_readiness_failure(now,failure)
                 self.disarm("stale_frame_or_focus_loss")
                 return
+            if self.waiting_for_arm_frame:
+                self.waiting_for_arm_frame = False
+                self.arm_frame_wait_started_at = None
+                self._log('arm_resumed_on_fresh_frame', 'fresh_validated_context')
             if self.waiting_for_decision:
                 self.waiting_for_decision = False
+                self.decision_wait_started_at = None
                 self._log('decision_resumed','fresh_validated_context')
             if self.modifiers_check():
                 # Do not synthesize Ctrl+S/Alt+F while hotkey modifiers remain
