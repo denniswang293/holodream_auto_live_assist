@@ -30,7 +30,7 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "confirmed_note_type", "current_observation_type", "identity_state",
                 "association_score", "measurement_quality", "note_uid",
                 "simple_core_state", "simple_core_reason", "lane_span", "crossing_y",
-                "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
+                "revision", "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
                 "simple_track_status", "particle_rejection_streak", "particle_reinitializations"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
@@ -39,11 +39,11 @@ FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_
                 "normalization_ms", "state_detector_ms", "note_detector_ms", "tracker_matching_ms",
                 "unknown_association_ms", "pf_prediction_update_ms", "decision_ms", "scheduler_update_ms",
                 "simple_core_ms", "diagnostic_write_ms"]
-ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type"]
+ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type", "lifecycle_state", "revision"]
 DECISION_FIELDS = ["timestamp", "note_uid", "track_id", "lifecycle_state", "reason", "key",
                    "eta_s", "hit_at", "uncertainty_s", "gates_json", "key_conflicts_json"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
-                 "predicted_hit_time", "uncertainty_s", "gameplay_state"]
+                 "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:
     def __init__(self, path, fields):
         self.file = path.open("x", newline="", encoding="utf-8-sig")
@@ -227,7 +227,8 @@ def run(args):
                             "key": event.get("resolved_keys", ""),
                             "predicted_hit_time": event.get("predicted_hit_time", ""),
                             "uncertainty_s": event.get("uncertainty_s", ""),
-                            "gameplay_state": event.get("gameplay_state", "")})
+                            "gameplay_state": event.get("gameplay_state", ""),
+                            "revision": event.get("revision", "")})
                         tap_funnel[event.get("simple_core_state", "unknown")] += 1
                     core_state=event.get("simple_core_state","")
                     if core_state:
@@ -292,6 +293,14 @@ def run(args):
                       "input_trigger_y": engine.trigger_y, "input_advance_px": engine.input_advance_px,
                       "tracking_completion_y": geometry.hit_y,
                       "hold_visual_enabled": engine.hold_enabled,
+                      "judgment_time_model": {"status": engine.judgment_time.status,
+                                              "samples": len(engine.judgment_time.samples),
+                                              "min_samples": engine.judgment_time.min_samples},
+                      "refactor_flags": {
+                          "tap_deadline_amend": engine.simple_core.intents.amend_enabled,
+                          "hold_tracker_v2": engine.hold_tracker_v2 is not None,
+                          "judgment_calibration_v2": engine.judgment_time.enabled,
+                      },
                       "geometry_cache": geometry.cache_info(),
                       "tap_rule": engine.tap_rule.metadata() if engine.tap_rule else None,
                       "processed_frames": engine.frames, "acquired_frames": worker.captured,

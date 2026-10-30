@@ -12,7 +12,7 @@ class SimpleAssistCore:
     def __init__(self, *, session_id: str, tracker_cfg: dict,
                  particle_cfg: dict, hit_y: float,
                  event_cfg: dict, min_y: float, known_keys: set[str],
-                 on_transition=None):
+                 on_transition=None, timing_cfg: dict | None = None):
         self.session_id = session_id
         self.known_keys = set(known_keys)
         self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y)
@@ -23,7 +23,12 @@ class SimpleAssistCore:
             self.transitions.append(dict(row))
             if on_transition:
                 on_transition(row)
-        self.intents = TapIntentManager(record)
+        timing_cfg = dict(timing_cfg or {})
+        self.intents = TapIntentManager(record,
+            amend_enabled=timing_cfg.get("enabled", timing_cfg.get("tap_deadline_amend", False)),
+            freeze_window_ms=timing_cfg.get("freeze_window_ms", 30),
+            max_amend_step_ms=timing_cfg.get("max_amend_step_ms", 40),
+            max_total_amend_ms=timing_cfg.get("max_total_amend_ms", 80))
         self.last_reasons: dict[int, str] = {}
         self.last_traces = {}
         self.decision_rows = []

@@ -25,5 +25,5 @@ def test_tap_decision_csv_preserves_per_gate_and_key_conflict_trace(tmp_path):
 
 def test_live_csv_schemas_keep_legacy_event_and_action_columns():
     assert {"event_id", "predicted_hit_time", "resolved_keys"}.issubset(EVENT_FIELDS)
-    assert {"action", "reason", "timestamp", "event_id", "key"}.issubset(ACTION_FIELDS)
+    assert {"action", "reason", "timestamp", "event_id", "key", "lifecycle_state", "revision"}.issubset(ACTION_FIELDS)
     assert {"note_uid", "state", "reason"}.issubset(INTENT_FIELDS)
