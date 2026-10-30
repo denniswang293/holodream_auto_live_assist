@@ -10,7 +10,7 @@ from src.geometry import CalibratedGeometry
 from src.live_capture import CapturedFrame
 from src.live_engine import LiveEngine
 from src.detector import Candidate
-from src.live_input import MockActuator, TapScheduler
+from src.live_input import ActionIntent, MockActuator, TapScheduler, OfferResult
 from src.predictor import Prediction
 from src.simple_tracker import SimpleTracker
 from src.tap_intent import TapIntentManager
@@ -65,6 +65,14 @@ def make_ready_track(track_id=1, hit_at=10.20, key="F", uncertainty=.01):
     return track
 
 
+def add_particle_evidence(track):
+    track.particle_filter = SimpleNamespace(initialized=True, cfg={"min_real_observations": 4,
+        "max_posterior_width_ms": 40, "min_valid_crossing_mass": .95})
+    track.prediction = replace(track.prediction, real_observation_count=5,
+        eta_p10=.19, eta_p90=.21, valid_crossing_mass=.99)
+    return track
+
+
 class Clock:
     def __init__(self, now):
         self.now = now
@@ -93,10 +101,67 @@ def test_tap_planner_requires_confirmation_eta_and_stable_covered_key():
     assert not proposals
     assert reasons[1] == "track_not_current_confirmed"
 
-    ready = make_ready_track()
+    ready = add_particle_evidence(make_ready_track())
     proposals, reasons = planner.plan([ready], 10., {"F"}, scheduler)
     assert proposals[1].key == "F"
     assert reasons[1] == ""
+    scheduler.close()
+
+
+def test_offer_result_has_fresh_structured_rejection_reason():
+    clock, _, _, scheduler = armed_scheduler()
+    scheduler.last_reason = "stale_old_reason"
+    scheduler.update_context(9.0, "PLAYING", True, True)
+    result = scheduler.offer(ActionIntent("uid", ("F",), 10.2, .01, "tap"))
+    assert isinstance(result, OfferResult)
+    assert result.accepted is False
+    assert result.reason == "validated_capture_expired"
+    assert result.reason != scheduler.last_reason
+    scheduler.update_context(10.0, "PLAYING", True, True)
+    result = scheduler.offer(ActionIntent("uid", ("F",), 10.2, .01, "tap"))
+    assert result.accepted is True and result.reason == "accepted"
+    assert result.intent_id == "uid" and result.timestamp == pytest.approx(10.0)
+    scheduler.close()
+
+
+def test_planner_emits_per_gate_trace_and_candidate_key_conflicts():
+    _, _, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    track = add_particle_evidence(make_ready_track())
+    track.history[-1] = (10.0, 280, .4)
+    scheduler.recent.append(("F", 10.20))
+    proposals, reasons = planner.plan([track], 10., {"F"}, scheduler)
+    assert proposals == {}
+    assert reasons[track.track_id] == "tap_key_conflict"
+    trace = planner.last_traces[track.track_id]
+    assert all(trace.gates.values())
+    assert trace.final_reason == "tap_key_conflict"
+    assert trace.key_conflicts["F"] == "reserved_same_key_time"
+    scheduler.close()
+
+
+def test_planner_traces_candidate_without_eta_without_crashing():
+    _, _, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    track = make_ready_track()
+    track.prediction = replace(track.prediction, eta=None, hit_time=None, uncertainty=None)
+    proposals, reasons = planner.plan([track], 10., {"F"}, scheduler)
+    assert proposals == {}
+    assert reasons[track.track_id] == "eta_unavailable"
+    assert planner.last_traces[track.track_id].hit_at is None
+    scheduler.close()
+
+
+def test_intent_rejection_is_logged_with_its_offer_reason():
+    _, _, _, scheduler = armed_scheduler()
+    scheduler.armed = False
+    transitions = []
+    manager = TapIntentManager(transitions.append)
+    proposal = TapProposal("session:simple:reject", 7, "F", 10.20, .01, "evidence")
+    accepted, rejected = manager.schedule({7: proposal}, scheduler, 10.)
+    assert not accepted and rejected[proposal.note_uid] == "assist_disarmed"
+    row = next(row for row in transitions if row["state"] == "NOT_SCHEDULED")
+    assert row["reason"] == "assist_disarmed"
     scheduler.close()
 
 
@@ -120,7 +185,8 @@ def test_intent_manager_freezes_key_and_deadline_after_acceptance():
     scheduler.poll()
     manager.record_action(rows[-1])
     assert manager.state_for(first.note_uid) == "FIRED"
-    assert [row["state"] for row in transitions if row.get("note_uid") == first.note_uid] == ["SCHEDULED", "FIRED"]
+    assert [row["state"] for row in transitions if row.get("note_uid") == first.note_uid] == [
+        "PENDING", "SCHEDULED", "FIRED"]
     scheduler.close()
 
 

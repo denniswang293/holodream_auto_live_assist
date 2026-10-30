@@ -62,10 +62,20 @@ class TapIntentManager:
         accepted, rejected = [], {}
         self.last_rejections = {}
         if not scheduler.armed:
-            return accepted, {p.note_uid: "assist_disarmed" for p in proposals.values()}
+            rejected = {p.note_uid: "assist_disarmed" for p in proposals.values()}
+            for proposal in proposals.values():
+                self._emit(proposal.note_uid, "NOT_SCHEDULED", now, rejected[proposal.note_uid],
+                           key=proposal.key, hit_at=proposal.hit_at)
+            self.last_rejections = dict(rejected)
+            return accepted, rejected
         readiness = scheduler._readiness_failure(now)
         if readiness:
-            return accepted, {p.note_uid: readiness for p in proposals.values()}
+            rejected = {p.note_uid: readiness for p in proposals.values()}
+            for proposal in proposals.values():
+                self._emit(proposal.note_uid, "NOT_SCHEDULED", now, readiness,
+                           key=proposal.key, hit_at=proposal.hit_at)
+            self.last_rejections = dict(rejected)
+            return accepted, rejected
         generation = scheduler.arm_generation
         for proposal in sorted(proposals.values(), key=lambda p: (p.hit_at, p.note_uid)):
             old = self.intents.get(proposal.note_uid)
@@ -73,17 +83,25 @@ class TapIntentManager:
                 if old.state == "PENDING":
                     continue
                 rejected[proposal.note_uid] = "intent_terminal_no_reschedule"
+                self._emit(proposal.note_uid, "NOT_SCHEDULED", now,
+                           rejected[proposal.note_uid], key=proposal.key, hit_at=proposal.hit_at)
                 continue
             if proposal.hit_at <= now:
                 rejected[proposal.note_uid] = "deadline_already_passed"
+                self._emit(proposal.note_uid, "NOT_SCHEDULED", now,
+                           rejected[proposal.note_uid], key=proposal.key, hit_at=proposal.hit_at)
                 continue
             intent = TapIntent(proposal.note_uid, proposal.key, proposal.hit_at,
                                generation, now, proposal.uncertainty, proposal.evidence,
                                proposal.lane_span, proposal.appearance, proposal.observed_y)
-            if scheduler.offer(intent.action()):
+            result = scheduler.offer(intent.action())
+            if result.accepted:
                 self.intents[proposal.note_uid] = intent
                 intent.transitions.append({"state": "PENDING", "timestamp": now,
                                            "reason": "scheduler_accepted"})
+                self._emit(proposal.note_uid, "PENDING", now, "scheduler_accepted",
+                           key=proposal.key, hit_at=proposal.hit_at,
+                           arm_generation=generation)
                 self._emit(proposal.note_uid, "SCHEDULED", now, "scheduler_accepted",
                            key=proposal.key, hit_at=proposal.hit_at,
                            arm_generation=generation, evidence=proposal.evidence,
@@ -91,7 +109,7 @@ class TapIntentManager:
                            observed_y=proposal.observed_y)
                 accepted.append(intent)
             else:
-                reason = scheduler.last_reason or "scheduler_rejected"
+                reason = result.reason
                 rejected[proposal.note_uid] = reason
                 self._emit(proposal.note_uid, "NOT_SCHEDULED", now, reason,
                            key=proposal.key, hit_at=proposal.hit_at,

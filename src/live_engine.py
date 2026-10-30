@@ -1242,11 +1242,12 @@ class LiveEngine:
                     commit = self.occlusion_commits.get(event_id)
                     if commit and commit[1]==self.scheduler.arm_generation:
                         intent = commit[0]
-                    accepted = self.scheduler.offer(intent)
+                    offer_result = self.scheduler.offer(intent)
+                    accepted = offer_result.accepted
                     self._emit_tap_decision(
                         tr,event_id,frame,finished,"SCHEDULE_OFFERED",
                         "SCHEDULE_ACCEPTED" if accepted else "SCHEDULE_REJECTED",
-                        "" if accepted else (self.scheduler.last_reason or "scheduler_rejected"),
+                        "" if accepted else offer_result.reason,
                         not accepted,scheduled=accepted)
                     if (accepted and not hold and tr.confirmed_note_type=="tap" and tr.selected_key is None):
                         tr.selected_key=keys[0]
@@ -1587,10 +1588,26 @@ def draw_live_overlay(work, tracks, info, engine, dropped=0):
         keys, reason = engine.last_decisions.get(tr.track_id,((),"not_current_eligible_tap"))
         hit = f"{tr.prediction.hit_time:.4f}" if tr.prediction.hit_time is not None else "?"
         uncertainty = f"{tr.prediction.uncertainty:.4f}" if tr.prediction.uncertainty is not None else "?"
+        simple_uid = engine.simple_core.note_uid(tr.track_id) if engine.simple_core else ""
+        simple_intent = engine.simple_core.intents.intents.get(simple_uid) if engine.simple_core else None
+        if simple_intent is not None:
+            lifecycle = "SCHEDULED" if simple_intent.state == "PENDING" else simple_intent.state
+            selected = simple_intent.key
+        elif tr.status != "confirmed":
+            lifecycle, selected = "TRACKING", ""
+        elif tr.confirmed_note_type == "tap" and not reason:
+            lifecycle, selected = "ELIGIBLE", (keys[0] if keys else "")
+        elif tr.confirmed_note_type == "tap":
+            lifecycle, selected = "CONFIRMED", ""
+        else:
+            lifecycle, selected = "TRACK_CONFIRMED", ""
         kind = ('hold_candidate' if
                 f"{engine.session_id}:{tr.track_id}" in engine.hold_ids else tr.kind)
+        outcome = f"key:{selected} {lifecycle}" if selected else lifecycle
+        if reason:
+            outcome += f" | {reason}"
         lines += [f"#{tr.track_id} {kind} cand:{'/'.join(tr.stable_keys) or '?'} hit:{hit}",
-                  f"  +/-{uncertainty}s {reason or ('selected:'+','.join(keys))}"]
+                  f"  +/-{uncertainty}s {outcome}"]
     for i, line in enumerate(lines):
         cv2.putText(canvas, line[:80], (base.shape[1]+round(8*scale), round(19*scale)+i*round(18*scale)),
                     cv2.FONT_HERSHEY_SIMPLEX, .37*scale, (170,235,255) if i == 0 else (220,220,220), max(1,round(scale)), cv2.LINE_AA)
