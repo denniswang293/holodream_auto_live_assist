@@ -157,16 +157,15 @@ def test_existing_intent_does_not_extend_deadline_after_track_loss():
     scheduler.close()
 
 
-def test_live_engine_simple_core_schedules_tap_once_without_v6_tap_path():
+def test_live_engine_particle_core_schedules_tap_once():
     root = Path(__file__).resolve().parents[1]
     geometry = CalibratedGeometry(json.loads(
         (root / "config/geometry_live_assist.json").read_text(encoding="utf-8-sig")))
     config = json.loads((root / "config.json").read_text(encoding="utf-8-sig"))
-    config["live"] = json.loads((root / "config/live_assist_v5.json").read_text(encoding="utf-8-sig"))
-    config["live"].update(tap_core="simple", input_advance_px=15, dropout_grace_ms=0)
+    config["live"] = json.loads((root / "config/live_assist.json").read_text(encoding="utf-8-sig"))
+    config["live"].update(input_advance_px=15)
     config["live"]["hold_visual"]["enabled"] = False
-    config["live"]["speculative_taps"]["enabled"] = False
-    config["predictor"]["mode"] = "legacy"
+    config["predictor"]["mode"] = "particle"
     config["tracker"].update(confirm_observations=5, max_gap_s=.16)
 
     clock, actuator, rows, scheduler = armed_scheduler(1000.)

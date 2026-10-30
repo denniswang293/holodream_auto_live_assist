@@ -57,20 +57,19 @@ class TapPlanner:
         legal = set(c.candidate_keys) & set(track.stable_keys) & known_keys
         if not legal:
             return "no_stable_verified_covered_key"
-        if p.predictor_mode == "particle":
-            pf = track.particle_filter
-            if pf is None or not pf.initialized:
-                return "particle_not_initialized"
-            cfg = pf.cfg
-            if (p.real_observation_count is None or
-                    p.real_observation_count < int(cfg.get("min_real_observations", 4))):
-                return "particle_insufficient_real_observations"
-            width = (p.eta_p90 - p.eta_p10) if p.eta_p10 is not None and p.eta_p90 is not None else None
-            if width is None or not math.isfinite(width) or width > float(cfg.get("max_posterior_width_ms", 40)) / 1000:
-                return "particle_posterior_too_wide"
-            if (p.valid_crossing_mass is None or
-                    p.valid_crossing_mass < float(cfg.get("min_valid_crossing_mass", .95))):
-                return "particle_crossing_mass_too_low"
+        pf = track.particle_filter
+        if pf is None or not pf.initialized:
+            return "particle_not_initialized"
+        cfg = pf.cfg
+        if (p.real_observation_count is None or
+                p.real_observation_count < int(cfg.get("min_real_observations", 4))):
+            return "particle_insufficient_real_observations"
+        width = (p.eta_p90 - p.eta_p10) if p.eta_p10 is not None and p.eta_p90 is not None else None
+        if width is None or not math.isfinite(width) or width > float(cfg.get("max_posterior_width_ms", 40)) / 1000:
+            return "particle_posterior_too_wide"
+        if (p.valid_crossing_mass is None or
+                p.valid_crossing_mass < float(cfg.get("min_valid_crossing_mass", .95))):
+            return "particle_crossing_mass_too_low"
         return ""
 
     @staticmethod

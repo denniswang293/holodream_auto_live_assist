@@ -45,13 +45,10 @@ def test_yellow_path_evidence_is_color_specific():
 
 
 @pytest.mark.parametrize('appearance',['green_candidate','yellow_bar'])
-@pytest.mark.parametrize('tap_core',['v6','simple'])
-def test_hold_keeps_key_down_until_its_own_tail_leaves_judgment_row(make_candidate,appearance,tap_core):
+def test_hold_keeps_key_down_until_its_own_tail_leaves_judgment_row(make_candidate,appearance):
     geometry,green=scene(appearance)
     config=json.loads((ROOT/'config.json').read_text())
-    config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
-    config['live']['dropout_grace_ms']=0
-    config['live']['tap_core']=tap_core
+    config['live']=json.loads((ROOT/'config/live_assist.json').read_text(encoding='utf-8-sig'))
     clock=SimpleNamespace(now=1000.)
     actuator=MockActuator()
     scheduler=TapScheduler('assist',actuator,clock=lambda:clock.now,max_uncertainty=.1)
@@ -92,7 +89,7 @@ def test_hold_keeps_key_down_until_its_own_tail_leaves_judgment_row(make_candida
 def test_focus_loss_releases_hold_immediately(make_candidate,appearance):
     geometry,green=scene(appearance)
     config=json.loads((ROOT/'config.json').read_text())
-    config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
+    config['live']=json.loads((ROOT/'config/live_assist.json').read_text(encoding='utf-8-sig'))
     clock=SimpleNamespace(now=1000.)
     actuator=MockActuator()
     scheduler=TapScheduler('assist',actuator,clock=lambda:clock.now,max_uncertainty=.1)
@@ -120,7 +117,7 @@ def test_focus_loss_releases_hold_immediately(make_candidate,appearance):
 def test_committed_hold_survives_early_target_crossing_only_until_physical_line(make_candidate,cross_y):
     geometry,green=scene()
     config=json.loads((ROOT/'config.json').read_text())
-    config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
+    config['live']=json.loads((ROOT/'config/live_assist.json').read_text(encoding='utf-8-sig'))
     clock=SimpleNamespace(now=1000.);actuator=MockActuator()
     scheduler=TapScheduler('assist',actuator,clock=lambda:clock.now,max_uncertainty=.1)
     scheduler.update_context(clock.now,'PLAYING',True);scheduler.toggle();scheduler.poll()
@@ -167,7 +164,7 @@ def test_hold_scheduler_rejects_missing_path_and_caps_duration():
 def test_wide_hold_head_suppresses_its_narrow_edge_fragment(make_candidate):
     geometry,green=scene()
     config=json.loads((ROOT/'config.json').read_text())
-    config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
+    config['live']=json.loads((ROOT/'config/live_assist.json').read_text(encoding='utf-8-sig'))
     clock=SimpleNamespace(now=1000.)
     scheduler=TapScheduler('assist',MockActuator(),clock=lambda:clock.now,max_uncertainty=.1)
     scheduler.update_context(clock.now,'PLAYING',True);scheduler.toggle();scheduler.poll()

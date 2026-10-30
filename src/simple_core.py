@@ -7,16 +7,15 @@ from .tap_planner import TapPlanner
 
 
 class SimpleAssistCore:
-    def __init__(self, *, session_id: str, tracker_cfg: dict, predictor_cfg: dict,
-                 predictor_mode: str, particle_cfg: dict, hit_y: float,
+    def __init__(self, *, session_id: str, tracker_cfg: dict,
+                 particle_cfg: dict, hit_y: float,
                  event_cfg: dict, min_y: float, known_keys: set[str],
                  on_transition=None):
         self.session_id = session_id
         self.known_keys = set(known_keys)
-        self.tracker = SimpleTracker(tracker_cfg, predictor_cfg,
-            predictor_mode=predictor_mode, particle_cfg=particle_cfg, hit_y=hit_y)
+        self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y)
         self.planner = TapPlanner(event_cfg, min_y=min_y,
-            max_uncertainty_s=float(predictor_cfg.get("max_uncertainty_s", .04)))
+            max_uncertainty_s=float(particle_cfg.get("max_uncertainty_s", .04)))
         self.transitions = []
         def record(row):
             self.transitions.append(dict(row))

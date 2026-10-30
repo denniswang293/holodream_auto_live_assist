@@ -1,0 +1,44 @@
+{
+  "capture_fps": 120,
+  "keyboard_input_mode": "scan_code",
+  "max_frame_age_ms": 60,
+  "max_input_lateness_ms": 15,
+  "input_advance_px": 15,
+  "hold_visual": {
+    "enabled": true,
+    "path_appearances": [
+      "green_candidate",
+      "yellow_bar"
+    ],
+    "control_rule": "hold_start_key_to_visible_tail",
+    "confirmed_by": "user",
+    "confirmation": "按住起點鍵直到尾端，滑動中不換鍵",
+    "min_path_px": 40,
+    "release_gap_ms": 80,
+    "max_hold_s": 6.0
+  },
+  "tap_rule": {
+    "rule": "any_covered_key",
+    "commit_horizon_ms": 100,
+    "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+    "key_order": [
+      "S",
+      "D",
+      "F",
+      "J",
+      "K",
+      "L"
+    ],
+    "confirmed_by": "user",
+    "confirmation_date": "2026-10-28",
+    "confirmation": "範圍內任意一鍵；鍵位是 S D F J K L"
+  },
+  "speculative_taps": {
+    "enabled": true,
+    "max_uncertainty_s": 0.1,
+    "max_hit_drift_s": 0.15,
+    "tap_min_hit_observations": 2,
+    "tap_hit_drift_window": 3,
+    "tap_last_chance_single_fit": true
+  }
+}

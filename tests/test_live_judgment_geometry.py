@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_assist_timing_advance_changes_prediction_target_without_moving_geometry():
     config=json.loads((ROOT/'config.json').read_text(encoding='utf-8-sig'))
-    config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
+    config['live']=json.loads((ROOT/'config/live_assist.json').read_text(encoding='utf-8-sig'))
     geometry=CalibratedGeometry(json.loads((ROOT/'config/geometry_live_assist.json').read_text(encoding='utf-8-sig')))
     before=json.dumps(geometry.document,sort_keys=True)
     hit_times=[]
@@ -33,7 +33,7 @@ def test_assist_timing_advance_changes_prediction_target_without_moving_geometry
 @pytest.mark.parametrize('advance',[-1,41,float('nan')])
 def test_assist_rejects_invalid_timing_advance(advance):
     config=json.loads((ROOT/'config.json').read_text(encoding='utf-8-sig'))
-    config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
+    config['live']=json.loads((ROOT/'config/live_assist.json').read_text(encoding='utf-8-sig'))
     config['live']['input_advance_px']=advance
     geometry=CalibratedGeometry(json.loads((ROOT/'config/geometry_live_assist.json').read_text(encoding='utf-8-sig')))
     with pytest.raises(ValueError,match='input advance'):
