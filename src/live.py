@@ -40,6 +40,10 @@ FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_
                 "unknown_association_ms", "pf_prediction_update_ms", "decision_ms", "scheduler_update_ms",
                 "simple_core_ms", "diagnostic_write_ms"]
 ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type"]
+DECISION_FIELDS = ["timestamp", "note_uid", "track_id", "lifecycle_state", "reason", "key",
+                   "eta_s", "hit_at", "uncertainty_s", "gates_json", "key_conflicts_json"]
+INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
+                 "predicted_hit_time", "uncertainty_s", "gameplay_state"]
 class CsvLog:
     def __init__(self, path, fields):
         self.file = path.open("x", newline="", encoding="utf-8-sig")
@@ -112,6 +116,8 @@ def run(args):
     stop_reason = "stopped"
     recorder = None
     reasons = Counter()
+    tap_funnel = Counter()
+    input_actions = Counter()
     latencies = []
     last_info = None
     from .windows_runtime import WindowTarget, enable_dpi_awareness, modifiers_down
@@ -133,7 +139,10 @@ def run(args):
         event_log = CsvLog(out/"live_events.csv", EVENT_FIELDS)
         frame_log = CsvLog(out/"live_frames.csv", FRAME_FIELDS)
         key_log = CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
-        for log in (event_log, frame_log, key_log):
+        decision_log = CsvLog(out/"tap_decisions.csv", DECISION_FIELDS)
+        intent_log = CsvLog(out/"tap_intents.csv", INTENT_FIELDS)
+        input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
+        for log in (event_log, frame_log, key_log, decision_log, intent_log, input_log):
             stack.callback(log.close)
         if args.record_overlay:
             from .live_async import EncoderWorker, VIDEO_INDEX_FIELDS
@@ -150,6 +159,8 @@ def run(args):
         engine_holder={}
         def log_action(row):
             key_log.write(row)
+            input_log.write(row)
+            input_actions[row.get("action", "unknown")] += 1
             if "engine" in engine_holder:
                 engine_holder["engine"].record_scheduler_action(row)
             if row["action"] in ("armed","disarmed","arm_rejected","arm_requested",
@@ -168,7 +179,7 @@ def run(args):
         stack.callback(scheduler.close)
         engine = LiveEngine(config, geometry, scheduler, clock)
         engine_holder["engine"]=engine
-        print(f"C Particle Tap core + visual Hold; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
+        print(f"Particle-based Tap assist + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
         from .windows_runtime import GlobalControls
         def emergency_stop():
             stopped.set()
@@ -204,6 +215,20 @@ def run(args):
                 info["capture_fps"] = worker.actual_fps
                 for event in events:
                     event_log.write(event)
+                    if event.get("simple_core_state") in {
+                            "DETECTED", "CONFIRMED", "SCHEDULED", "PENDING", "FIRED",
+                            "EXPIRED", "CANCELED", "NOT_SCHEDULED"}:
+                        intent_log.write({
+                            "event_id": event.get("event_id", ""),
+                            "note_uid": event.get("note_uid", event.get("event_id", "")),
+                            "state": event.get("simple_core_state", ""),
+                            "reason": event.get("simple_core_reason", ""),
+                            "timestamp": event.get("capture_timestamp", ""),
+                            "key": event.get("resolved_keys", ""),
+                            "predicted_hit_time": event.get("predicted_hit_time", ""),
+                            "uncertainty_s": event.get("uncertainty_s", ""),
+                            "gameplay_state": event.get("gameplay_state", "")})
+                        tap_funnel[event.get("simple_core_state", "unknown")] += 1
                     core_state=event.get("simple_core_state","")
                     if core_state:
                         if core_state=="SCHEDULED": reasons["selected_tap"] += 1
@@ -211,6 +236,8 @@ def run(args):
                             reasons[event.get("simple_core_reason") or core_state.lower()] += 1
                     else:
                         reasons[event["abstain_reason"] or "selected_tap"] += 1
+                for decision in engine.simple_core.drain_decisions():
+                    decision_log.write(decision)
                 image = draw_live_overlay(work, tracks, info, engine, dropped)
                 info["dropped_total"] = dropped
                 info["video_frame"] = ""
@@ -289,6 +316,21 @@ def run(args):
                       "recording_error": str(recording_error) if recording_error else None,
                       "accuracy": "UNVERIFIED", "real_game_sessions_validated": 0}
             _summary(out, result)
+            (out/"run_metrics.json").write_text(json.dumps({
+                "metric_scope": "diagnostic_funnel; not game accuracy",
+                "tap_lifecycle_transitions": dict(tap_funnel),
+                "input_action_counts": dict(input_actions),
+                "simple_intent_terminal_states": simple_states,
+                "processed_frames": engine.frames,
+                "acquired_frames": worker.captured,
+                "capture_fps": result["capture_fps"],
+                "processing_fps": result["wall_processing_fps"],
+                "latency_p50_ms": result["latency_p50_ms"],
+                "latency_p95_ms": result["latency_p95_ms"],
+                "dropped_frames": result["dropped_frames"],
+                "stale_frames": result["stale_frames"],
+                "accuracy": "UNVERIFIED"
+            }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
             print(f"Saved {out}: {engine.frames} frames, {engine.events} events, {scheduler.sent_taps} taps, {scheduler.sent_holds} holds. Accuracy UNVERIFIED.", flush=True)
             if recording_error:
                 raise RuntimeError(str(recording_error))

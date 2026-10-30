@@ -1,6 +1,8 @@
 """Composition root for the deliberately small ordinary-Tap control path."""
 from __future__ import annotations
 
+import json
+
 from .simple_tracker import SimpleTracker
 from .tap_intent import TapIntentManager
 from .tap_planner import TapPlanner
@@ -23,6 +25,9 @@ class SimpleAssistCore:
                 on_transition(row)
         self.intents = TapIntentManager(record)
         self.last_reasons: dict[int, str] = {}
+        self.last_traces = {}
+        self.decision_rows = []
+        self._last_decision_fingerprints = {}
 
     def note_uid(self, track_id: int):
         return f"{self.session_id}:simple:{track_id}"
@@ -46,6 +51,7 @@ class SimpleAssistCore:
                  if intent.state == "PENDING"}
         proposals, reasons = self.planner.plan(tracks if enabled else [], processed_at,
             self.known_keys, scheduler, note_uids=note_uids, fixed_keys=fixed)
+        traces = self.planner.last_traces
         accepted, rejected = self.intents.schedule(proposals, scheduler, processed_at)
         self.last_reasons = {**reasons, **{
             track.track_id: rejected[uid]
@@ -53,10 +59,49 @@ class SimpleAssistCore:
             for uid in (note_uids.get(track.track_id, ""),)
             if uid in rejected
         }}
+        self.last_traces = traces
+        for track in tracks:
+            uid = self.note_uid(track.track_id)
+            trace = traces.get(track.track_id)
+            intent = self.intents.intents.get(uid)
+            reason = self.last_reasons.get(track.track_id, "")
+            if intent is not None:
+                lifecycle = "SCHEDULED" if intent.state == "PENDING" else intent.state
+                key = intent.key
+                reason = next((t["reason"] for t in reversed(intent.transitions) if t.get("reason")), "")
+            elif not enabled:
+                lifecycle, key = "CANCELED", ""
+                reason = "safe_context_disabled"
+            elif track.status != "confirmed":
+                lifecycle, key = "TRACKING", ""
+            elif track.confirmed_note_type == "tap" and not reason:
+                lifecycle, key = "ELIGIBLE", proposals.get(track.track_id).key if track.track_id in proposals else ""
+            else:
+                lifecycle, key = "TRACK_CONFIRMED", ""
+            gates = trace.gates if trace else {}
+            conflicts = trace.key_conflicts if trace else {}
+            fingerprint = (lifecycle, reason, key, tuple(sorted(gates.items())),
+                           tuple(sorted(conflicts.items())))
+            if fingerprint == self._last_decision_fingerprints.get(track.track_id):
+                continue
+            self._last_decision_fingerprints[track.track_id] = fingerprint
+            self.decision_rows.append({
+                "timestamp": processed_at, "note_uid": uid, "track_id": track.track_id,
+                "lifecycle_state": lifecycle, "reason": reason, "key": key,
+                "eta_s": trace.eta_s if trace and trace.eta_s is not None else "",
+                "hit_at": trace.hit_at if trace and trace.hit_at is not None else "",
+                "uncertainty_s": trace.uncertainty_s if trace and trace.uncertainty_s is not None else "",
+                "gates_json": json.dumps(gates, sort_keys=True) if trace else "{}",
+                "key_conflicts_json": json.dumps(conflicts, sort_keys=True) if trace else "{}",
+            })
         return proposals, accepted
 
     def drain_transitions(self):
         rows, self.transitions = self.transitions, []
+        return rows
+
+    def drain_decisions(self):
+        rows, self.decision_rows = self.decision_rows, []
         return rows
 
     def record_scheduler_action(self, action: dict):

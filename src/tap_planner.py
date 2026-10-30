@@ -22,6 +22,18 @@ class TapProposal:
     observed_y: float | None = None
 
 
+@dataclass
+class DecisionTrace:
+    note_uid: str
+    track_id: int
+    gates: dict[str, bool]
+    final_reason: str
+    eta_s: float | None
+    hit_at: float | None
+    uncertainty_s: float | None
+    key_conflicts: dict[str, str]
+
+
 class TapPlanner:
     """Turn confirmed motion evidence into at most one key and one ETA."""
 
@@ -31,6 +43,36 @@ class TapPlanner:
         self.min_y = float(min_y)
         self.max_uncertainty_s = float(max_uncertainty_s)
         self.conflict_window_s = float(conflict_window_s)
+
+    def _trace_gates(self, track: SimpleTrack, now: float, known_keys: set[str]):
+        c, p = track.candidate, track.prediction
+        pf = track.particle_filter
+        cfg = pf.cfg if pf is not None else {}
+        legal = set(c.candidate_keys) & set(track.stable_keys) & known_keys
+        finite_eta = (p.hit_time is not None and p.eta is not None and p.uncertainty is not None and
+                      all(math.isfinite(v) for v in (p.hit_time, p.eta, p.uncertainty)))
+        width = (p.eta_p90 - p.eta_p10) if p.eta_p10 is not None and p.eta_p90 is not None else None
+        gates = {
+            "track_confirmed_current": track.status == "confirmed" and not track.missed,
+            "ordinary_tap_confirmed": is_simple_tap(c) and track.confirmed_note_type == "tap",
+            "stable_key": bool(track.stable_keys),
+            "lane_span_valid": (math.isfinite(c.u_min) and math.isfinite(c.u_max) and
+                                0 <= c.u_min < c.u_max <= 1),
+            "event_min_y_reached": bool(track.history and track.history[-1][1] >= self.min_y),
+            "eta_available_finite": finite_eta,
+            "eta_future": bool(finite_eta and p.hit_time > now and p.eta > 0),
+            "eta_within_horizon": bool(finite_eta and p.eta <= float(self.event_config.get("max_eta_s", .45))),
+            "eta_uncertainty_acceptable": bool(finite_eta and 0 <= p.uncertainty <= self.max_uncertainty_s),
+            "verified_covered_key": bool(legal),
+            "particle_initialized": bool(pf and pf.initialized),
+            "particle_real_observations": bool(pf and p.real_observation_count is not None and
+                p.real_observation_count >= int(cfg.get("min_real_observations", 4))),
+            "particle_posterior_width": bool(width is not None and math.isfinite(width) and
+                width <= float(cfg.get("max_posterior_width_ms", 40)) / 1000),
+            "particle_crossing_mass": bool(p.valid_crossing_mass is not None and
+                p.valid_crossing_mass >= float(cfg.get("min_valid_crossing_mass", .95))),
+        }
+        return gates
 
     def _reason(self, track: SimpleTrack, now: float, known_keys: set[str]):
         c, p = track.candidate, track.prediction
@@ -87,9 +129,25 @@ class TapPlanner:
         fixed_keys = fixed_keys or {}
         reasons, proposals = {}, {}
         eligible = []
+        self.last_traces = {}
         for track in tracks:
             reason = self._reason(track, now, known_keys)
             uid = note_uids.get(track.track_id, f"simple:{track.track_id}")
+            gates = self._trace_gates(track, now, known_keys)
+            conflicts = {}
+            hit = track.prediction.hit_time
+            overlaps = self._covered_keys(track, known_keys)
+            for key in KEYS:
+                if key not in overlaps:
+                    conflicts[key] = "not_covered_or_unverified"
+                elif hit is not None and any(other == key and abs(t-hit) < self.conflict_window_s for other, t in
+                          [(k, h) for k, h in scheduler.recent] +
+                          [(intent.keys[0], intent.hit_at) for intent in scheduler.pending.values()]):
+                    conflicts[key] = "reserved_same_key_time"
+                else:
+                    conflicts[key] = ""
+            self.last_traces[track.track_id] = DecisionTrace(uid, track.track_id, gates, reason,
+                track.prediction.eta, hit, track.prediction.uncertainty, conflicts)
             if reason:
                 reasons[track.track_id] = reason
             else:
@@ -113,14 +171,24 @@ class TapPlanner:
                 overlaps = self._covered_keys(track, known_keys)
                 fixed = fixed_keys.get(uid)
                 row = []
+                trace = self.last_traces[track.track_id]
                 for key in KEYS:
                     conflicts = any(other == key and abs(t - hit) < self.conflict_window_s
                                     for other, t in reservations)
                     if fixed and key != fixed:
+                        trace.key_conflicts[key] = "intent_key_frozen"
                         row.append(1e9)
-                    elif key not in overlaps or conflicts or held.get(key, -math.inf) > hit:
+                    elif key not in overlaps:
+                        trace.key_conflicts[key] = "not_covered_or_unverified"
+                        row.append(1e9)
+                    elif conflicts:
+                        trace.key_conflicts[key] = "reserved_same_key_time"
+                        row.append(1e9)
+                    elif held.get(key, -math.inf) > hit:
+                        trace.key_conflicts[key] = "key_held_through_hit_time"
                         row.append(1e9)
                     else:
+                        trace.key_conflicts[key] = ""
                         row.append(1. - overlaps[key] * 6.)
                 row.extend([unmatched] * len(group))
                 costs.append(row)
@@ -140,4 +208,5 @@ class TapPlanner:
                     reasons[track.track_id] = ""
                 else:
                     reasons[track.track_id] = "tap_key_conflict"
+                    self.last_traces[track.track_id].final_reason = "tap_key_conflict"
         return proposals, reasons

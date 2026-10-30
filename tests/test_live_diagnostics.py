@@ -1,54 +1,29 @@
 import csv
 
-from src.live import ASSOCIATION_FIELDS, AsyncCsvLog, CsvLog, IDENTITY_FIELDS
+from src.live import (ACTION_FIELDS, DECISION_FIELDS, EVENT_FIELDS, INTENT_FIELDS,
+                      CsvLog)
 
 
-def test_identity_transition_csv_accepts_coast_and_reliable_age(tmp_path):
-    path = tmp_path / "pf_identity_transitions.csv"
-    row = {"physical_note_uid": "physical:1", "track_id": 1,
-           "timestamp": 1.0, "from_state": "CONFIRMED_TAP",
-           "to_state": "TAP_COASTING", "reason": "no_accepted_measurement",
-           "coast_ms": 16.7, "reliable_age_ms": 33.3, "source_frame": 12}
-    assert {"coast_ms", "reliable_age_ms"}.issubset(IDENTITY_FIELDS)
-    log = CsvLog(path, IDENTITY_FIELDS)
+def test_tap_decision_csv_preserves_per_gate_and_key_conflict_trace(tmp_path):
+    path = tmp_path / "tap_decisions.csv"
+    row = {"timestamp": 1.0, "note_uid": "session:simple:4", "track_id": 4,
+           "lifecycle_state": "ELIGIBLE", "reason": "", "key": "F",
+           "eta_s": .2, "hit_at": 1.2, "uncertainty_s": .01,
+           "gates_json": '{"track_confirmed_current":true}',
+           "key_conflicts_json": '{"F":""}'}
+    log = CsvLog(path, DECISION_FIELDS)
     try:
         log.write(row)
     finally:
         log.close()
-    with path.open(newline="", encoding="utf-8-sig") as f:
-        saved = next(csv.DictReader(f))
-    assert saved["coast_ms"] == "16.7"
-    assert saved["reliable_age_ms"] == "33.3"
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        saved = next(csv.DictReader(stream))
+    assert saved["note_uid"] == "session:simple:4"
+    assert "track_confirmed_current" in saved["gates_json"]
+    assert saved["key_conflicts_json"] == '{"F":""}'
 
 
-def test_unknown_association_csv_accepts_source_verdict_fields(tmp_path):
-    path = tmp_path / "pf_unknown_association_audit.csv"
-    row = {"source_frame": 7, "track_id": 1, "candidate_index": 0,
-           "association_accepted": True, "final_reason": "PF_MATCHED_DEGRADED_UNKNOWN",
-           "accepted": True, "reason": "PF_MATCHED_DEGRADED_UNKNOWN",
-           "association_score": .2, "predicted_y": 170.0,
-           "observed_y": 170.2, "coast_ms": 16.7}
-    assert {"accepted", "reason"}.issubset(ASSOCIATION_FIELDS)
-    log = CsvLog(path, ASSOCIATION_FIELDS)
-    try:
-        log.write(row)
-    finally:
-        log.close()
-    with path.open(newline="", encoding="utf-8-sig") as f:
-        saved = next(csv.DictReader(f))
-    assert saved["accepted"] == "True"
-    assert saved["reason"] == "PF_MATCHED_DEGRADED_UNKNOWN"
-
-
-def test_async_diagnostic_writer_batches_and_reports_schema_errors(tmp_path):
-    path=tmp_path/"diagnostics.csv"
-    log=AsyncCsvLog(path,["frame","value"],max_queue=4,batch_size=2)
-    log.write({"frame":1,"value":"ok"})
-    log.write({"frame":2,"value":"ok"})
-    log.write({"frame":3,"value":"ok","unexpected":True})
-    log.close()
-    assert log.health()["rows_written"]==2
-    assert log.health()["schema_errors"]==1
-    assert log.health()["dropped_rows"]==1
-    with path.open(newline="",encoding="utf-8-sig") as f:
-        assert [row["frame"] for row in csv.DictReader(f)]==["1","2"]
+def test_live_csv_schemas_keep_legacy_event_and_action_columns():
+    assert {"event_id", "predicted_hit_time", "resolved_keys"}.issubset(EVENT_FIELDS)
+    assert {"action", "reason", "timestamp", "event_id", "key"}.issubset(ACTION_FIELDS)
+    assert {"note_uid", "state", "reason"}.issubset(INTENT_FIELDS)

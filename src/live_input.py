@@ -38,6 +38,17 @@ class ActionIntent:
     path_appearance: str | None = None
 
 
+@dataclass(frozen=True)
+class OfferResult:
+    accepted: bool
+    reason: str
+    intent_id: str
+    timestamp: float
+
+    def __bool__(self):
+        return self.accepted
+
+
 def verified_keys(config, geometry_sha256):
     """Manual key evidence is pinned to this geometry, never a heuristic score."""
     evidence = config.get("live", {}).get("verified_key_mapping", {})
@@ -191,30 +202,38 @@ class TapScheduler:
     def offer(self, intent):
         with self.lock:
             now = self.clock()
-            if self.mode != "assist" or not self.armed or not self._ready(now) or self.modifiers_check():
-                return False
+            if self.mode != "assist":
+                reason = "assist_mode_required"
+            elif not self.armed:
+                reason = "assist_disarmed"
+            else:
+                reason = self._readiness_failure(now)
+                if not reason and self.modifiers_check():
+                    reason = "physical_modifier_held"
+            if reason:
+                return OfferResult(False, reason, intent.event_id, now)
             if (intent.note_type not in ("tap","hold") or len(intent.keys) != 1 or intent.keys[0] not in list("SDFJKL") or
                     not math.isfinite(intent.hit_at) or not math.isfinite(intent.uncertainty) or
                     not 0 <= intent.uncertainty <= self.max_uncertainty or not now < intent.hit_at <= now+.45):
-                return False
+                return OfferResult(False, "invalid_intent_or_timing", intent.event_id, now)
             if intent.note_type == 'hold' and (intent.path_u is None or
                     not math.isfinite(intent.path_u) or not 0 <= intent.path_u <= 1):
-                return False
+                return OfferResult(False, "invalid_hold_path_position", intent.event_id, now)
             if intent.note_type == 'hold' and intent.path_appearance not in (None,'green_candidate','yellow_bar'):
-                return False
+                return OfferResult(False, "invalid_hold_appearance", intent.event_id, now)
             if intent.event_id in self.consumed:
-                return False
+                return OfferResult(False, "intent_already_consumed", intent.event_id, now)
             if intent.event_id not in self.pending:
                 if len(self.pending) >= 32:
                     self._log("abstain", "pending_limit", intent)
-                    return False
+                    return OfferResult(False, "pending_limit", intent.event_id, now)
                 # Separate simultaneous single-key notes are allowed. A second
                 # track on the same key/time is not a new physical-note proof.
                 if any(key == intent.keys[0] and abs(hit-intent.hit_at) < .035
                        for key, hit in self.recent):
                     self.consumed.add(intent.event_id)
                     self._log("abstain", "possible_duplicate_physical_note", intent)
-                    return False
+                    return OfferResult(False, "possible_duplicate_physical_note", intent.event_id, now)
                 self.recent.append((intent.keys[0], intent.hit_at))
                 self.pending_reservations[intent.event_id] = (intent.keys[0],intent.hit_at)
                 self._log("scheduled", intent=intent, key=intent.keys[0])
@@ -228,7 +247,7 @@ class TapScheduler:
                     self.recent.append(updated)
                     self.pending_reservations[intent.event_id] = updated
             self.pending[intent.event_id] = intent
-            return True
+            return OfferResult(True, "accepted", intent.event_id, now)
 
     def _remove_pending_reservation(self, event_id):
         reservation = self.pending_reservations.pop(event_id,None)
