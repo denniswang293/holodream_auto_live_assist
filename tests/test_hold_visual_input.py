@@ -45,11 +45,13 @@ def test_yellow_path_evidence_is_color_specific():
 
 
 @pytest.mark.parametrize('appearance',['green_candidate','yellow_bar'])
-def test_hold_keeps_key_down_until_its_own_tail_leaves_judgment_row(make_candidate,appearance):
+@pytest.mark.parametrize('tap_core',['v6','simple'])
+def test_hold_keeps_key_down_until_its_own_tail_leaves_judgment_row(make_candidate,appearance,tap_core):
     geometry,green=scene(appearance)
     config=json.loads((ROOT/'config.json').read_text())
     config['live']=json.loads((ROOT/'config/live_assist_v5.json').read_text(encoding='utf-8-sig'))
     config['live']['dropout_grace_ms']=0
+    config['live']['tap_core']=tap_core
     clock=SimpleNamespace(now=1000.)
     actuator=MockActuator()
     scheduler=TapScheduler('assist',actuator,clock=lambda:clock.now,max_uncertainty=.1)

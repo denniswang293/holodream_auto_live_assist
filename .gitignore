@@ -9,5 +9,5 @@ build/
 dist/
 *.egg-info/
 /holodream.mp4
-/output/assist
-/output/run_*/live_overlay.mp4
+/output/*
+!/output/README.md

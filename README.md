@@ -2,6 +2,8 @@
 
 > **警告：**目前工具仍處於測試階段，測試結果尚不穩定，基本上還不能放心用於實戰。
 
+V7 Simple Assist Core 已加入可選 Mock 驗證路徑，但尚未完成獨立音符真值標註；正式 Assist 預設仍是 V6。不要把回放送鍵數當成命中率。`--tap-core simple` 僅用於受控比較，實機測試前請先檢閱 `output/v7_simple_core_ab/` 的取消與疑似重複清單。
+
 HoloDream 目前只保留 Windows 全螢幕即時 Assist：以 720×404 座標辨識六鍵軌道，按 `S D F J K L` 對應遊戲鍵。輸入啟動時關閉，只有使用者在遊戲前景按下 `Ctrl+Shift+Alt+Q` 並放開組合鍵後才會啟用。
 
 
@@ -42,6 +44,18 @@ python -m pytest
 ```
 
 測試不等於實戰命中率驗證。
+
+## V7 Simple Core Mock 比較
+
+使用指定實機錄影跑 V6 + Particle、Simple + Linear、Simple + Particle 三組 MockActuator 回放。這不會送出實際鍵盤輸入，也不會覆寫來源 run：
+
+```powershell
+python -m tools.replay_simple_core output/run_20261030T132141_738544Z --out output/v7_simple_core_ab
+```
+
+結果位於 `output/v7_simple_core_ab/`。需人工標註物理音符、碰線時間與遊戲判定後，才能判定哪組較少漏按或誤按。
+
+受控的 Simple 實機路徑可用 `--tap-core simple` 選擇；它仍要求在遊戲前景手動按 `Ctrl+Shift+Alt+Q` Arm，並保留 `Esc`／`F12` 停止。未完成人工真值覆核前，請保持正式預設 V6。
 
 ## 專案結構
 
