@@ -65,8 +65,12 @@ def test_identity_retention_fails_closed_for_focus_stale_expiry_and_wrong_key(ma
     tr.source_track_ids = [tr.track_id]
     tr.physical_note_uid = "physical:one"
     engine.input_eligible_ids[tr.track_id] = scheduler.arm_generation
+    traces=[]
+    engine.diagnostic_sink=lambda name,row: traces.append((name,row))
     args = dict(state="PLAYING", focused=True, roi_valid=True, stale=False)
     assert not engine._tap_identity_intent_still_valid(tr,event_id,intent,.12,**{**args,"focused":False})
+    assert traces[-1][0]=="scheduler_trace"
+    assert traces[-1][1]["first_failed_predicate"]=="FOCUS_LOST"
     assert not engine._tap_identity_intent_still_valid(tr,event_id,intent,.12,**{**args,"stale":True})
     assert not engine._tap_identity_intent_still_valid(tr,event_id,intent,.17,**args)
     tr.stable_keys = ["D"]

@@ -65,6 +65,7 @@ class ParticlePredictor:
         self.ess = 0.0
         self.last_status = "PF_NOT_READY"
         self.elapsed = 0.0
+        self.association_elapsed = 0.0
 
     def _initialize(self, history: list[tuple[float, float, float]]) -> bool:
         data = np.asarray(history[-7:], dtype=float)
@@ -114,7 +115,20 @@ class ParticlePredictor:
 
     def identity_association_score(self, candidate, timestamp: float, reference_span: tuple[float, float],
                                    supported_keys: set[str] | list[str], selected_key: str | None = None,
-                                   *, max_sigma: float | None = None) -> dict:
+                                   *, max_sigma: float | None = None,
+                                   allow_pinned_key: bool = False) -> dict:
+        began = time.perf_counter()
+        try:
+            return self._identity_association_score(candidate,timestamp,reference_span,
+                supported_keys,selected_key,max_sigma=max_sigma,
+                allow_pinned_key=allow_pinned_key)
+        finally:
+            self.association_elapsed += time.perf_counter()-began
+
+    def _identity_association_score(self, candidate, timestamp: float, reference_span: tuple[float, float],
+                                    supported_keys: set[str] | list[str], selected_key: str | None = None,
+                                    *, max_sigma: float | None = None,
+                                    allow_pinned_key: bool = False) -> dict:
         """Score a low-quality observation against the predicted physical Tap.
 
         This is a scale-normalized association diagnostic, not a probability.
@@ -142,6 +156,11 @@ class ParticlePredictor:
             return result
         keys = set(candidate.candidate_keys)
         support = set(supported_keys)
+        if selected_key and allow_pinned_key and not support:
+            # The Scheduler only writes selected_key after choosing from
+            # stable_keys. Keep that frozen historical evidence through a
+            # temporary per-frame stable-key fluctuation.
+            support.add(selected_key)
         if not support or not keys.intersection(support) or (selected_key and selected_key not in keys):
             result["reason"] = "original_key_not_supported"
             return result

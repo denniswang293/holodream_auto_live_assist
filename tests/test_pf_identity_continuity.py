@@ -77,3 +77,43 @@ def test_unknown_cannot_extend_identity_past_reliable_observation_limit(make_can
     assert track.identity_state == "TAP_COASTING"
     assert any(row["final_reason"] == "tap_identity_reliable_observation_expired"
                for row in tracker.last_unknown_association_audit)
+
+
+def test_frozen_scheduler_key_survives_temporary_stable_key_fluctuation(make_candidate):
+    tracker, track = build_confirmed_tap(make_candidate)
+    track.selected_key = "F"  # only set after Scheduler selects from stable evidence
+    track.stable_keys = []
+    tracks = tracker.update([make_candidate(y=178, appearance="neutral_candidate", keys=["F"])], 6 / 60)
+    assert tracks[0].physical_note_uid == track.physical_note_uid
+    assert tracks[0].identity_state == "TAP_DEGRADED_OBSERVATION"
+    assert tracker.last_unknown_association_audit[0]["association_accepted"]
+
+
+def test_rejected_unknown_does_not_advance_history_or_pf_and_tap_recovers(make_candidate):
+    tracker, track = build_confirmed_tap(make_candidate)
+    uid=track.physical_note_uid; pf=track.particle_filter
+    old_history=list(track.history); old_pf_time=pf.last_time; old_count=pf.observation_count
+    old_weights=pf.weights.copy()
+    tracker.update([make_candidate(y=280,appearance="neutral_candidate",keys=["F"])],6/60)
+    assert track.history==old_history
+    assert pf.last_time==old_pf_time
+    assert pf.observation_count==old_count
+    assert (pf.weights==old_weights).all()
+    recovered=tracker.update([make_candidate(y=178,keys=["F"])],7/60)
+    assert any(tr.physical_note_uid==uid and tr.confirmed_note_type=="tap" for tr in recovered)
+    assert pf.observation_count==old_count+1
+
+
+def test_identity_continuity_can_be_rolled_back_without_absorbing_unknown(make_candidate):
+    tracker, original = build_confirmed_tap(make_candidate)
+    uid = original.physical_note_uid
+    tracker.particle_cfg["identity_continuity"] = {"enabled": False}
+
+    tracks = tracker.update(
+        [make_candidate(y=178, appearance="neutral_candidate", keys=["F"])], 6 / 60)
+
+    assert original.identity_state == "TAP_COASTING"
+    assert not any(t.physical_note_uid == uid and
+                   t.current_observation_type == "unknown" for t in tracks)
+    assert any(t.current_observation_type == "unknown" and
+               t.physical_note_uid != uid for t in tracks)

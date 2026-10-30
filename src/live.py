@@ -8,6 +8,7 @@ import csv
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import queue
 import threading
 import time
 from types import SimpleNamespace
@@ -33,7 +34,10 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
-                "tracked_count", "input_armed", "dropped_total", "video_frame"]
+                "tracked_count", "input_armed", "dropped_total", "video_frame", "acquire_queue_wait_ms",
+                "normalization_ms", "state_detector_ms", "note_detector_ms", "tracker_matching_ms",
+                "unknown_association_ms", "pf_prediction_update_ms", "decision_ms", "scheduler_update_ms",
+                "diagnostic_write_ms"]
 ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type"]
 IDENTITY_FIELDS = ["physical_note_uid", "track_id", "timestamp", "from_state", "to_state",
                    "reason", "confirmed_note_type", "current_observation_type", "evidence_count",
@@ -49,7 +53,33 @@ HIT_ETA_FIELDS = ["physical_note_uid", "track_id", "source_track_ids", "source_f
                   "observed_y", "innovation_y", "association_score", "association_accepted", "measurement_quality",
                   "measurement_status", "eta_p10", "eta_p50", "eta_p90", "hit_at", "physical_hit_time",
                   "valid_crossing_mass", "particle_ess", "coast_ms", "original_selected_key", "original_hit_at",
-                  "final_action", "final_reason"]
+                  "final_action", "final_reason", "last_reliable_tap_at", "tracker_status"]
+SCHEDULER_TRACE_FIELDS = ["timestamp", "event_id", "track_id", "physical_note_uid", "source_track_ids",
+                          "original_selected_key", "original_hit_at", "tracker_status", "current_type",
+                          "confirmed_note_type", "identity_state", "measurement_status", "association_reason",
+                          "first_failed_predicate", "all_failed_predicates"]
+TAP_DECISION_FIELDS = ["timestamp", "source_frame", "event_id", "track_id", "physical_note_uid",
+    "source_track_ids", "candidate_type", "confirmed_note_type", "identity_state", "track_status",
+    "missed_frames", "appearance", "candidate_keys", "stable_keys", "selected_key",
+    "particle_initialized", "particle_measurement_status", "particle_ess", "particle_ess_fraction",
+    "particle_valid_crossing_mass", "particle_coast_ms", "particle_real_observation_count",
+    "particle_measurement_age_ms", "particle_eta_usable", "particle_eta_reject_reason",
+    "eta_p10", "eta_p50", "eta_p90", "predicted_hit_time", "hit_history_count",
+    "hit_history_drift_ms", "decision_stage", "decision_result", "reject_reason", "is_retryable",
+    "pending_intent_exists", "original_hit_at", "original_key", "arm_generation",
+    "eventually_scheduled", "eventually_key_down", "eventually_canceled", "final_action",
+    "final_reason", "reliable_candidate_appearance", "reliable_candidate_span",
+    "current_candidate_span", "original_appearance", "original_span", "original_position_y",
+    "current_position_y", "particle_predicted_position_y", "position_compatible",
+    "span_compatible", "appearance_compatible", "identity_compatible",
+    "competing_candidate_exists", "remaining_to_hit_ms"]
+STAGE_FIELDS = ["frame", "capture_timestamp", "gameplay_state", "candidate_count", "tracked_count",
+                "acquire_queue_wait_ms", "normalization_ms", "state_detector_ms", "note_detector_ms",
+                "tracker_matching_ms", "unknown_association_ms", "pf_prediction_update_ms", "decision_ms",
+                "scheduler_update_ms",
+                "diagnostic_write_ms", "event_csv_write_ms", "overlay_ms", "recording_offer_ms",
+                "frame_csv_write_ms", "stage_csv_write_ms", "capture_to_acquire_ms", "processing_ms",
+                "latency_ms", "capture_fps", "processing_fps", "encoder_queue_wait_ms"]
 
 
 class CsvLog:
@@ -66,6 +96,65 @@ class CsvLog:
 
     def close(self):
         self.file.close()
+
+
+class AsyncCsvLog:
+    """Bounded, nonblocking diagnostics writer; action logs remain synchronous."""
+    def __init__(self,path,fields,*,max_queue=8192,batch_size=128):
+        self.path=Path(path); self.fields=list(fields); self.queue=queue.Queue(maxsize=max_queue)
+        self.batch_size=batch_size; self.file=self.path.open("x",newline="",encoding="utf-8-sig")
+        self.writer=csv.DictWriter(self.file,fieldnames=self.fields); self.writer.writeheader()
+        self.lock=threading.Lock(); self.dropped=0; self.schema_errors=0; self.rows_written=0
+        self.last_error=""; self.closed=False
+        self.thread=threading.Thread(target=self._run,name=f"csv-{self.path.stem}",daemon=True)
+        self.thread.start()
+
+    def write(self,row):
+        extra=set(row)-set(self.fields)
+        with self.lock:
+            if extra:
+                self.schema_errors+=1; self.dropped+=1
+                self.last_error=f"extra_fields:{','.join(sorted(extra))}"
+                return
+            if self.closed:
+                self.dropped+=1; self.last_error="write_after_close"; return
+            try: self.queue.put_nowait(dict(row))
+            except queue.Full:
+                self.dropped+=1; self.last_error="diagnostic_queue_full"
+
+    def _run(self):
+        stopping=False
+        while not stopping:
+            item=self.queue.get(); batch=[]
+            if item is None:
+                self.queue.task_done(); stopping=True
+            else:
+                batch.append(item)
+                while len(batch)<self.batch_size:
+                    try: item=self.queue.get_nowait()
+                    except queue.Empty: break
+                    if item is None:
+                        self.queue.task_done(); stopping=True; break
+                    batch.append(item)
+            if batch:
+                try:
+                    self.writer.writerows(batch); self.file.flush(); self.rows_written+=len(batch)
+                except Exception as error:
+                    with self.lock:
+                        self.dropped+=len(batch)
+                        self.last_error=f"writer_error:{type(error).__name__}:{error}"
+            for _ in batch: self.queue.task_done()
+        self.file.flush()
+
+    def health(self):
+        return {"file":self.path.name,"rows_written":self.rows_written,"dropped_rows":self.dropped,
+                "schema_errors":self.schema_errors,"queue_remaining":self.queue.qsize(),
+                "queue_capacity":self.queue.maxsize,"last_error":self.last_error}
+
+    def close(self):
+        if self.closed: return
+        with self.lock: self.closed=True
+        self.queue.put(None); self.thread.join(); self.file.close()
 
 
 class RecordingIndexLog(CsvLog):
@@ -155,10 +244,14 @@ def run(args):
         event_log = CsvLog(out/"live_events.csv", EVENT_FIELDS)
         frame_log = CsvLog(out/"live_frames.csv", FRAME_FIELDS)
         key_log = CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
-        identity_log = CsvLog(out/"pf_identity_transitions.csv", IDENTITY_FIELDS)
-        association_log = CsvLog(out/"pf_unknown_association_audit.csv", ASSOCIATION_FIELDS)
-        eta_log = CsvLog(out/"pf_hit_eta_diagnostics.csv", HIT_ETA_FIELDS)
-        for log in (event_log, frame_log, key_log, identity_log, association_log, eta_log):
+        identity_log = AsyncCsvLog(out/"pf_identity_transitions.csv", IDENTITY_FIELDS)
+        association_log = AsyncCsvLog(out/"pf_unknown_association_audit.csv", ASSOCIATION_FIELDS)
+        eta_log = AsyncCsvLog(out/"pf_hit_eta_diagnostics.csv", HIT_ETA_FIELDS)
+        scheduler_trace_log = AsyncCsvLog(out/"pf_identity_scheduler_trace.csv", SCHEDULER_TRACE_FIELDS)
+        tap_decision_log = AsyncCsvLog(out/"tap_decision_trace.csv", TAP_DECISION_FIELDS)
+        stage_log = CsvLog(out/"pf_stage_timing.csv", STAGE_FIELDS)
+        diagnostic_logs=(identity_log,association_log,eta_log,scheduler_trace_log,tap_decision_log)
+        for log in (event_log, frame_log, key_log, stage_log, *diagnostic_logs):
             stack.callback(log.close)
         if args.record_overlay:
             from .live_async import EncoderWorker, VIDEO_INDEX_FIELDS
@@ -172,8 +265,11 @@ def run(args):
         from .windows_runtime import WindowsActuator
         actuator = WindowsActuator(input_mode=live_cfg.get('keyboard_input_mode','scan_code'))
         print(f"Keyboard input: {actuator.input_mode}",flush=True)
+        engine_holder={}
         def log_action(row):
             key_log.write(row)
+            if "engine" in engine_holder:
+                engine_holder["engine"].record_scheduler_action(row)
             if row["action"] in ("armed","disarmed","arm_rejected","arm_requested"):
                 print(f"INPUT {row['action']}: {row['reason']}",flush=True)
             elif row['action']=='key_down':
@@ -187,10 +283,13 @@ def run(args):
                                      if live_cfg.get("speculative_taps",{}).get("enabled") else .04)
         stack.callback(scheduler.close)
         engine = LiveEngine(config, geometry, scheduler, clock)
+        engine_holder["engine"]=engine
         def diagnostic_sink(name, row):
             {"identity_transition": identity_log, "unknown_association": association_log,
-             "hit_eta": eta_log}[name].write(row)
+             "hit_eta": eta_log, "scheduler_trace": scheduler_trace_log,
+             "tap_decision":tap_decision_log}[name].write(row)
         engine.diagnostic_sink = diagnostic_sink
+        previous_stage_csv_ms=0.0
         label = ("Experimental Tap and visible-path Hold attempts" if engine.hold_enabled else
                  "Experimental unknown/uncertain candidate Tap attempts" if engine.speculative.get('enabled') else
                  "User-confirmed any-covered-key Tap rule" if engine.tap_rule else "Verified tap keys")
@@ -228,16 +327,43 @@ def run(args):
                 roi_valid = True
                 work, tracks, events, info = engine.process(packet, focused, roi_valid)
                 info["capture_fps"] = worker.actual_fps
+                event_csv_started=time.perf_counter()
                 for event in events:
                     event_log.write(event)
                     reasons[event["abstain_reason"] or "selected_tap"] += 1
+                event_csv_ms=(time.perf_counter()-event_csv_started)*1000
+                overlay_started=time.perf_counter()
                 image = draw_live_overlay(work, tracks, info, engine, dropped)
+                overlay_ms=(time.perf_counter()-overlay_started)*1000
                 info["dropped_total"] = dropped
                 info["video_frame"] = ""
+                recording_offer_ms=0.0
                 if recorder:
                     job = SimpleNamespace(work=work,info=dict(info),event_ids='|'.join(e['event_id'] for e in events))
+                    recording_started=time.perf_counter()
                     recorder.offer(job,image)
+                    recording_offer_ms=(time.perf_counter()-recording_started)*1000
+                frame_csv_started=time.perf_counter()
                 frame_log.write(info)
+                frame_csv_ms=(time.perf_counter()-frame_csv_started)*1000
+                stage_row={"frame":info["frame"],"capture_timestamp":info["capture_timestamp"],
+                    "gameplay_state":info["gameplay_state"],"candidate_count":info["candidate_count"],
+                    "tracked_count":info["tracked_count"],"acquire_queue_wait_ms":info["acquire_queue_wait_ms"],
+                    "normalization_ms":info["normalization_ms"],"state_detector_ms":info["state_detector_ms"],
+                    "note_detector_ms":info["note_detector_ms"],"tracker_matching_ms":info["tracker_matching_ms"],
+                    "unknown_association_ms":info["unknown_association_ms"],
+                    "pf_prediction_update_ms":info["pf_prediction_update_ms"],"decision_ms":info["decision_ms"],
+                    "scheduler_update_ms":info["scheduler_update_ms"],
+                    "diagnostic_write_ms":info["diagnostic_write_ms"],"event_csv_write_ms":event_csv_ms,
+                    "overlay_ms":overlay_ms,"recording_offer_ms":recording_offer_ms,
+                    "frame_csv_write_ms":frame_csv_ms,"stage_csv_write_ms":previous_stage_csv_ms,
+                    "capture_to_acquire_ms":(packet.acquired_at-packet.captured_at)*1000,
+                    "processing_ms":info["processing_ms"],"latency_ms":info["latency_ms"],
+                    "capture_fps":info["capture_fps"],"processing_fps":info["processing_fps"],
+                    "encoder_queue_wait_ms":""}
+                stage_csv_started=time.perf_counter()
+                stage_log.write(stage_row)
+                previous_stage_csv_ms=(time.perf_counter()-stage_csv_started)*1000
                 last_info = info
                 latencies.append(info["latency_ms"])
                 for name, condition in (
@@ -276,6 +402,11 @@ def run(args):
                 except Exception as error:
                     recording_error = error
                     stop_reason = f'error: {error}'
+            for log in diagnostic_logs:
+                log.close()
+            diagnostic_health={log.path.name:log.health() for log in diagnostic_logs}
+            (out/"pf_diagnostic_health.json").write_text(
+                json.dumps(diagnostic_health,indent=2)+"\n",encoding="utf-8")
             wall_elapsed = time.perf_counter()-wall_started
             result = {"mode": "assist", "predictor_mode": config["predictor"]["mode"],
                       "source_kind": "actual window capture",
@@ -313,6 +444,7 @@ def run(args):
                       "recording_nominal_fps": min(video_fps,60) if recorder else video_fps if args.record_overlay else None,
                       "recording_index": 'live_video_index.csv' if recorder else None,
                       "recording_error": str(recording_error) if recording_error else None,
+                      "diagnostic_health": diagnostic_health,
                       "accuracy": "UNVERIFIED", "real_game_sessions_validated": 0}
             _summary(out, result)
             print(f"Saved {out}: {engine.frames} frames, {engine.events} events, {scheduler.sent_taps} taps, {scheduler.sent_holds} holds. Accuracy UNVERIFIED.", flush=True)

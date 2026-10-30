@@ -67,13 +67,15 @@ class Track:
 
     def observe(self, c: Candidate, t: float, predictor: Predictor, hit_y: float, cfg: dict,
                 *, predictor_mode: str = "legacy", particle_cfg: dict | None = None,
-                particle_seed: int = 20261030, physical_hit_y: float | None = None) -> None:
+                particle_seed: int = 20261030, physical_hit_y: float | None = None,
+                identity_association: dict | None = None) -> None:
         _, y, _, h = c.bbox
         cy = y+h/2
         was_confirmed_tap = self.confirmed_note_type == "tap" and self.was_confirmed
         reliable_tap = (c.note_type == "tap" and c.appearance in ("cyan_bar","yellow_bar") and
                         c.path_bbox is None and c.hold_path_px <= 0)
-        degraded = (predictor_mode == "particle" and was_confirmed_tap and
+        identity_enabled=(particle_cfg or {}).get("identity_continuity",{}).get("enabled",True)
+        degraded = (identity_enabled and predictor_mode == "particle" and was_confirmed_tap and
                     c.note_type == "unknown")
         association = {}
         if degraded:
@@ -91,8 +93,9 @@ class Track:
                 self.transition_identity("TAP_COASTING",t,self.reason)
                 return
             source = self.last_reliable_tap_candidate
-            association = self.particle_filter.identity_association_score(
-                c,t,(source.u_min,source.u_max),self.stable_keys,self.selected_key)
+            association = identity_association or self.particle_filter.identity_association_score(
+                c,t,(source.u_min,source.u_max),self.stable_keys,self.selected_key,
+                allow_pinned_key=self.selected_key is not None)
             self.last_association = association
             if not association.get("accepted"):
                 self.status, self.reason = "lost", association.get("reason","unknown_observation_rejected")
@@ -219,6 +222,8 @@ class Tracker:
         self.last_unknown_association_audit: list[dict] = []
         self._ambiguous_unknown_pairs: set[tuple[int,int]] = set()
         self._pair_candidate_index: dict[int,int] = {}
+        self._unknown_association_cache: dict[tuple[int,int],dict] = {}
+        self.stage_times = {"unknown_association_s":0.0,"matching_s":0.0}
         self.next_id = 1
 
     @property
@@ -232,6 +237,8 @@ class Tracker:
         candidate_index = self._pair_candidate_index.get(id(c),-1)
         if (tr.confirmed_note_type == "tap" and c.note_type == "unknown" and
                 self.predictor_mode == "particle"):
+            if not self.particle_cfg.get("identity_continuity",{}).get("enabled",True):
+                return None
             if (tr.particle_filter is None or
                     tr.last_reliable_tap_at is None or
                     t-tr.last_reliable_tap_at > float(self.particle_cfg.get("identity_continuity",{}).get("max_degraded_ms",90))/1000 or
@@ -241,8 +248,11 @@ class Tracker:
             source=tr.last_reliable_tap_candidate
             if source is None:
                 return None
-            association=tr.particle_filter.identity_association_score(
-                c,t,(source.u_min,source.u_max),tr.stable_keys,tr.selected_key)
+            association=self._unknown_association_cache.get((track_index,candidate_index))
+            if association is None:
+                association=tr.particle_filter.identity_association_score(
+                c,t,(source.u_min,source.u_max),tr.stable_keys,tr.selected_key,
+                allow_pinned_key=tr.selected_key is not None)
             if not association.get("accepted"):
                 return None
             return float(association["association_score"])
@@ -304,6 +314,9 @@ class Tracker:
         validates any previously scheduled intent/deadline.
         """
         degraded_unknown = candidate.note_type == "unknown"
+        if (degraded_unknown and
+                not self.particle_cfg.get("identity_continuity",{}).get("enabled",True)):
+            return None
         if (self.predictor_mode != "particle" or
                 (candidate.note_type != "tap" and not degraded_unknown) or
                 candidate.appearance not in ("cyan_bar", "yellow_bar", "neutral_candidate") or
@@ -336,7 +349,8 @@ class Tracker:
                 continue
             if degraded_unknown:
                 identity=pf.identity_association_score(candidate,t,(reliable.u_min,reliable.u_max),
-                                                       old.stable_keys,old.selected_key)
+                                                       old.stable_keys,old.selected_key,
+                                                       allow_pinned_key=old.selected_key is not None)
                 if not identity.get("accepted"):
                     continue
             elif not set(old.stable_keys).intersection(candidate.candidate_keys):
@@ -367,8 +381,12 @@ class Tracker:
         return viable[0][2]
 
     def update(self, candidates: list[Candidate], t: float, playing: bool = True) -> list[Track]:
+        update_started=time.perf_counter()
+        association_elapsed_before=sum(getattr(tr.particle_filter,"association_elapsed",0.0)
+            for tr in (*self.tracks,*self.finished) if tr.particle_filter is not None)
         self.last_unknown_association_audit = []
         self._ambiguous_unknown_pairs = set()
+        self._unknown_association_cache = {}
         self._pair_candidate_index = {id(c):j for j,c in enumerate(candidates)}
         self.recent_particle_tracks = [old for old in self.recent_particle_tracks
                                        if old.particle_filter is not None and
@@ -379,10 +397,15 @@ class Tracker:
             self.finished.extend(self.tracks)
             self.tracks = []
             self.recent_particle_tracks.clear()
+            self.stage_times={"unknown_association_s":0.0,"matching_s":0.0,
+                              "total_s":time.perf_counter()-update_started}
             return []
+        association_started=time.perf_counter()
         potential = []
         for i,tr in enumerate(self.tracks):
-            if tr.confirmed_note_type != "tap" or tr.particle_filter is None or tr.last_reliable_tap_candidate is None:
+            if (not self.particle_cfg.get("identity_continuity",{}).get("enabled",True) or
+                    tr.confirmed_note_type != "tap" or tr.particle_filter is None or
+                    tr.last_reliable_tap_candidate is None):
                 continue
             ref=tr.last_reliable_tap_candidate
             for j,c in enumerate(candidates):
@@ -396,7 +419,9 @@ class Tracker:
                         "final_reason":"tap_identity_reliable_observation_expired"})
                     continue
                 score=tr.particle_filter.identity_association_score(
-                    c,t,(ref.u_min,ref.u_max),tr.stable_keys,tr.selected_key)
+                    c,t,(ref.u_min,ref.u_max),tr.stable_keys,tr.selected_key,
+                    allow_pinned_key=tr.selected_key is not None)
+                self._unknown_association_cache[(i,j)]=score
                 potential.append((i,j,tr,c,score))
         accepted_by_candidate=Counter(j for _,j,_,_,score in potential if score.get("accepted"))
         accepted_by_track=Counter(i for i,_,_,_,score in potential if score.get("accepted"))
@@ -417,6 +442,8 @@ class Tracker:
                 "association_accepted":bool(score.get("accepted") and not competing),
                 "final_reason":"competing_unknown_associations" if competing else score.get("reason","unknown"),
                 **score})
+        unknown_association_s=time.perf_counter()-association_started
+        matching_started=time.perf_counter()
         pairs = []
         for i, tr in enumerate(self.tracks):
             for j, c in enumerate(candidates):
@@ -430,7 +457,8 @@ class Tracker:
                 continue
             self.tracks[i].observe(candidates[j], t, self.predictor, self.hit_y, self.cfg,
                                    predictor_mode=self.predictor_mode, particle_cfg=self.particle_cfg,
-                                   particle_seed=self.particle_seed, physical_hit_y=self.physical_hit_y)
+                                   particle_seed=self.particle_seed, physical_hit_y=self.physical_hit_y,
+                                   identity_association=self._unknown_association_cache.get((i,j)))
             used_tracks.add(i)
             used_candidates.add(j)
         for i, tr in enumerate(self.tracks):
@@ -494,4 +522,9 @@ class Tracker:
             else:
                 active.append(tr)
         self.tracks = active
+        self.stage_times={"unknown_association_s":unknown_association_s,
+                          "matching_s":time.perf_counter()-matching_started,
+                          "total_s":time.perf_counter()-update_started,
+                          "pf_association_s":max(0.0,sum(getattr(tr.particle_filter,"association_elapsed",0.0)
+                              for tr in (*self.tracks,*self.finished) if tr.particle_filter is not None)-association_elapsed_before)}
         return self.tracks

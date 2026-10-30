@@ -1,6 +1,6 @@
 import csv
 
-from src.live import ASSOCIATION_FIELDS, CsvLog, IDENTITY_FIELDS
+from src.live import ASSOCIATION_FIELDS, AsyncCsvLog, CsvLog, IDENTITY_FIELDS
 
 
 def test_identity_transition_csv_accepts_coast_and_reliable_age(tmp_path):
@@ -38,3 +38,17 @@ def test_unknown_association_csv_accepts_source_verdict_fields(tmp_path):
         saved = next(csv.DictReader(f))
     assert saved["accepted"] == "True"
     assert saved["reason"] == "PF_MATCHED_DEGRADED_UNKNOWN"
+
+
+def test_async_diagnostic_writer_batches_and_reports_schema_errors(tmp_path):
+    path=tmp_path/"diagnostics.csv"
+    log=AsyncCsvLog(path,["frame","value"],max_queue=4,batch_size=2)
+    log.write({"frame":1,"value":"ok"})
+    log.write({"frame":2,"value":"ok"})
+    log.write({"frame":3,"value":"ok","unexpected":True})
+    log.close()
+    assert log.health()["rows_written"]==2
+    assert log.health()["schema_errors"]==1
+    assert log.health()["dropped_rows"]==1
+    with path.open(newline="",encoding="utf-8-sig") as f:
+        assert [row["frame"] for row in csv.DictReader(f)]==["1","2"]
