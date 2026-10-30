@@ -221,6 +221,7 @@ class LiveEngine:
         if self.tap_rule:
             self.known_keys = self.tap_rule.allowed_keys
         self.last_decisions = {}
+        self.simple_decision_reasons = {}
         self.occlusion_commits = {}
         self.dropout_commits = {}
         self.edge_fragment_commits = set()
@@ -1379,9 +1380,52 @@ class LiveEngine:
                 if intent is not None and intent.state == "PENDING":
                     self.last_decisions[tr.track_id] = ((intent.key,), "")
                     tr.selected_key = intent.key
+                    self.simple_decision_reasons.pop(tr.track_id, None)
+                elif intent is not None:
+                    self.last_decisions[tr.track_id] = ((), intent.state.lower())
+                    self.simple_decision_reasons.pop(tr.track_id, None)
                 else:
-                    self.last_decisions[tr.track_id] = ((), self.simple_core.last_reasons.get(
-                        tr.track_id, "not_scheduled"))
+                    reason = self.simple_core.last_reasons.get(tr.track_id, "not_scheduled")
+                    self.last_decisions[tr.track_id] = ((), reason)
+                    if reason != self.simple_decision_reasons.get(tr.track_id):
+                        prediction = tr.prediction
+                        created.append({
+                            "event_id": uid, "note_uid": uid, "track_id": tr.track_id,
+                            "source_frame": frame.sequence,
+                            "capture_timestamp": frame.captured_at,
+                            "processing_timestamp": finished,
+                            "predicted_hit_time": prediction.hit_time if prediction.hit_time is not None else "",
+                            "uncertainty_s": prediction.uncertainty if prediction.uncertainty is not None else "",
+                            "key_candidates": "|".join(tr.stable_keys), "resolved_keys": "",
+                            "type": "tap", "appearance": tr.candidate.appearance,
+                            "confidence_label": "heuristic_only", "abstain_reason": reason,
+                            "gameplay_state": state, "predictor_mode": "particle",
+                            "geometry_status": self.geometry.status,
+                            "geometry_sha256": self.geometry_hash,
+                            "resolution_basis": "simple_confirmed_tap",
+                            "eta_p10_s": prediction.eta_p10 if prediction.eta_p10 is not None else "",
+                            "eta_p50_s": prediction.eta_p50 if prediction.eta_p50 is not None else "",
+                            "eta_p90_s": prediction.eta_p90 if prediction.eta_p90 is not None else "",
+                            "valid_crossing_mass": prediction.valid_crossing_mass if prediction.valid_crossing_mass is not None else "",
+                            "particle_ess": prediction.ess if prediction.ess is not None else "",
+                            "real_observation_count": prediction.real_observation_count if prediction.real_observation_count is not None else "",
+                            "coast_ms": prediction.coast_ms,
+                            "measurement_status": prediction.measurement_status,
+                            "particle_predicted_y": prediction.fitted_y if prediction.fitted_y is not None else "",
+                            "particle_velocity_px_s": prediction.velocity if prediction.velocity is not None else "",
+                            "simple_track_observations": tr.observations,
+                            "simple_track_status": tr.status,
+                            "particle_rejection_streak": tr.particle_rejection_streak,
+                            "particle_reinitializations": tr.particle_reinitializations,
+                            "simple_core_state": "NOT_SCHEDULED",
+                            "simple_core_reason": reason,
+                            "lane_span": f"{tr.candidate.u_min:.6f}:{tr.candidate.u_max:.6f}",
+                            "crossing_y": tr.history[-1][1] if tr.history else ""})
+                    self.simple_decision_reasons[tr.track_id] = reason
+            current_simple_ids = {tr.track_id for tr in self.simple_tracks}
+            self.simple_decision_reasons = {
+                track_id: reason for track_id, reason in self.simple_decision_reasons.items()
+                if track_id in current_simple_ids}
             scheduler_started=time.perf_counter()
             self.scheduler.poll()
             measured["scheduler_update"]=time.perf_counter()-scheduler_started
