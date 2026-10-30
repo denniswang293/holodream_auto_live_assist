@@ -23,6 +23,12 @@ class Prediction:
     physical_hit_time: float | None = None
     predictor_mode: str = "legacy"
     measurement_status: str = "legacy"
+    identity_state: str = "UNCONFIRMED"
+    association_score: float | None = None
+    measurement_quality: str = "unknown"
+    identity_ambiguous: bool = False
+    observed_y: float | None = None
+    innovation_y: float | None = None
 
 
 class Predictor:

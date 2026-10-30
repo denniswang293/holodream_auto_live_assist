@@ -5,6 +5,7 @@
 HoloDream 目前只保留 Windows 全螢幕即時 Assist：以 720×404 座標辨識六鍵軌道，按 `S D F J K L` 對應遊戲鍵。輸入啟動時關閉，只有使用者在遊戲前景按下 `Ctrl+Shift+Alt+Q` 並放開組合鍵後才會啟用。
 
 
+
 ## 安裝
 
 需要 Windows 與 Python 3.10 或更新版本：

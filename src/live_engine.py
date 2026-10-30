@@ -31,9 +31,14 @@ def track_options(track, now, known_keys, event_cfg, *, allow_range=False, specu
         return (), "track_not_current_confirmed"
     speculative = speculative or {}
     experimental = bool(speculative.get("enabled"))
+    degraded_tap = (getattr(track,"confirmed_note_type",None)=="tap" and
+                    getattr(track,"identity_state","")=="TAP_DEGRADED_OBSERVATION" and
+                    c.note_type=="unknown" and
+                    bool(getattr(track,"last_association",{}).get("accepted")))
     allowed_appearances = ("cyan_bar", "yellow_bar", "green_candidate",
                            "pink_candidate", "neutral_candidate") if experimental else ("cyan_bar", "yellow_bar")
-    if c.note_type not in (("tap", "unknown") if experimental else ("tap",)) or c.appearance not in allowed_appearances:
+    if ((c.note_type not in (("tap", "unknown") if experimental else ("tap",)) and not degraded_tap) or
+            (c.appearance not in allowed_appearances and not (degraded_tap and c.appearance=="neutral_candidate"))):
         return (), "unverified_special_or_neutral"
     if c.suspected_overlap and not experimental:
         return (), "suspected_overlap"
@@ -163,6 +168,17 @@ class LiveEngine:
         predictor_cfg = dict(config.get("predictor",{}))
         predictor_mode = str(predictor_cfg.get("mode", "legacy"))
         particle_cfg = dict(predictor_cfg.get("particle", {}))
+        self.tap_identity_cfg = dict(particle_cfg.get("identity_continuity",{}))
+        self.tap_identity_cfg = {"enabled":True,"confirmed_tap_only":True,
+            "allow_degraded_unknown":True,"max_degraded_ms":90,
+            "reject_competing_heads":True,"preserve_frozen_key":True,
+            "preserve_original_deadline":True,**self.tap_identity_cfg}
+        max_degraded=float(self.tap_identity_cfg["max_degraded_ms"])
+        if (self.tap_identity_cfg["confirmed_tap_only"] is not True or
+                self.tap_identity_cfg["preserve_frozen_key"] is not True or
+                self.tap_identity_cfg["preserve_original_deadline"] is not True or
+                not 0<max_degraded<=min(90,float(particle_cfg.get("max_coast_ms",90)))):
+            raise ValueError("Tap identity continuity must remain confirmed-only and within the 90ms PF coast limit")
         if self.speculative.get("enabled"):
             tracker_cfg["max_hit_drift_s"] = self.speculative["max_hit_drift_s"]
             tracker_cfg["tap_hit_drift_window"] = self.speculative.get("tap_hit_drift_window",5)
@@ -171,6 +187,9 @@ class LiveEngine:
                                predictor_mode=predictor_mode,particle_cfg=particle_cfg,
                                physical_hit_y=geometry.hit_y)
         self.collector = EventCollector({**config.get("events", {}), "reference_height": geometry.reference_resolution[1]})
+        self.diagnostic_sink = None
+        self._identity_transition_offsets = {}
+        self._emitted_identity_transition_ids = set()
         # Near-target commitment must move with the trigger when input is
         # advanced; otherwise the track finishes before reaching the corridor.
         self.commit_entry_y = (min(self.judgment_bar_top,self.trigger_y-12.5*self.pixel_scale_y)
@@ -448,6 +467,48 @@ class LiveEngine:
                             'replacement_tracker_owns_original_key_and_deadline',intent)
         return True
 
+    def _tap_identity_intent_still_valid(self, tr, event_id, intent, now, *,
+                                         state, focused, roi_valid, stale):
+        """Keep only an existing Tap intent for its original UID/key/deadline."""
+        if not self.tap_identity_cfg.get("enabled"):
+            return False
+        try:
+            origin_track_id=int(event_id.rsplit(":",1)[1])
+        except (IndexError,ValueError):
+            return False
+        max_ms=float(self.tap_identity_cfg["max_degraded_ms"])
+        valid_state=tr.identity_state in ("CONFIRMED_TAP","TAP_DEGRADED_OBSERVATION","TAP_COASTING")
+        if (not valid_state or tr.confirmed_note_type!="tap" or not tr.was_confirmed or
+                tr.identity_state=="TAP_IDENTITY_AMBIGUOUS" or intent.note_type!="tap" or
+                event_id not in self.scheduler.pending or self.scheduler.pending[event_id] is not intent or
+                origin_track_id not in tr.source_track_ids or not tr.physical_note_uid or
+                self.input_eligible_ids.get(origin_track_id)!=self.scheduler.arm_generation or
+                self.scheduler.arm_generation<=0 or not self.scheduler.armed or
+                intent.keys[0] not in tr.stable_keys or
+                (tr.selected_key is not None and tr.selected_key!=intent.keys[0]) or
+                state!="PLAYING" or not focused or not roi_valid or stale or
+                now>intent.hit_at+self.scheduler.max_lateness or
+                tr.last_reliable_tap_at is None or
+                not 0<=now-tr.last_reliable_tap_at<=max_ms/1000 or
+                not tr.particle_filter or not tr.particle_filter.initialized or
+                event_id in self.hold_ids):
+            return False
+        if tr.identity_state=="TAP_DEGRADED_OBSERVATION":
+            if (not self.tap_identity_cfg.get("allow_degraded_unknown") or
+                    tr.current_observation_type!="unknown" or
+                    not tr.last_association.get("accepted") or
+                    intent.keys[0] not in tr.candidate.candidate_keys or
+                    tr.candidate.path_bbox is not None or tr.candidate.hold_path_px>0):
+                return False
+        elif tr.identity_state=="TAP_COASTING":
+            if tr.missed<1 and tr.status!="completed":
+                return False
+        return True
+
+    def _emit_diagnostic(self, name, row):
+        if self.diagnostic_sink is not None:
+            self.diagnostic_sink(name,row)
+
     def _keep_coasting_provisional_tap(self, coast, finished):
         return (coast['generation'] == self.scheduler.arm_generation and
                 finished <= coast['intent'].hit_at+self.scheduler.max_lateness)
@@ -514,6 +575,14 @@ class LiveEngine:
             tracks = self.tracker.update(candidates, frame.captured_at, playing=state == "PLAYING")
             measured["prediction"] = self.tracker.elapsed-prediction_before
             measured["tracking"] = max(0.0,time.perf_counter()-phase-measured["prediction"])
+            for audit in self.tracker.last_unknown_association_audit:
+                self._emit_diagnostic("unknown_association",{"source_frame":frame.sequence,**audit})
+            for tracked in (*tracks,*self.tracker.finished):
+                for transition in getattr(tracked,"identity_transitions",[]):
+                    transition_id=(tracked.physical_note_uid,transition.get("timestamp"),transition.get("to_state"))
+                    if transition_id not in self._emitted_identity_transition_ids:
+                        self._emitted_identity_transition_ids.add(transition_id)
+                        self._emit_diagnostic("identity_transition",{"source_frame":frame.sequence,**transition})
         finished = self.clock()
         latency = finished-frame.captured_at
         if latency > self.scheduler.max_age and not stale:
@@ -559,6 +628,9 @@ class LiveEngine:
                     continue
                 coast = self.provisional_tap_losses.get(event_id)
                 pending = self.scheduler.pending.get(event_id)
+                if (pending and tr.confirmed_note_type=="tap" and tr.selected_key is None and
+                        pending.note_type=="tap" and pending.keys[0] in tr.stable_keys):
+                    tr.selected_key=pending.keys[0]
                 if (pending and tr.status == 'confirmed' and not tr.missed and
                         pending.note_type == 'tap' and tr.candidate.note_type == 'tap' and
                         tr.candidate.appearance in ('cyan_bar','yellow_bar') and tr.history):
@@ -596,9 +668,31 @@ class LiveEngine:
                     if pending is coast['intent']:
                         self.scheduler.resume(event_id)
                     continue
+                if (pending and tr.identity_state in ("TAP_DEGRADED_OBSERVATION","TAP_COASTING") and
+                        self._tap_identity_intent_still_valid(tr,event_id,pending,finished,
+                            state=state,focused=focused,roi_valid=roi_valid,stale=stale)):
+                    self.scheduler.resume(event_id)
+                    active_events.add(event_id)
+                    retained[tr.track_id]=(pending.keys,"")
+                    self.scheduler._log("tap_identity_continuity_retained",
+                        f"{tr.identity_state};uid={tr.physical_note_uid};original_hit_at={pending.hit_at:.6f};"
+                        f"key={pending.keys[0]};measurement={tr.prediction.measurement_status}",pending)
+                    continue
                 if tr.track_id in self.reidentified_tracker_ids:
                     old_event_id = self.reidentified_tracker_ids[tr.track_id]
                     reidentified[tr.track_id] = old_event_id
+                    old_intent=self.scheduler.pending.get(old_event_id)
+                    if (old_intent and self._tap_identity_intent_still_valid(
+                            tr,old_event_id,old_intent,finished,state=state,focused=focused,
+                            roi_valid=roi_valid,stale=stale)):
+                        self.scheduler.consumed.add(event_id)
+                        self.scheduler.resume(old_event_id)
+                        active_events.add(old_event_id)
+                        retained[tr.track_id]=(old_intent.keys,"")
+                        self.scheduler._log("tap_identity_handoff_retained",
+                            f"uid={tr.physical_note_uid};source_ids={tr.source_track_ids};"
+                            f"original_hit_at={old_intent.hit_at:.6f};key={old_intent.keys[0]}",old_intent)
+                        continue
                     if (old_event_id not in retained_reidentified_events and
                             self._retain_reidentified_intent(old_event_id,finished)):
                         self.scheduler.consumed.add(event_id)
@@ -780,6 +874,11 @@ class LiveEngine:
                                     "physical_track_uid": tr.physical_note_uid,
                                     "source_track_ids": "|".join(map(str,tr.source_track_ids)),
                                     "reidentified_from_id": tr.reidentified_from_id if tr.reidentified_from_id is not None else "",
+                                    "confirmed_note_type": tr.confirmed_note_type or "",
+                                    "current_observation_type": tr.current_observation_type,
+                                    "identity_state": tr.identity_state,
+                                    "association_score": tr.last_association.get("association_score", ""),
+                                    "measurement_quality": tr.prediction.measurement_quality,
                                 "eta_expired": bool(tr.prediction.hit_time is not None and tr.prediction.hit_time <= finished),
                                 "eta_abstain_reason": "predicted_hit_not_future" if tr.prediction.hit_time is not None and tr.prediction.hit_time <= finished else "",
                                     "geometry_status": self.geometry.status, "geometry_sha256": self.geometry_hash})
@@ -799,6 +898,8 @@ class LiveEngine:
                     if commit and commit[1]==self.scheduler.arm_generation:
                         intent = commit[0]
                     accepted = self.scheduler.offer(intent)
+                    if (accepted and not hold and tr.confirmed_note_type=="tap" and tr.selected_key is None):
+                        tr.selected_key=keys[0]
                     if accepted and hold:
                         self.hold_spans[event_id] = ((tr.candidate.u_min,tr.candidate.u_max),intent.hit_at)
                     ordinary_tap = (tr.candidate.appearance in ('cyan_bar','yellow_bar') and
@@ -869,6 +970,24 @@ class LiveEngine:
                         self.scheduler.withdraw(event_id,'edge_fragment_commit_expired')
                         continue
                 if (event_id not in active_events and event_id not in present_ids and
+                        event_id not in finished_past_ids):
+                    try:
+                        origin_track_id=int(event_id.rsplit(":",1)[1])
+                    except (IndexError,ValueError):
+                        origin_track_id=-1
+                    source_track=next((candidate for candidate in
+                        (*self.tracker.finished,*self.tracker.recent_particle_tracks)
+                        if candidate.track_id==origin_track_id),None)
+                    intent=self.scheduler.pending.get(event_id)
+                    if (source_track is not None and intent is not None and
+                            self._tap_identity_intent_still_valid(source_track,event_id,intent,finished,
+                                state=state,focused=focused,roi_valid=roi_valid,stale=stale)):
+                        self.scheduler.resume(event_id)
+                        active_events.add(event_id)
+                        self.scheduler._log("tap_identity_coast_retained",
+                            f"uid={source_track.physical_note_uid};coast_ms={source_track.prediction.coast_ms:.1f};"
+                            f"original_hit_at={intent.hit_at:.6f};key={intent.keys[0]}",intent)
+                if (event_id not in active_events and event_id not in present_ids and
                         event_id not in finished_past_ids and
                         self._dropout_still_valid(event_id,finished)):
                     active_events.add(event_id)
@@ -900,6 +1019,43 @@ class LiveEngine:
             self.hold_spans = {event_id:value for event_id,value in self.hold_spans.items()
                                if event_id in live_holds}
         measured["decision"] = time.perf_counter()-phase
+        for tracked in (*tracks,*self.tracker.finished):
+            if getattr(tracked,"confirmed_note_type",None)!="tap" or getattr(tracked,"particle_filter",None) is None:
+                continue
+            event_id=f"{self.session_id}:{tracked.track_id}"
+            pending=self.scheduler.pending.get(event_id)
+            parent_event=self.reidentified_tracker_ids.get(tracked.track_id)
+            if pending is None and parent_event:
+                pending=self.scheduler.pending.get(parent_event)
+            association=tracked.last_association or {}
+            observed_y=association.get("observed_y")
+            if observed_y is None and tracked.history:
+                observed_y=tracked.history[-1][1]
+            self._emit_diagnostic("hit_eta",{
+                "physical_note_uid":tracked.physical_note_uid,"track_id":tracked.track_id,
+                "source_track_ids":"|".join(map(str,tracked.source_track_ids)),
+                "source_frame":frame.sequence,"capture_timestamp":frame.captured_at,
+                "confirmed_note_type":tracked.confirmed_note_type,
+                "current_observation_type":tracked.current_observation_type,
+                "identity_state":tracked.identity_state,
+                "particle_predicted_y":tracked.prediction.fitted_y if tracked.prediction.fitted_y is not None else "",
+                "observed_y":observed_y if observed_y is not None else "",
+                "innovation_y":association.get("innovation_y",tracked.prediction.innovation_y or ""),
+                "association_score":association.get("association_score",tracked.prediction.association_score or ""),
+                "association_accepted":association.get("accepted",False),
+                "measurement_quality":association.get("measurement_quality",tracked.prediction.measurement_quality),
+                "measurement_status":tracked.prediction.measurement_status,
+                "eta_p10":tracked.prediction.eta_p10 if tracked.prediction.eta_p10 is not None else "",
+                "eta_p50":tracked.prediction.eta_p50 if tracked.prediction.eta_p50 is not None else "",
+                "eta_p90":tracked.prediction.eta_p90 if tracked.prediction.eta_p90 is not None else "",
+                "hit_at":tracked.prediction.hit_time if tracked.prediction.hit_time is not None else "",
+                "physical_hit_time":tracked.prediction.physical_hit_time if tracked.prediction.physical_hit_time is not None else "",
+                "valid_crossing_mass":tracked.prediction.valid_crossing_mass if tracked.prediction.valid_crossing_mass is not None else "",
+                "particle_ess":tracked.prediction.ess if tracked.prediction.ess is not None else "",
+                "coast_ms":tracked.prediction.coast_ms,"original_selected_key":pending.keys[0] if pending else tracked.selected_key or "",
+                "original_hit_at":pending.hit_at if pending else "",
+                "final_action":"PENDING" if pending else "NO_PENDING_INTENT",
+                "final_reason":tracked.reason})
         self.tracker.finished.clear()
         self.collector.rows.clear()  # live CSV is streamed; no growing frame/event queue
         self.stale += stale

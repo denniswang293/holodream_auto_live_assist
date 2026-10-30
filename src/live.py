@@ -27,12 +27,29 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "confidence_label", "abstain_reason", "gameplay_state", "eta_expired", "eta_abstain_reason", "geometry_status", "geometry_sha256", "resolution_basis",
                 "predictor_mode", "eta_p10_s", "eta_p50_s", "eta_p90_s", "valid_crossing_mass", "particle_ess",
                 "real_observation_count", "coast_ms", "physical_hit_time", "measurement_status",
-                "physical_track_uid", "source_track_ids", "reidentified_from_id"]
+                "physical_track_uid", "source_track_ids", "reidentified_from_id",
+                "confirmed_note_type", "current_observation_type", "identity_state",
+                "association_score", "measurement_quality"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
                 "tracked_count", "input_armed", "dropped_total", "video_frame"]
 ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type"]
+IDENTITY_FIELDS = ["physical_note_uid", "track_id", "timestamp", "from_state", "to_state",
+                   "reason", "confirmed_note_type", "current_observation_type", "evidence_count",
+                   "association_score", "innovation_y", "measurement_quality", "coast_ms",
+                   "reliable_age_ms", "source_frame"]
+ASSOCIATION_FIELDS = ["timestamp", "source_frame", "candidate_index", "track_id", "physical_note_uid",
+                      "current_observation_type", "association_accepted", "final_reason", "association_score",
+                      "accepted", "reason",
+                      "predicted_y", "observed_y", "innovation_y", "sigma_y", "predicted_u", "innovation_u",
+                      "sigma_u", "span_overlap", "span_width_ratio", "key_match", "measurement_quality", "coast_ms"]
+HIT_ETA_FIELDS = ["physical_note_uid", "track_id", "source_track_ids", "source_frame", "capture_timestamp",
+                  "confirmed_note_type", "current_observation_type", "identity_state", "particle_predicted_y",
+                  "observed_y", "innovation_y", "association_score", "association_accepted", "measurement_quality",
+                  "measurement_status", "eta_p10", "eta_p50", "eta_p90", "hit_at", "physical_hit_time",
+                  "valid_crossing_mass", "particle_ess", "coast_ms", "original_selected_key", "original_hit_at",
+                  "final_action", "final_reason"]
 
 
 class CsvLog:
@@ -138,7 +155,10 @@ def run(args):
         event_log = CsvLog(out/"live_events.csv", EVENT_FIELDS)
         frame_log = CsvLog(out/"live_frames.csv", FRAME_FIELDS)
         key_log = CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
-        for log in (event_log, frame_log, key_log):
+        identity_log = CsvLog(out/"pf_identity_transitions.csv", IDENTITY_FIELDS)
+        association_log = CsvLog(out/"pf_unknown_association_audit.csv", ASSOCIATION_FIELDS)
+        eta_log = CsvLog(out/"pf_hit_eta_diagnostics.csv", HIT_ETA_FIELDS)
+        for log in (event_log, frame_log, key_log, identity_log, association_log, eta_log):
             stack.callback(log.close)
         if args.record_overlay:
             from .live_async import EncoderWorker, VIDEO_INDEX_FIELDS
@@ -167,6 +187,10 @@ def run(args):
                                      if live_cfg.get("speculative_taps",{}).get("enabled") else .04)
         stack.callback(scheduler.close)
         engine = LiveEngine(config, geometry, scheduler, clock)
+        def diagnostic_sink(name, row):
+            {"identity_transition": identity_log, "unknown_association": association_log,
+             "hit_eta": eta_log}[name].write(row)
+        engine.diagnostic_sink = diagnostic_sink
         label = ("Experimental Tap and visible-path Hold attempts" if engine.hold_enabled else
                  "Experimental unknown/uncertain candidate Tap attempts" if engine.speculative.get('enabled') else
                  "User-confirmed any-covered-key Tap rule" if engine.tap_rule else "Verified tap keys")

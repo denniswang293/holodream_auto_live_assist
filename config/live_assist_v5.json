@@ -19,7 +19,22 @@
       "lane_measurement_noise": 0.012,
       "observation_gate_px": 32.0,
       "min_velocity": 20,
-      "max_velocity": 1800
+      "max_velocity": 1800,
+      "identity_gate_sigma": 3.5,
+      "identity_min_span_overlap": 0.35,
+      "identity_min_ess_fraction": 0.1,
+      "identity_max_sigma_y_px": 12.0,
+      "identity_max_sigma_u": 0.04,
+      "degraded_measurement_noise_scale": 2.5,
+      "identity_continuity": {
+        "enabled": true,
+        "confirmed_tap_only": true,
+        "allow_degraded_unknown": true,
+        "max_degraded_ms": 90,
+        "reject_competing_heads": true,
+        "preserve_frozen_key": true,
+        "preserve_original_deadline": true
+      }
     }
   },
   "capture_fps": 120,

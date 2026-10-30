@@ -112,6 +112,94 @@ class ParticlePredictor:
             return None
         return float(np.average(self.y + self.v * dt, weights=self.weights))
 
+    def identity_association_score(self, candidate, timestamp: float, reference_span: tuple[float, float],
+                                   supported_keys: set[str] | list[str], selected_key: str | None = None,
+                                   *, max_sigma: float | None = None) -> dict:
+        """Score a low-quality observation against the predicted physical Tap.
+
+        This is a scale-normalized association diagnostic, not a probability.
+        It deliberately requires key and horizontal-span evidence in addition
+        to particle-space proximity.
+        """
+        result = {"accepted": False, "reason": "PF_NOT_READY", "association_score": math.inf,
+                  "predicted_y": None, "predicted_u": None, "innovation_y": None,
+                  "innovation_u": None, "sigma_y": None, "sigma_u": None,
+                  "measurement_quality": "unusable", "coast_ms": ""}
+        if (not self.initialized or self.last_time is None or timestamp <= self.last_time or
+                self.y is None or not np.all(np.isfinite(self.weights))):
+            result["reason"] = "invalid_or_unready_pf_time"
+            return result
+        dt = timestamp - self.last_time
+        result["coast_ms"] = dt * 1000
+        if dt > self.max_coast_s:
+            result["reason"] = "identity_coast_expired"
+            return result
+        if (candidate.note_type != "unknown" or candidate.appearance not in
+                ("cyan_bar", "yellow_bar", "neutral_candidate") or
+                candidate.suspected_overlap or candidate.path_bbox is not None or
+                candidate.hold_path_px > 0):
+            result["reason"] = "unknown_has_special_or_competing_visual_features"
+            return result
+        keys = set(candidate.candidate_keys)
+        support = set(supported_keys)
+        if not support or not keys.intersection(support) or (selected_key and selected_key not in keys):
+            result["reason"] = "original_key_not_supported"
+            return result
+        if selected_key and selected_key not in support:
+            result["reason"] = "selected_key_lacks_history_support"
+            return result
+        span = (float(candidate.u_min), float(candidate.u_max))
+        old = tuple(map(float, reference_span))
+        if not (all(math.isfinite(v) for v in (*span, *old)) and
+                0 <= span[0] < span[1] <= 1 and 0 <= old[0] < old[1] <= 1):
+            result["reason"] = "invalid_horizontal_span"
+            return result
+        overlap = max(0., min(span[1], old[1]) - max(span[0], old[0]))
+        overlap_fraction = overlap / max(1e-9, min(span[1]-span[0], old[1]-old[0]))
+        width_ratio = (span[1]-span[0]) / (old[1]-old[0])
+        if overlap_fraction < float(self.cfg.get("identity_min_span_overlap", .35)) or not .30 <= width_ratio <= 1.8:
+            result.update(reason="horizontal_span_incompatible", span_overlap=overlap_fraction,
+                          span_width_ratio=width_ratio)
+            return result
+        x, y, w, h = candidate.bbox
+        observed_y = float(y + h / 2)
+        observed_u = (span[0] + span[1]) / 2
+        py = self.y + self.v * dt
+        pu = self.u + self.vu * dt
+        pred_y = self._weighted_quantile(py, self.weights, .5)
+        pred_u = self._weighted_quantile(pu, self.weights, .5)
+        mu_y = float(np.average(py, weights=self.weights))
+        mu_u = float(np.average(pu, weights=self.weights))
+        sy = math.sqrt(max(0., float(np.average((py-mu_y)**2, weights=self.weights))))
+        su = math.sqrt(max(0., float(np.average((pu-mu_u)**2, weights=self.weights))))
+        min_ess_fraction = float(self.cfg.get("identity_min_ess_fraction", .1))
+        max_sigma_y = float(self.cfg.get("identity_max_sigma_y_px", 12.0))
+        max_sigma_u = float(self.cfg.get("identity_max_sigma_u", .04))
+        if (not math.isfinite(self.ess) or self.ess < self.count*min_ess_fraction or
+                sy > max_sigma_y or su > max_sigma_u):
+            result.update(reason="particle_distribution_unreliable", predicted_y=pred_y,
+                          predicted_u=pred_u, sigma_y=sy, sigma_u=su,
+                          observed_y=observed_y, innovation_y=observed_y-mu_y,
+                          innovation_u=observed_u-mu_u, measurement_quality="unusable")
+            return result
+        quality = max(.2, min(1., float(candidate.score)))
+        # Unknown/thin contours are noisier than a normal colored Tap body.
+        noise_scale = min(4., max(2., 2.5 / quality))
+        sigma_y = max(self.y_measurement * noise_scale, sy)
+        sigma_u = max(self.u_measurement * noise_scale, su, (span[1]-span[0]) * .15)
+        zy, zu = abs(observed_y-mu_y)/sigma_y, abs(observed_u-mu_u)/sigma_u
+        score = math.sqrt(zy*zy + zu*zu)
+        limit = float(max_sigma if max_sigma is not None else self.cfg.get("identity_gate_sigma", 3.5))
+        result.update({"association_score": score, "predicted_y": pred_y, "predicted_u": pred_u,
+                       "innovation_y": observed_y-mu_y, "innovation_u": observed_u-mu_u,
+                       "sigma_y": sigma_y, "sigma_u": sigma_u,
+                       "measurement_quality": "degraded" if quality >= .45 and h >= 3 else "thin",
+                       "observed_y": observed_y, "span_overlap": overlap_fraction,
+                       "span_width_ratio": width_ratio, "key_match": True})
+        result["accepted"] = math.isfinite(score) and score <= limit
+        result["reason"] = "PF_MATCHED_DEGRADED_UNKNOWN" if result["accepted"] else "innovation_outside_pf_gate"
+        return result
+
     def _weighted_quantile(self, values: np.ndarray, weights: np.ndarray, q: float) -> float:
         order = np.argsort(values)
         v, w = values[order], weights[order]
@@ -174,11 +262,16 @@ class ParticlePredictor:
                           physical_hit_time=physical_time, reason=reason)
 
     def update(self, history: list[tuple[float, float, float]], target_y: float,
-               *, physical_hit_y: float | None = None) -> Prediction:
+               *, physical_hit_y: float | None = None, measurement_noise_scale: float = 1.0,
+               measurement_status: str = "USED", association_score: float | None = None,
+               measurement_quality: str = "reliable") -> Prediction:
         began = time.perf_counter()
         try:
             if physical_hit_y is not None:
                 self.physical_hit_y = physical_hit_y
+            if not math.isfinite(measurement_noise_scale) or not 1 <= measurement_noise_scale <= 4:
+                return Prediction(reason="PF_INVALID_MEASUREMENT_QUALITY", predictor_mode="particle",
+                                  measurement_status="REJECTED_QUALITY")
             if not self.initialized:
                 if not self._initialize(history):
                     return Prediction(reason=self.last_status, predictor_mode="particle",
@@ -200,13 +293,13 @@ class ParticlePredictor:
             y_residual = measured_y - self.y
             u_residual = measured_u - self.u
             innovation = float(np.average(np.abs(y_residual), weights=self.weights))
-            if innovation > self.gate_px:
+            if innovation > self.gate_px * measurement_noise_scale:
                 self.last_status = "REJECTED_MEASUREMENT"
                 return self._prediction(target_y, t, "REJECTED_MEASUREMENT")
             # Student-t likelihood (df=4), computed in log space.
             logw = np.log(np.maximum(self.weights, 1e-300))
-            logw -= 2.5 * np.log1p((y_residual / self.y_measurement) ** 2 / 4.)
-            logw -= 2.5 * np.log1p((u_residual / self.u_measurement) ** 2 / 4.)
+            logw -= 2.5 * np.log1p((y_residual / (self.y_measurement * measurement_noise_scale)) ** 2 / 4.)
+            logw -= 2.5 * np.log1p((u_residual / (self.u_measurement * measurement_noise_scale)) ** 2 / 4.)
             logw -= np.max(logw)
             w = np.exp(logw)
             total = float(w.sum())
@@ -233,7 +326,9 @@ class ParticlePredictor:
                 return Prediction(reason=self.last_status, predictor_mode="particle",
                                   measurement_status="PF_INVALID_STATE")
             self.last_status = "UPDATED"
-            return self._prediction(target_y, t, "USED")
+            prediction = self._prediction(target_y, t, measurement_status)
+            return Prediction(**{**prediction.__dict__, "association_score":association_score,
+                                 "measurement_quality":measurement_quality})
         finally:
             self.elapsed += time.perf_counter() - began
 
