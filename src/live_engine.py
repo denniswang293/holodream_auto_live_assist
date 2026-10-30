@@ -429,6 +429,21 @@ class LiveEngine:
                 event_id not in finished_past_ids and
                 self._keep_coasting_provisional_tap(coast,finished))
 
+    def _retain_reidentified_intent(self, event_id, now):
+        """Transfer tracking ownership without replacing a scheduled Tap."""
+        coast = self.provisional_tap_losses.get(event_id)
+        intent = self.scheduler.pending.get(event_id)
+        has_replacement = any(owner == event_id for owner in self.reidentified_tracker_ids.values())
+        valid = (coast is not None and intent is coast['intent'] and
+                 coast['generation'] == self.scheduler.arm_generation and has_replacement and
+                 now <= intent.hit_at+self.scheduler.max_lateness)
+        if not valid:
+            return False
+        self.scheduler.resume(event_id)
+        self.scheduler._log('reidentified_intent_retained',
+                            'replacement_tracker_owns_original_key_and_deadline',intent)
+        return True
+
     def _keep_coasting_provisional_tap(self, coast, finished):
         return (coast['generation'] == self.scheduler.arm_generation and
                 finished <= coast['intent'].hit_at+self.scheduler.max_lateness)
@@ -513,6 +528,7 @@ class LiveEngine:
             ready = []
             retained = {}
             reidentified = {}
+            retained_reidentified_events = set()
             present_ids = set()
             finished_tracks = {f"{self.session_id}:{tr.track_id}":tr for tr in self.tracker.finished}
             finished_past_ids = {event_id for event_id,tr in finished_tracks.items()
@@ -566,7 +582,12 @@ class LiveEngine:
                         self.scheduler.resume(event_id)
                     continue
                 if tr.track_id in self.reidentified_tracker_ids:
-                    reidentified[tr.track_id] = self.reidentified_tracker_ids[tr.track_id]
+                    old_event_id = self.reidentified_tracker_ids[tr.track_id]
+                    reidentified[tr.track_id] = old_event_id
+                    if (old_event_id not in retained_reidentified_events and
+                            self._retain_reidentified_intent(old_event_id,finished)):
+                        active_events.add(old_event_id)
+                        retained_reidentified_events.add(old_event_id)
                 # A fragmented/recreated ID can still be the same physical
                 # head. Keep the old pending intent and suppress this new ID
                 # only when color, selected-lane coverage, span, and projected
@@ -791,7 +812,9 @@ class LiveEngine:
             for event_id in list(self.scheduler.pending):
                 coast = self.provisional_tap_losses.get(event_id)
                 if coast and event_id not in active_events:
-                    if self._keep_absent_provisional_tap(event_id,coast,finished,
+                    if self._retain_reidentified_intent(event_id,finished):
+                        active_events.add(event_id)
+                    elif self._keep_absent_provisional_tap(event_id,coast,finished,
                             present_ids,finished_tracks,finished_past_ids):
                         self.scheduler.resume(event_id)
                         active_events.add(event_id)

@@ -665,3 +665,66 @@ def test_scheduled_nearline_tap_can_survive_only_a_compatible_position_outlier(
     else:
         assert not actuator.calls
     s.close()
+
+
+def test_reidentified_old_tap_survives_finished_tracker_until_original_deadline(
+        setup_rule,make_candidate):
+    config,geometry=setup_rule
+    clock,actuator,s=scheduler()
+    rows=[]
+    s.on_log=rows.append
+    s.armed=True
+    s.arm_generation=3
+    s.update_context(clock.now,'PLAYING',True,True)
+    engine=LiveEngine(config,geometry,s,clock=lambda:clock.now,detector=lambda *args:[])
+    engine.gate.update=lambda *args:'PLAYING'
+    old_event=f'{engine.session_id}:57'
+    old_intent=ActionIntent(old_event,('S',),1000.20,.01)
+    assert s.offer(old_intent)
+    coast={'intent':old_intent,'generation':3,'expires_at':1000.07,
+           'span':(.01,.10),'appearance':'cyan_bar','last_time':999.99,
+           'center_y':235.,'velocity':180.}
+    engine.provisional_tap_losses[old_event]=coast
+    new=track(make_candidate,58,['S'],.01,.10,hit=1000.30)
+    new.first_time=1000.
+    new.last_time=1000.02
+    new.history=[(1000.02,238.6,.055)]
+    new_event=f'{engine.session_id}:58'
+    engine.reidentified_tracker_ids[new.track_id]=old_event
+    s.consumed.add(new_event)
+    engine.seen_ids.add(new.track_id)
+    engine.input_eligible_ids[new.track_id]=3
+    engine.tracker.update=lambda *args,**kwargs:[new]
+    engine.tracker.finished=[SimpleNamespace(track_id=57,reason='lost')]
+
+    image=np.zeros((404,720,3),np.uint8)
+    engine.process(CapturedFrame(0,image,1000.,1000.))
+    assert s.pending[old_event] is old_intent
+    assert old_intent.hit_at==1000.20
+    assert not any(r.get('event_id')==old_event and r.get('action')=='canceled' for r in rows)
+
+    # The ownership transfer cannot stretch the original scheduler deadline.
+    assert not engine._retain_reidentified_intent(old_event,1000.216)
+    s.close()
+
+
+def test_reidentification_does_not_merge_a_different_same_lane_tap(setup_rule,make_candidate):
+    config,geometry=setup_rule
+    clock,actuator,s=scheduler()
+    s.armed=True
+    s.arm_generation=2
+    s.update_context(clock.now,'PLAYING',True,True)
+    intent=ActionIntent('session:old',('S',),1000.30,.01)
+    assert s.offer(intent)
+    engine=LiveEngine(config,geometry,s,clock=lambda:clock.now)
+    coast={'intent':intent,'generation':2,'expires_at':1000.07,
+           'span':(.01,.10),'appearance':'cyan_bar','last_time':1000.,
+           'center_y':235.,'velocity':180.}
+    next_note=track(make_candidate,59,['S'],.01,.10,hit=1000.30)
+    next_note.first_time=1000.
+    next_note.last_time=1000.02
+    next_note.history=[(1000.02,275.,.055)]
+    assert not engine._matches_provisional_reidentification(
+        next_note,'session:next',coast,1000.02)
+    assert 'session:next' not in s.consumed
+    s.close()
