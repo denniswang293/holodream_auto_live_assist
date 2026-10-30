@@ -1,4 +1,5 @@
 {
+  "tap_core": "v6",
   "predictor": {
     "mode": "particle",
     "particle": {

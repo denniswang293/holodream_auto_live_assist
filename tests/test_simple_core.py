@@ -1,0 +1,215 @@
+from dataclasses import replace
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from src.geometry import CalibratedGeometry
+from src.live_capture import CapturedFrame
+from src.live_engine import LiveEngine
+from src.detector import Candidate
+from src.live_input import MockActuator, TapScheduler
+from src.predictor import Prediction
+from src.simple_tracker import SimpleTracker
+from src.tap_intent import TapIntentManager
+from src.tap_planner import TapPlanner, TapProposal
+
+
+def candidate(y, *, u=.40, appearance="cyan_bar", keys=("F",), width=.12):
+    return Candidate((250, round(y-3), 60, 6), appearance, .9, u-width/2, u+width/2,
+                     list(keys), "tap", body_bbox=(250, round(y-3), 60, 6))
+
+
+def test_simple_tracker_keeps_track_id_across_short_detector_dropout():
+    tracker = SimpleTracker({"confirm_observations": 3, "max_gap_s": .16},
+        {"min_observations": 3, "min_duration_s": .02, "min_velocity": 20,
+         "min_displacement_px": 1, "max_uncertainty_s": .04}, hit_y=310.5)
+    for i in range(4):
+        tracks = tracker.update([candidate(200+i*5)], 1+i/60)
+    track_id = tracks[0].track_id
+    tracks = tracker.update([], 1.08)
+    assert tracks[0].track_id == track_id
+    tracks = tracker.update([candidate(225)], 1.10)
+    assert tracks[0].track_id == track_id
+    assert tracks[0].missed == 0
+
+
+def test_simple_tracker_does_not_merge_two_visible_same_lane_notes():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    tracks = tracker.update([candidate(200), candidate(230)], 1.0)
+    assert len(tracks) == 2
+    assert tracks[0].track_id != tracks[1].track_id
+
+
+def test_simple_tracker_collapses_only_same_frame_duplicate_contours():
+    tracker = SimpleTracker()
+    a = candidate(200)
+    b = replace(a, bbox=(251, 198, 60, 6), score=.8)
+    tracks = tracker.update([a, b], 1.0)
+    assert len(tracks) == 1
+
+
+def make_ready_track(track_id=1, hit_at=10.20, key="F", uncertainty=.01):
+    track = SimpleTracker()._new_track(candidate(280, keys=(key,)), 10.0)
+    track.track_id = track_id
+    track.status = "confirmed"
+    track.confirmed_note_type = "tap"
+    track.observations = 6
+    track.history = [(9.9, 250, .4), (10.0, 280, .4)]
+    track.stable_keys = [key]
+    track.prediction = Prediction(velocity=300, fitted_y=280, eta=hit_at-10,
+        hit_time=hit_at, uncertainty=uncertainty, reason="")
+    return track
+
+
+class Clock:
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+def armed_scheduler(now=10.0):
+    clock = Clock(now)
+    actuator = MockActuator()
+    rows = []
+    scheduler = TapScheduler("assist", actuator, clock=clock, on_log=rows.append)
+    scheduler.update_context(now, "PLAYING", True, True)
+    scheduler.armed = True
+    scheduler.arm_generation = 1
+    return clock, actuator, rows, scheduler
+
+
+def test_tap_planner_requires_confirmation_eta_and_stable_covered_key():
+    _, _, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    unconfirmed = make_ready_track()
+    unconfirmed.status = "tentative"
+    proposals, reasons = planner.plan([unconfirmed], 10., {"F"}, scheduler)
+    assert not proposals
+    assert reasons[1] == "track_not_current_confirmed"
+
+    ready = make_ready_track()
+    proposals, reasons = planner.plan([ready], 10., {"F"}, scheduler)
+    assert proposals[1].key == "F"
+    assert reasons[1] == ""
+    scheduler.close()
+
+
+def test_intent_manager_freezes_key_and_deadline_after_acceptance():
+    clock, _, rows, scheduler = armed_scheduler()
+    transitions = []
+    manager = TapIntentManager(transitions.append)
+    first = TapProposal("session:simple:1", 1, "F", 10.20, .01, "first fit")
+    accepted, rejected = manager.schedule({1: first}, scheduler, 10.)
+    assert len(accepted) == 1 and not rejected
+    original = scheduler.pending[first.note_uid]
+
+    later = TapProposal(first.note_uid, 1, "F", 10.26, .02, "later fit")
+    manager.schedule({1: later}, scheduler, 10.03)
+    assert scheduler.pending[first.note_uid] is original
+    assert original.hit_at == pytest.approx(10.20)
+    assert original.keys == ("F",)
+
+    clock.now = 10.20
+    scheduler.update_context(10.16, "PLAYING", True, True)
+    scheduler.poll()
+    manager.record_action(rows[-1])
+    assert manager.state_for(first.note_uid) == "FIRED"
+    assert [row["state"] for row in transitions if row.get("note_uid") == first.note_uid] == ["SCHEDULED", "FIRED"]
+    scheduler.close()
+
+
+def test_disarm_cancels_pending_intent_and_no_retry_is_created():
+    _, _, rows, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:2", 2, "D", 10.20, .01, "evidence")
+    manager.schedule({2: proposal}, scheduler, 10.)
+    scheduler.on_log = lambda row: (rows.append(row), manager.record_action(row))
+    scheduler.disarm("focus_loss")
+    assert manager.state_for(proposal.note_uid) == "CANCELED"
+    scheduler.update_context(10., "PLAYING", True, True)
+    scheduler.armed = True
+    scheduler.arm_generation += 1
+    manager.schedule({2: proposal}, scheduler, 10.)
+    assert proposal.note_uid not in scheduler.pending
+    assert manager.state_for(proposal.note_uid) == "CANCELED"
+    scheduler.close()
+
+
+def test_existing_intent_does_not_extend_deadline_after_track_loss():
+    clock, actuator, rows, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:3", 3, "S", 10.10, .01, "evidence")
+    manager.schedule({3: proposal}, scheduler, 10.)
+    scheduler.on_log = lambda row: (rows.append(row), manager.record_action(row))
+    # No proposal represents a lost observation. The manager owns the already
+    # accepted action and does not require an ETA refresh to keep its deadline.
+    clock.now = 10.10
+    scheduler.update_context(10.10, "PLAYING", True, True)
+    scheduler.poll()
+    assert actuator.calls == [("down", "S")]
+    assert manager.state_for(proposal.note_uid) == "FIRED"
+    scheduler.close()
+
+
+def test_live_engine_simple_core_schedules_tap_once_without_v6_tap_path():
+    root = Path(__file__).resolve().parents[1]
+    geometry = CalibratedGeometry(json.loads(
+        (root / "config/geometry_live_assist.json").read_text(encoding="utf-8-sig")))
+    config = json.loads((root / "config.json").read_text(encoding="utf-8-sig"))
+    config["live"] = json.loads((root / "config/live_assist_v5.json").read_text(encoding="utf-8-sig"))
+    config["live"].update(tap_core="simple", input_advance_px=15, dropout_grace_ms=0)
+    config["live"]["hold_visual"]["enabled"] = False
+    config["live"]["speculative_taps"]["enabled"] = False
+    config["predictor"]["mode"] = "legacy"
+    config["tracker"].update(confirm_observations=5, max_gap_s=.16)
+
+    clock, actuator, rows, scheduler = armed_scheduler(1000.)
+    current = [candidate(220)]
+    engine = LiveEngine(config, geometry, scheduler, clock=clock,
+                        detector=lambda *args: current)
+    # Replay tooling may replace the diagnostic session label after engine
+    # construction; the Tap owner remains the authority for its own IDs.
+    engine.session_id = "replay-session"
+    engine.gate.update = lambda *args: "PLAYING"
+    scheduler.on_log = lambda row: (rows.append(row), engine.record_scheduler_action(row))
+    image = np.zeros((404, 720, 3), np.uint8)
+
+    for i in range(5):
+        timestamp = 1000. + i * .02
+        clock.now = timestamp
+        y = 220 + (timestamp - 1000.) * 300
+        current[:] = [candidate(y)]
+        engine.process(CapturedFrame(i, image, timestamp, timestamp))
+        if i == 0:
+            scheduler.armed = True
+            scheduler.arm_generation = 1
+
+    assert len(scheduler.pending) == 1
+    event_id, intent = next(iter(scheduler.pending.items()))
+    assert event_id.startswith(f"{engine.simple_core.session_id}:simple:")
+    original_hit = intent.hit_at
+    original_key = intent.keys
+
+    # A later estimate and a temporarily absent observation cannot replace or
+    # extend the accepted action.
+    for i, timestamp in enumerate((1000.10, 1000.12), start=5):
+        clock.now = timestamp
+        current[:] = []
+        engine.process(CapturedFrame(i, image, timestamp, timestamp))
+    assert scheduler.pending[event_id].hit_at == original_hit
+    assert scheduler.pending[event_id].keys == original_key
+
+    clock.now = original_hit
+    scheduler.update_context(original_hit - .01, "PLAYING", True, True)
+    scheduler.poll()
+    assert actuator.calls == [("down", original_key[0])]
+    assert engine.simple_core.intents.state_for(event_id) == "FIRED"
+    assert not any(action.get("event_id", "").startswith("replay-session:")
+                   for action in rows if action.get("action") == "key_down")
+    scheduler.close()

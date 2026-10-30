@@ -20,6 +20,8 @@ from .overlay import render
 from .tracker import Tracker
 from .tap_assignment import AnyCoveredKeyRule
 from .hold_visual import path_runs, nearest_run
+from .simple_core import SimpleAssistCore
+from .simple_tracker import is_simple_tap
 
 PROVISIONAL_TAP_LOSS_GRACE_S = .070
 
@@ -229,6 +231,7 @@ class LiveEngine:
         self.reidentified_tracker_ids = {}
         self.judgment_bar_top = geometry.document.get('live_measurement',{}).get('judgment_bar_top_y')
         self.gate = GameplayGate(config.get("gameplay"), geometry.reference_resolution)
+        self.simple_core_mode = config.get("live", {}).get("tap_core", "v6") == "simple"
         tracker_cfg = {**config.get("tracker", {}), "key_map": config["key_map"]}
         # Advancing input changes the prediction target, not the physical end
         # of the visible note. Keep tracking until the measured judgment row.
@@ -251,8 +254,11 @@ class LiveEngine:
             tracker_cfg["max_hit_drift_s"] = self.speculative["max_hit_drift_s"]
             tracker_cfg["tap_hit_drift_window"] = self.speculative.get("tap_hit_drift_window",5)
             predictor_cfg["max_uncertainty_s"] = self.speculative["max_uncertainty_s"]
+        # In Simple Core mode the old tracker remains only for the unchanged
+        # visual-Hold route. Ordinary Taps use SimpleTracker below.
+        hold_predictor_mode = "legacy" if self.simple_core_mode else predictor_mode
         self.tracker = Tracker(tracker_cfg,self.trigger_y,predictor_cfg,
-                               predictor_mode=predictor_mode,particle_cfg=particle_cfg,
+                               predictor_mode=hold_predictor_mode,particle_cfg=particle_cfg,
                                physical_hit_y=geometry.hit_y)
         self.collector = EventCollector({**config.get("events", {}), "reference_height": geometry.reference_resolution[1]})
         self.diagnostic_sink = None
@@ -268,6 +274,17 @@ class LiveEngine:
                                if self.judgment_bar_top is not None else None)
         self.dc = {**config.get("detector", {}), "reference_resolution": geometry.reference_resolution}
         self.session_id = uuid.uuid4().hex[:12]
+        self.simple_core = None
+        self.simple_tracks = []
+        if self.simple_core_mode:
+            self.simple_core = SimpleAssistCore(session_id=self.session_id,
+                tracker_cfg={**tracker_cfg, "max_eta_s": config.get("events", {}).get("max_eta_s", .45)},
+                predictor_cfg=predictor_cfg, predictor_mode=predictor_mode,
+                particle_cfg=particle_cfg, hit_y=self.trigger_y,
+                event_cfg=config.get("events", {}),
+                min_y=float(config.get("events", {}).get("min_y",190*self.pixel_scale_y)),
+                known_keys=self.known_keys)
+            self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}
         self.track_births, self.recycled_ids = {}, set()
         self.last_capture = -math.inf
@@ -284,6 +301,9 @@ class LiveEngine:
         # Do not recycle IDs on resuming or lose emergency de-duplication state.
         self.tracker.update([], self.last_capture, playing=False)
         self.tracker.finished.clear()
+        if self.simple_core is not None:
+            self.simple_core.tracker.update([], self.last_capture, playing=False)
+            self.simple_tracks = []
 
     def _commit_still_valid(self,tr,commit,now):
         """A committed deadline uses its validated fit, not a noisy new fit.
@@ -703,6 +723,8 @@ class LiveEngine:
 
     def record_scheduler_action(self, action):
         event_id=action.get("event_id")
+        if self.simple_core is not None:
+            self.simple_core.record_scheduler_action(action)
         if not event_id or event_id not in self.tap_decision_context:
             return
         row=dict(self.tap_decision_context[event_id])
@@ -794,9 +816,27 @@ class LiveEngine:
             measured["note_detector"] = time.perf_counter()-phase
             prediction_before = self.tracker.elapsed
             phase = time.perf_counter()
-            tracks = self.tracker.update(candidates, frame.captured_at, playing=state == "PLAYING")
-            measured["prediction"] = self.tracker.elapsed-prediction_before
-            measured["tracking"] = max(0.0,time.perf_counter()-phase-measured["prediction"])
+            if self.simple_core is not None:
+                simple_candidates = [c for c in candidates if is_simple_tap(c)]
+                hold_candidates = ([c for c in candidates
+                    if self.hold_enabled and c.appearance in self.hold_path_colors and
+                    c.hold_path_px >= self.hold_path_px] if state == "PLAYING" else [])
+                simple_started = time.perf_counter()
+                self.simple_tracks = self.simple_core.tracker.update(
+                    simple_candidates, frame.captured_at, playing=state == "PLAYING")
+                simple_elapsed = time.perf_counter() - simple_started
+                hold_started = time.perf_counter()
+                tracks = self.tracker.update(hold_candidates, frame.captured_at,
+                                             playing=state == "PLAYING")
+                measured["prediction"] = self.tracker.elapsed-prediction_before
+                measured["tracking"] = max(0.0, time.perf_counter()-phase-
+                    measured["prediction"]-simple_elapsed)
+                measured["simple_core"] = simple_elapsed
+            else:
+                self.simple_tracks = []
+                tracks = self.tracker.update(candidates, frame.captured_at, playing=state == "PLAYING")
+                measured["prediction"] = self.tracker.elapsed-prediction_before
+                measured["tracking"] = max(0.0,time.perf_counter()-phase-measured["prediction"])
             measured["unknown_association"] = self.tracker.stage_times.get("unknown_association_s",0.0)
             measured["tracker_matching"] = max(0.0,
                 self.tracker.stage_times.get("matching_s",0.0)-measured["prediction"])
@@ -816,6 +856,7 @@ class LiveEngine:
             stale = True
             self.invalidate("frame_expired_during_processing")
             state, tracks = "STALE", []
+            self.simple_tracks = []
         created = []
         active_events = set()
         phase = time.perf_counter()
@@ -1265,6 +1306,11 @@ class LiveEngine:
                         final_reason=reason or "not_eligible_in_current_arm")
                     self.scheduler.withdraw(event_id, reason or "not_created_while_armed",retryable=retryable)
             for event_id in list(self.scheduler.pending):
+                if (self.simple_core is not None and
+                        event_id.startswith(f"{self.simple_core.session_id}:simple:")):
+                    # SimpleTapIntentManager owns the whole Tap lifecycle.
+                    # The legacy V6 retention loop must never mutate it.
+                    continue
                 coast = self.provisional_tap_losses.get(event_id)
                 if coast and event_id not in active_events:
                     if self._retain_reidentified_intent(event_id,finished):
@@ -1339,12 +1385,67 @@ class LiveEngine:
                 event_id:evidence for event_id,evidence in self.tap_edge_evidence.items()
                 if event_id in self.scheduler.pending and evidence['generation']==self.scheduler.arm_generation
             }
+            if self.simple_core is not None:
+                safe_context = (state == "PLAYING" and focused and roi_valid and not stale)
+                proposals, accepted = self.simple_core.plan_tracks(
+                    self.simple_tracks, frame.captured_at, finished, self.scheduler,
+                    enabled=safe_context)
+                for tr in self.simple_tracks:
+                    uid = self.simple_core.note_uid(tr.track_id)
+                    intent = self.simple_core.intents.intents.get(uid)
+                    if intent is not None and intent.state == "PENDING":
+                        self.last_decisions[tr.track_id] = ((intent.key,), "")
+                        tr.selected_key = intent.key
+                    else:
+                        self.last_decisions[tr.track_id] = ((), self.simple_core.last_reasons.get(
+                            tr.track_id, "not_scheduled"))
             scheduler_started=time.perf_counter()
             self.scheduler.poll()
             measured["scheduler_update"]=time.perf_counter()-scheduler_started
             live_holds = set(self.scheduler.pending) | {intent.event_id for _,intent in self.scheduler.held.values()}
             self.hold_spans = {event_id:value for event_id,value in self.hold_spans.items()
                                if event_id in live_holds}
+            if self.simple_core is not None:
+                current_simple = {track.track_id: track for track in self.simple_tracks}
+                for transition in self.simple_core.drain_transitions():
+                    uid = transition["note_uid"]
+                    try:
+                        simple_id = int(uid.rsplit(":", 1)[1])
+                    except (IndexError, ValueError):
+                        simple_id = 0
+                    tr = current_simple.get(simple_id)
+                    intent = self.simple_core.intents.intents.get(uid)
+                    proposal = next((item for item in proposals.values()
+                                     if item.note_uid == uid), None)
+                    created.append({
+                        "event_id": uid, "note_uid": uid, "track_id": simple_id,
+                        "source_frame": frame.sequence,
+                        "capture_timestamp": transition.get("timestamp", frame.captured_at),
+                        "processing_timestamp": finished,
+                        "predicted_hit_time": (intent.hit_at if intent else
+                            proposal.hit_at if proposal else ""),
+                        "uncertainty_s": (intent.uncertainty if intent else
+                            proposal.uncertainty if proposal else ""),
+                        "key_candidates": "|".join(tr.stable_keys) if tr else "",
+                        "resolved_keys": intent.key if intent else
+                            proposal.key if proposal else transition.get("key", ""),
+                        "type": "tap", "appearance": tr.candidate.appearance if tr else "",
+                        "confidence_label": "heuristic_only",
+                        "abstain_reason": transition.get("reason", ""),
+                        "gameplay_state": state,
+                        "predictor_mode": self.simple_core.tracker.predictor_mode,
+                        "geometry_status": self.geometry.status,
+                        "geometry_sha256": self.geometry_hash,
+                        "resolution_basis": "simple_confirmed_tap",
+                        "simple_core_state": transition.get("state", ""),
+                        "simple_core_reason": transition.get("reason", ""),
+                        "lane_span": (f"{tr.candidate.u_min:.6f}:{tr.candidate.u_max:.6f}" if tr else
+                            f"{intent.lane_span[0]:.6f}:{intent.lane_span[1]:.6f}" if intent else
+                            f"{proposal.lane_span[0]:.6f}:{proposal.lane_span[1]:.6f}" if proposal else ""),
+                        "crossing_y": (tr.history[-1][1] if tr and tr.history else
+                            intent.observed_y if intent else proposal.observed_y if proposal else "")})
+                    if transition.get("state") == "DETECTED":
+                        self.events += 1
         measured["decision"] = max(0.,time.perf_counter()-phase-measured.get("scheduler_update",0.))
         late_diagnostic_started=time.perf_counter()
         for tracked in (*tracks,*self.tracker.finished):
@@ -1403,6 +1504,7 @@ class LiveEngine:
                 "state_detector_ms":measured["state_detector"]*1000,
                 "note_detector_ms":measured["note_detector"]*1000,
                 "tracker_matching_ms":measured["tracker_matching"]*1000,
+                "simple_core_ms":measured.get("simple_core",0.)*1000,
                 "unknown_association_ms":measured["unknown_association"]*1000,
                 "pf_prediction_update_ms":measured["prediction"]*1000,
                 "decision_ms":measured["decision"]*1000,
@@ -1410,11 +1512,13 @@ class LiveEngine:
                 "diagnostic_write_ms":measured["diagnostic_write"]*1000,
                 "capture_fps": self._fps(self.capture_times), "processing_fps": self._fps(self.process_times),
                 "latency_p50_ms": float(np.median(self.latencies)), "latency_p95_ms": float(np.percentile(self.latencies, 95)),
-                "stale_total": self.stale, "candidate_count": len(candidates), "tracked_count": len(tracks),
+                "stale_total": self.stale, "candidate_count": len(candidates),
+                "tracked_count": len(tracks)+len(self.simple_tracks),
                 "input_armed": self.scheduler.armed}
         measured["cv_total"] = time.perf_counter()-wall_begin
         self.stage_times = measured
-        return work, tracks, created, info
+        display_tracks = [*tracks, *self.simple_tracks]
+        return work, display_tracks, created, info
 
     @staticmethod
     def _fps(times):

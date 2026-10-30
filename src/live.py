@@ -30,14 +30,15 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "real_observation_count", "coast_ms", "physical_hit_time", "measurement_status",
                 "physical_track_uid", "source_track_ids", "reidentified_from_id",
                 "confirmed_note_type", "current_observation_type", "identity_state",
-                "association_score", "measurement_quality"]
+                "association_score", "measurement_quality", "note_uid",
+                "simple_core_state", "simple_core_reason", "lane_span", "crossing_y"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
                 "tracked_count", "input_armed", "dropped_total", "video_frame", "acquire_queue_wait_ms",
                 "normalization_ms", "state_detector_ms", "note_detector_ms", "tracker_matching_ms",
                 "unknown_association_ms", "pf_prediction_update_ms", "decision_ms", "scheduler_update_ms",
-                "diagnostic_write_ms"]
+                "simple_core_ms", "diagnostic_write_ms"]
 ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type"]
 IDENTITY_FIELDS = ["physical_note_uid", "track_id", "timestamp", "from_state", "to_state",
                    "reason", "confirmed_note_type", "current_observation_type", "evidence_count",
@@ -76,7 +77,7 @@ TAP_DECISION_FIELDS = ["timestamp", "source_frame", "event_id", "track_id", "phy
 STAGE_FIELDS = ["frame", "capture_timestamp", "gameplay_state", "candidate_count", "tracked_count",
                 "acquire_queue_wait_ms", "normalization_ms", "state_detector_ms", "note_detector_ms",
                 "tracker_matching_ms", "unknown_association_ms", "pf_prediction_update_ms", "decision_ms",
-                "scheduler_update_ms",
+                "scheduler_update_ms", "simple_core_ms",
                 "diagnostic_write_ms", "event_csv_write_ms", "overlay_ms", "recording_offer_ms",
                 "frame_csv_write_ms", "stage_csv_write_ms", "capture_to_acquire_ms", "processing_ms",
                 "latency_ms", "capture_fps", "processing_fps", "encoder_queue_wait_ms"]
@@ -215,6 +216,9 @@ def run(args):
     if config["predictor"]["mode"] not in ("particle", "legacy"):
         raise ValueError("predictor mode must be particle or legacy")
     live_cfg = config.get("live", {})
+    if getattr(args, "tap_core", None):
+        live_cfg["tap_core"] = args.tap_core
+    live_cfg.setdefault("tap_core", "v6")
     geometry = load_calibration(args.geometry)
     max_age = live_cfg.get("max_frame_age_ms", 50)/1000
     worker = target = controls = None
@@ -330,7 +334,13 @@ def run(args):
                 event_csv_started=time.perf_counter()
                 for event in events:
                     event_log.write(event)
-                    reasons[event["abstain_reason"] or "selected_tap"] += 1
+                    core_state=event.get("simple_core_state","")
+                    if core_state:
+                        if core_state=="SCHEDULED": reasons["selected_tap"] += 1
+                        elif core_state in ("CANCELED","EXPIRED"):
+                            reasons[event.get("simple_core_reason") or core_state.lower()] += 1
+                    else:
+                        reasons[event["abstain_reason"] or "selected_tap"] += 1
                 event_csv_ms=(time.perf_counter()-event_csv_started)*1000
                 overlay_started=time.perf_counter()
                 image = draw_live_overlay(work, tracks, info, engine, dropped)
@@ -354,6 +364,7 @@ def run(args):
                     "unknown_association_ms":info["unknown_association_ms"],
                     "pf_prediction_update_ms":info["pf_prediction_update_ms"],"decision_ms":info["decision_ms"],
                     "scheduler_update_ms":info["scheduler_update_ms"],
+                    "simple_core_ms":info.get("simple_core_ms",0.),
                     "diagnostic_write_ms":info["diagnostic_write_ms"],"event_csv_write_ms":event_csv_ms,
                     "overlay_ms":overlay_ms,"recording_offer_ms":recording_offer_ms,
                     "frame_csv_write_ms":frame_csv_ms,"stage_csv_write_ms":previous_stage_csv_ms,
@@ -408,7 +419,12 @@ def run(args):
             (out/"pf_diagnostic_health.json").write_text(
                 json.dumps(diagnostic_health,indent=2)+"\n",encoding="utf-8")
             wall_elapsed = time.perf_counter()-wall_started
+            simple_states=({state:sum(intent.state==state for intent in engine.simple_core.intents.intents.values())
+                            for state in ("PENDING","FIRED","CANCELED","EXPIRED")}
+                           if engine.simple_core is not None else {})
             result = {"mode": "assist", "predictor_mode": config["predictor"]["mode"],
+                      "tap_core": live_cfg.get("tap_core","v6"),
+                      "simple_intent_states": simple_states,
                       "source_kind": "actual window capture",
                       "window_title": target.title if target else None,
                       "region": list(region.bounds) if region else None,
@@ -466,6 +482,8 @@ def main():
                         help="Record overlay and clean source asynchronously")
     parser.add_argument("--predictor", choices=("particle", "legacy"),
                         help="Ordinary Tap ETA path (default: config predictor mode, particle)")
+    parser.add_argument("--tap-core", choices=("v6", "simple"),
+                        help="Ordinary Tap control path (default: config, v6)")
     parser.add_argument("--max-frames", type=int)
     args = parser.parse_args()
     if args.max_frames is not None and args.max_frames <= 0:
