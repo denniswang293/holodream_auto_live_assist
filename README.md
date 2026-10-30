@@ -1,73 +1,44 @@
-﻿# HoloDream Live Assist
+# HoloDream Live Assist
 
 > **警告：**目前工具仍處於測試階段，測試結果尚不穩定，基本上還不能放心用於實戰。
 
-V7 Simple Assist Core 已加入可選 Mock 驗證路徑，但尚未完成獨立音符真值標註；正式 Assist 預設仍是 V6。不要把回放送鍵數當成命中率。`--tap-core simple` 僅用於受控比較，實機測試前請先檢閱 `output/v7_simple_core_ab/` 的取消與疑似重複清單。
+目前只保留 C 模式 Tap 主路徑：Simple Tracker + Particle Filter。Hold 控制、即時擷取、幾何、人工啟用與輸入安全機制仍保留。執行指標不代表遊戲命中率。
 
-HoloDream 目前只保留 Windows 全螢幕即時 Assist：以 720×404 座標辨識六鍵軌道，按 `S D F J K L` 對應遊戲鍵。輸入啟動時關閉，只有使用者在遊戲前景按下 `Ctrl+Shift+Alt+Q` 並放開組合鍵後才會啟用。
-
-
-
-## 安裝
+## 安裝與啟動
 
 需要 Windows 與 Python 3.10 或更新版本：
 
 ```powershell
-cd C:\Users\USER\Desktop\holodream
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-live.txt
-```
-
-若 PowerShell 不允許啟用虛擬環境，可直接使用 `\.venv\Scripts\python.exe` 執行後續命令。
-
-## 啟動 Assist
-
-```powershell
 .\tools\launch_assist.cmd
 ```
 
-啟動器預設尋找標題為 `hololive-Dreams` 的遊戲視窗，擷取該視窗所在螢幕的完整畫面，等比例正規化到 720×404，並使用 `config/geometry_live_assist.json` 與 `config/live_assist_v5.json`。不會跳出 ROI 或解析度選擇器。錄影為選用項目，會保存乾淨來源、overlay 和時間索引，並增加磁碟用量。
+啟動後等待遊戲進入 PLAYING，並確認遊戲視窗在前景。Assist 初始為停用狀態；按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次可停用。`Esc` 或 `F12` 停止程式並釋放按住的鍵。失焦、暫停或影格過期時會解除輸入。
 
-進入遊戲並確認遊戲視窗在前景後，按 `Ctrl+Shift+Alt+Q`、放開組合鍵以啟用，再按一次關閉。`Esc` 或 `F12` 停止 Assist 並釋放按住的鍵。失焦、暫停、ROI／遊戲狀態無效或影格逾時都會解除輸入；恢復後要再次手動啟用。
+程式使用 720×404 座標、`S D F J K L` 六鍵及 `config/geometry_live_assist.json`。Tap 目標使用 y=310.5（判定線上移 15 px）；Hold 依可見尾端放鍵。
 
-每次執行都會在 `output/assist/` 建立新的 run 資料夾，包含 `live_run.json`、`live_diagnostics.md`、事件／影格／送鍵 CSV，以及選擇錄影時的影片檔。
+## 輸出與資料
 
-## 目前保留的測試
+每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。
 
-安裝開發測試依賴後可執行核心辨識、幾何、追蹤、時間預測及 Assist 輸入安全測試：
+## 核心測試
+
+安裝測試依賴後執行：
 
 ```powershell
 python -m pip install -r requirements-test.txt
 python -m pytest
 ```
 
-測試不等於實戰命中率驗證。
+測試只能驗證程式行為，不能證明實機命中率。
 
-## V7 Simple Core Mock 比較
+## 核心檔案
 
-使用指定實機錄影跑 V6 + Particle、Simple + Linear、Simple + Particle 三組 MockActuator 回放。這不會送出實際鍵盤輸入，也不會覆寫來源 run：
+- `src/simple_tracker.py`、`src/particle_predictor.py`：C 模式 Tap 位置追蹤與 Hit ETA 預測。
+- `src/tap_planner.py`、`src/tap_intent.py`：Tap 排程與意圖。
+- `src/live_input.py`、`src/live_engine.py`：人工啟用、安全限制、排程及 Hold 控制。
+- `src/live_capture.py`、`src/geometry.py`、`src/detector.py`：即時擷取、幾何與音符偵測。
+- `tools/launch_assist.cmd`：Assist 啟動器。
 
-```powershell
-python -m tools.replay_simple_core output/run_20261030T132141_738544Z --out output/v7_simple_core_ab
-```
-
-結果位於 `output/v7_simple_core_ab/`。需人工標註物理音符、碰線時間與遊戲判定後，才能判定哪組較少漏按或誤按。
-
-受控的 Simple 實機路徑可用 `--tap-core simple` 選擇；它仍要求在遊戲前景手動按 `Ctrl+Shift+Alt+Q` Arm，並保留 `Esc`／`F12` 停止。未完成人工真值覆核前，請保持正式預設 V6。
-
-## 專案結構
-
-```text
-config.json                      共用基礎設定，control.dry_run 保持 true
-config/geometry_live_assist.json Assist 使用的 720×404 幾何
-config/live_assist_v5.json       Assist 即時設定及使用者確認的操作規則
-src/                             偵測、幾何、追蹤、預測、即時擷取和安全輸入
-tools/launch_assist.cmd          唯一的使用者啟動器
-tests/                           Assist 核心自動測試
- output/                          本機 run、CSV 與選用錄影
- docs/archive/                    舊資料與開發歷史封存，不是現行工作流程
-```
-
-參閱 [操作手冊](docs/OPERATOR_GUIDE.md)、[架構說明](docs/ARCHITECTURE.md) 與[資料說明](docs/DATA_AND_CALIBRATION.md)。
+更多操作資訊見[操作手冊](docs/OPERATOR_GUIDE.md)、[架構說明](docs/ARCHITECTURE.md)與[資料及校正說明](docs/DATA_AND_CALIBRATION.md)。

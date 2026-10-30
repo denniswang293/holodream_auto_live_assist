@@ -9,11 +9,12 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 import math
+import time
 
 from .assignment import assign
 from .detector import Candidate
 from .particle_predictor import ParticlePredictor
-from .predictor import Prediction, Predictor
+from .predictor import Prediction
 
 
 def is_simple_tap(candidate: Candidate) -> bool:
@@ -87,14 +88,9 @@ class SimpleTrack:
 class SimpleTracker:
     """One-to-one motion association with a bounded missed-frame coast."""
 
-    def __init__(self, cfg: dict | None = None, predictor_cfg: dict | None = None,
-                 *, predictor_mode: str = "legacy", particle_cfg: dict | None = None,
+    def __init__(self, cfg: dict | None = None, particle_cfg: dict | None = None,
                  hit_y: float = 310.5):
-        if predictor_mode not in ("legacy", "particle"):
-            raise ValueError("predictor mode must be legacy or particle")
         self.cfg = dict(cfg or {})
-        self.predictor = Predictor(predictor_cfg)
-        self.predictor_mode = predictor_mode
         self.particle_cfg = dict(particle_cfg or {})
         self.hit_y = float(hit_y)
         self.tracks: list[SimpleTrack] = []
@@ -178,9 +174,8 @@ class SimpleTracker:
         self.next_id += 1
         track.key_history.append(tuple(candidate.candidate_keys))
         track.stable_keys = list(candidate.candidate_keys)
-        if self.predictor_mode == "particle":
-            track.particle_filter = ParticlePredictor(self.particle_cfg, seed=self.seed,
-                track_id=track.track_id, physical_hit_y=self.hit_y)
+        track.particle_filter = ParticlePredictor(self.particle_cfg, seed=self.seed,
+            track_id=track.track_id, physical_hit_y=self.hit_y)
         return track
 
     def _observe(self, track: SimpleTrack, candidate: Candidate, timestamp: float):
@@ -200,16 +195,15 @@ class SimpleTracker:
         order = list("SDFJKL")
         track.stable_keys = sorted((key for key, n in counts.items() if n / denominator >= .6),
                                    key=lambda k: order.index(k) if k in order else len(order))
-        if self.predictor_mode == "particle":
-            track.prediction = track.particle_filter.update(track.history, self.hit_y)
-        else:
-            track.prediction = self.predictor.predict(track.history, self.hit_y)
+        prediction_started = time.perf_counter()
+        track.prediction = track.particle_filter.update(track.history, self.hit_y)
+        self.elapsed += time.perf_counter() - prediction_started
         if y > self.cfg.get("completion_y", 325.5):
             track.status, track.reason = "completed", "past_physical_completion_line"
             return
         velocity = track.prediction.velocity
         if (track.observations >= self.min_observations and velocity is not None and
-                math.isfinite(velocity) and velocity >= self.predictor.cfg.get("min_velocity", 20)):
+                math.isfinite(velocity) and velocity >= track.particle_filter.min_velocity):
             track.status = "confirmed"
             track.confirmed_note_type = "tap"
         if track.prediction.hit_time is not None:
@@ -217,7 +211,7 @@ class SimpleTracker:
             track.hit_history = track.hit_history[-5:]
 
     def update(self, candidates: list[Candidate], timestamp: float, playing: bool = True):
-        started = __import__("time").perf_counter()
+        started = time.perf_counter()
         self.finished = []
         self.last_unknown_association_audit = []
         if not playing:
@@ -262,7 +256,6 @@ class SimpleTracker:
             if j not in matched_candidates:
                 active.append(self._new_track(candidate, timestamp))
         self.tracks = active
-        self.stage_times = {"matching_s": __import__("time").perf_counter() - started,
+        self.stage_times = {"matching_s": time.perf_counter() - started,
                             "unknown_association_s": 0.}
-        self.elapsed = getattr(self.predictor, "elapsed", 0.)
         return list(active)
