@@ -1,0 +1,47 @@
+{
+  "pf_identity_transitions.csv": {
+    "file": "pf_identity_transitions.csv",
+    "rows_written": 1993,
+    "dropped_rows": 0,
+    "schema_errors": 0,
+    "queue_remaining": 0,
+    "queue_capacity": 8192,
+    "last_error": ""
+  },
+  "pf_unknown_association_audit.csv": {
+    "file": "pf_unknown_association_audit.csv",
+    "rows_written": 13295,
+    "dropped_rows": 0,
+    "schema_errors": 0,
+    "queue_remaining": 0,
+    "queue_capacity": 8192,
+    "last_error": ""
+  },
+  "pf_hit_eta_diagnostics.csv": {
+    "file": "pf_hit_eta_diagnostics.csv",
+    "rows_written": 6691,
+    "dropped_rows": 0,
+    "schema_errors": 0,
+    "queue_remaining": 0,
+    "queue_capacity": 8192,
+    "last_error": ""
+  },
+  "pf_identity_scheduler_trace.csv": {
+    "file": "pf_identity_scheduler_trace.csv",
+    "rows_written": 240,
+    "dropped_rows": 0,
+    "schema_errors": 0,
+    "queue_remaining": 0,
+    "queue_capacity": 8192,
+    "last_error": ""
+  },
+  "tap_decision_trace.csv": {
+    "file": "tap_decision_trace.csv",
+    "rows_written": 20494,
+    "dropped_rows": 0,
+    "schema_errors": 0,
+    "queue_remaining": 0,
+    "queue_capacity": 8192,
+    "last_error": ""
+  }
+}
