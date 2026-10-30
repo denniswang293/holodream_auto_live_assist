@@ -24,7 +24,10 @@ from .windows_runtime import DEFAULT_WINDOW_TITLE
 
 EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "processing_timestamp",
                 "predicted_hit_time", "uncertainty_s", "key_candidates", "resolved_keys", "type", "appearance",
-                "confidence_label", "abstain_reason", "gameplay_state", "eta_expired", "eta_abstain_reason", "geometry_status", "geometry_sha256", "resolution_basis"]
+                "confidence_label", "abstain_reason", "gameplay_state", "eta_expired", "eta_abstain_reason", "geometry_status", "geometry_sha256", "resolution_basis",
+                "predictor_mode", "eta_p10_s", "eta_p50_s", "eta_p90_s", "valid_crossing_mass", "particle_ess",
+                "real_observation_count", "coast_ms", "physical_hit_time", "measurement_status",
+                "physical_track_uid", "source_track_ids", "reidentified_from_id"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
@@ -94,7 +97,17 @@ def _summary(out, result):
 def run(args):
     config = json.loads(args.config.read_text(encoding="utf-8-sig"))
     if args.live_config.exists():
-        config["live"] = {**config.get("live", {}), **json.loads(args.live_config.read_text(encoding="utf-8-sig"))}
+        live_document = json.loads(args.live_config.read_text(encoding="utf-8-sig"))
+        config["live"] = {**config.get("live", {}), **live_document}
+        if isinstance(live_document.get("predictor"), dict):
+            config["predictor"] = {**config.get("predictor", {}), **live_document["predictor"]}
+    config.setdefault("predictor", {})
+    selected_predictor = getattr(args, "predictor", None)
+    if selected_predictor:
+        config["predictor"]["mode"] = selected_predictor
+    config["predictor"].setdefault("mode", "particle")
+    if config["predictor"]["mode"] not in ("particle", "legacy"):
+        raise ValueError("predictor mode must be particle or legacy")
     live_cfg = config.get("live", {})
     geometry = load_calibration(args.geometry)
     max_age = live_cfg.get("max_frame_age_ms", 50)/1000
@@ -117,7 +130,7 @@ def run(args):
     video_fps = live_cfg.get("capture_fps", 120)
     focus_check, modifier_check = target.focused, modifiers_down
     out = new_run_directory(args.out)
-    print(f"Assist | geometry {geometry.status} | output: {out}", flush=True)
+    print(f"Assist | geometry {geometry.status} | predictor {config['predictor']['mode']} | output: {out}", flush=True)
     print("Ctrl+Shift+Alt+Q toggles assist only; Esc/F12 stops. Input starts OFF.", flush=True)
     print(f"Actual physical capture rectangle: {region.bounds} (entire game display)",flush=True)
     wall_started = time.perf_counter()
@@ -240,7 +253,8 @@ def run(args):
                     recording_error = error
                     stop_reason = f'error: {error}'
             wall_elapsed = time.perf_counter()-wall_started
-            result = {"mode": "assist", "source_kind": "actual window capture",
+            result = {"mode": "assist", "predictor_mode": config["predictor"]["mode"],
+                      "source_kind": "actual window capture",
                       "window_title": target.title if target else None,
                       "region": list(region.bounds) if region else None,
                       "normalization_transform": capture_fit.as_dict(),
@@ -294,6 +308,8 @@ def main():
     parser.add_argument("--backend", choices=("auto", "dxcam", "mss"), default="auto")
     parser.add_argument("--record-overlay", action="store_true",
                         help="Record overlay and clean source asynchronously")
+    parser.add_argument("--predictor", choices=("particle", "legacy"),
+                        help="Ordinary Tap ETA path (default: config predictor mode, particle)")
     parser.add_argument("--max-frames", type=int)
     args = parser.parse_args()
     if args.max_frames is not None and args.max_frames <= 0:

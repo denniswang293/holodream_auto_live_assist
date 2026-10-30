@@ -128,6 +128,63 @@ def test_pale_core_flicker_keeps_id_without_upgrading_unknown(tracker,make_candi
         assert tracker.tracks[0].candidate.note_type == ("unknown" if appearance == "neutral_candidate" else "tap")
 
 
+def test_particle_mode_is_primary_for_confirmed_taps_and_keeps_physical_eta(make_candidate):
+    tracker=Tracker({'completion_y':325.5,'max_gap_s':.16,'confirm_observations':5},310.5,
+                    predictor_cfg={'min_velocity':20},predictor_mode='particle',
+                    particle_cfg={'count':128,'max_posterior_width_ms':100},physical_hit_y=325.5)
+    for i in range(12):
+        tracks=tracker.update([make_candidate(y=150+i*4)],i/60)
+    tr=tracks[0]
+    assert tr.status=='confirmed'
+    assert tr.prediction.predictor_mode=='particle'
+    assert tr.prediction.eta_p10<=tr.prediction.eta_p50<=tr.prediction.eta_p90
+    assert tr.prediction.hit_time<tr.prediction.physical_hit_time
+
+
+def test_particle_is_not_created_for_unknown_or_hold_path(make_candidate):
+    tracker=Tracker({'confirm_observations':5},310.5,predictor_mode='particle')
+    for i in range(8):
+        tracks=tracker.update([make_candidate(y=100+i*5,appearance='green_candidate')],i/60)
+    assert tracks[0].particle_filter is None
+    assert tracks[0].prediction.predictor_mode=='legacy'
+
+
+def test_particle_state_handoff_preserves_physical_uid_after_reidentification(make_candidate,monkeypatch):
+    tracker=Tracker({'confirm_observations':5,'max_gap_s':.16,'max_missed_frames':1},310.5,
+                    predictor_mode='particle',particle_cfg={'count':64,'max_posterior_width_ms':100})
+    for i in range(7):
+        tracker.update([make_candidate(y=150+i*4,keys=['F'])],i/60)
+    old=tracker.tracks[0]
+    assert old.particle_filter is not None and old.was_confirmed
+    uid=old.physical_note_uid
+    pf=old.particle_filter
+    tracker.update([],7/60)
+    tracker.update([],8/60)
+    assert old in tracker.recent_particle_tracks
+    monkeypatch.setattr(tracker,'pair_cost',lambda *args:None)
+    new_tracks=tracker.update([make_candidate(y=186,keys=['F'])],9/60)
+    new=next(tr for tr in new_tracks if tr.track_id!=old.track_id)
+    assert new.reidentified_from_id==old.track_id
+    assert new.physical_note_uid==uid
+    assert new.particle_filter is pf
+    assert old.particle_filter is None
+    assert new.source_track_ids==[old.track_id,new.track_id]
+
+
+def test_particle_handoff_abstains_with_two_nearby_same_lane_heads(make_candidate,monkeypatch):
+    tracker=Tracker({'confirm_observations':5,'max_gap_s':.16,'max_missed_frames':1},310.5,
+                    predictor_mode='particle',particle_cfg={'count':64,'max_posterior_width_ms':100})
+    for i in range(7):
+        tracker.update([make_candidate(y=150+i*4,keys=['F'])],i/60)
+    old=tracker.tracks[0]
+    tracker.update([],7/60)
+    tracker.update([],8/60)
+    monkeypatch.setattr(tracker,'pair_cost',lambda *args:None)
+    tracks=tracker.update([make_candidate(y=186,keys=['F']),make_candidate(y=203,keys=['F'])],9/60)
+    assert all(tr.reidentified_from_id is None for tr in tracks if tr.track_id!=old.track_id)
+    assert old.particle_filter is not None
+
+
 def test_assist_tap_recovers_after_old_hit_time_outlier(make_candidate):
     class StablePredictor:
         cfg = {'min_velocity':20}

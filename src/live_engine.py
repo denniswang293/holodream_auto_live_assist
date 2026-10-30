@@ -161,11 +161,15 @@ class LiveEngine:
         # of the visible note. Keep tracking until the measured judgment row.
         tracker_cfg['completion_y'] = geometry.hit_y
         predictor_cfg = dict(config.get("predictor",{}))
+        predictor_mode = str(predictor_cfg.get("mode", "legacy"))
+        particle_cfg = dict(predictor_cfg.get("particle", {}))
         if self.speculative.get("enabled"):
             tracker_cfg["max_hit_drift_s"] = self.speculative["max_hit_drift_s"]
             tracker_cfg["tap_hit_drift_window"] = self.speculative.get("tap_hit_drift_window",5)
             predictor_cfg["max_uncertainty_s"] = self.speculative["max_uncertainty_s"]
-        self.tracker = Tracker(tracker_cfg,self.trigger_y,predictor_cfg)
+        self.tracker = Tracker(tracker_cfg,self.trigger_y,predictor_cfg,
+                               predictor_mode=predictor_mode,particle_cfg=particle_cfg,
+                               physical_hit_y=geometry.hit_y)
         self.collector = EventCollector({**config.get("events", {}), "reference_height": geometry.reference_resolution[1]})
         # Near-target commitment must move with the trigger when input is
         # advanced; otherwise the track finishes before reaching the corridor.
@@ -505,10 +509,10 @@ class LiveEngine:
             phase = time.perf_counter()
             candidates = self.detector(work, self.geometry, self.config["key_map"], self.dc) if state == "PLAYING" else []
             measured["note_detector"] = time.perf_counter()-phase
-            prediction_before = getattr(self.tracker.predictor,"elapsed",0.0)
+            prediction_before = self.tracker.elapsed
             phase = time.perf_counter()
             tracks = self.tracker.update(candidates, frame.captured_at, playing=state == "PLAYING")
-            measured["prediction"] = getattr(self.tracker.predictor,"elapsed",0.0)-prediction_before
+            measured["prediction"] = self.tracker.elapsed-prediction_before
             measured["tracking"] = max(0.0,time.perf_counter()-phase-measured["prediction"])
         finished = self.clock()
         latency = finished-frame.captured_at
@@ -530,6 +534,17 @@ class LiveEngine:
             reidentified = {}
             retained_reidentified_events = set()
             present_ids = set()
+            for tr in tracks:
+                parent_id = getattr(tr, "reidentified_from_id", None)
+                if parent_id is None:
+                    continue
+                old_event_id = f"{self.session_id}:{parent_id}"
+                if (old_event_id in self.scheduler.pending or
+                        old_event_id in self.provisional_tap_losses):
+                    self.reidentified_tracker_ids[tr.track_id] = old_event_id
+                    self.scheduler._log("track_reidentified",
+                        f"particle_state_handoff;physical_note_uid={tr.physical_note_uid};source_track_ids={tr.source_track_ids}",
+                        self.scheduler.pending.get(old_event_id))
             finished_tracks = {f"{self.session_id}:{tr.track_id}":tr for tr in self.tracker.finished}
             finished_past_ids = {event_id for event_id,tr in finished_tracks.items()
                                  if tr.reason == 'past_hit_line'}
@@ -586,6 +601,7 @@ class LiveEngine:
                     reidentified[tr.track_id] = old_event_id
                     if (old_event_id not in retained_reidentified_events and
                             self._retain_reidentified_intent(old_event_id,finished)):
+                        self.scheduler.consumed.add(event_id)
                         active_events.add(old_event_id)
                         retained_reidentified_events.add(old_event_id)
                 # A fragmented/recreated ID can still be the same physical
@@ -751,6 +767,19 @@ class LiveEngine:
                                                         "user_confirmed_any_covered_key" if keys and self.tap_rule else
                                                         "manual_key_evidence" if keys else "",
                                     "abstain_reason": reason, "gameplay_state": state,
+                                    "predictor_mode": tr.prediction.predictor_mode,
+                                    "eta_p10_s": tr.prediction.eta_p10 if tr.prediction.eta_p10 is not None else "",
+                                    "eta_p50_s": tr.prediction.eta_p50 if tr.prediction.eta_p50 is not None else "",
+                                    "eta_p90_s": tr.prediction.eta_p90 if tr.prediction.eta_p90 is not None else "",
+                                    "valid_crossing_mass": tr.prediction.valid_crossing_mass if tr.prediction.valid_crossing_mass is not None else "",
+                                    "particle_ess": tr.prediction.ess if tr.prediction.ess is not None else "",
+                                    "real_observation_count": tr.prediction.real_observation_count if tr.prediction.real_observation_count is not None else "",
+                                    "coast_ms": tr.prediction.coast_ms,
+                                    "physical_hit_time": tr.prediction.physical_hit_time if tr.prediction.physical_hit_time is not None else "",
+                                    "measurement_status": tr.prediction.measurement_status,
+                                    "physical_track_uid": tr.physical_note_uid,
+                                    "source_track_ids": "|".join(map(str,tr.source_track_ids)),
+                                    "reidentified_from_id": tr.reidentified_from_id if tr.reidentified_from_id is not None else "",
                                 "eta_expired": bool(tr.prediction.hit_time is not None and tr.prediction.hit_time <= finished),
                                 "eta_abstain_reason": "predicted_hit_not_future" if tr.prediction.hit_time is not None and tr.prediction.hit_time <= finished else "",
                                     "geometry_status": self.geometry.status, "geometry_sha256": self.geometry_hash})

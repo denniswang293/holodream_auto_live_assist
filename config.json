@@ -39,6 +39,7 @@
     "max_hit_drift_s": 0.08
   },
   "predictor": {
+    "mode": "particle",
     "window": 11,
     "min_observations": 5,
     "min_duration_s": 0.05,
@@ -47,7 +48,27 @@
     "min_displacement_px": 5,
     "jitter_px": 3.5,
     "lookahead_s": 1.5,
-    "max_uncertainty_s": 0.04
+    "max_uncertainty_s": 0.04,
+    "particle": {
+      "count": 128,
+      "ess_resample_fraction": 0.5,
+      "min_real_observations": 4,
+      "max_coast_ms": 90,
+      "max_posterior_width_ms": 40,
+      "min_valid_crossing_mass": 0.95,
+      "max_prediction_horizon_ms": 1500,
+      "use_acceleration": false,
+      "deterministic_seed": 20261030,
+      "measurement_model": "student_t",
+      "position_process_noise_px_sqrt_s": 1.8,
+      "velocity_process_noise_px_s_sqrt_s": 8.0,
+      "lane_process_noise_sqrt_s": 0.0015,
+      "position_measurement_noise_px": 3.0,
+      "lane_measurement_noise": 0.012,
+      "observation_gate_px": 32.0,
+      "min_velocity": 20,
+      "max_velocity": 1800
+    }
   },
   "events": {"max_eta_s": 0.45, "min_y": 190, "max_hit_drift_s": 0.06}
 }

@@ -2,9 +2,11 @@
 from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
+import time
 import numpy as np
 from .detector import Candidate
 from .predictor import Prediction, Predictor
+from .particle_predictor import ParticlePredictor
 
 
 @dataclass
@@ -28,6 +30,10 @@ class Track:
     stable_keys: list[str] = field(default_factory=list)
     rejected_position: tuple[float, float] | None = None
     appearance_anchor: str = ""
+    particle_filter: ParticlePredictor | None = None
+    physical_note_uid: str = ""
+    source_track_ids: list[int] = field(default_factory=list)
+    reidentified_from_id: int | None = None
 
     @property
     def kind(self) -> str:
@@ -36,7 +42,9 @@ class Track:
     def eta(self, hit_y: float | None = None, lookahead: float = 1.5) -> float | None:
         return self.prediction.eta if self.status == "confirmed" else None
 
-    def observe(self, c: Candidate, t: float, predictor: Predictor, hit_y: float, cfg: dict) -> None:
+    def observe(self, c: Candidate, t: float, predictor: Predictor, hit_y: float, cfg: dict,
+                *, predictor_mode: str = "legacy", particle_cfg: dict | None = None,
+                particle_seed: int = 20261030, physical_hit_y: float | None = None) -> None:
         _, y, _, h = c.bbox
         cy = y+h/2
         self.candidate, self.bbox, self.last_time = c, c.bbox, t
@@ -54,7 +62,21 @@ class Track:
         self.stable_keys = sorted((k for k, n in counts.items() if n/len(self.key_history) >= 0.6),
                                   key=lambda k: cfg.get("key_map", list("SDFJKL")).index(k))
         self.missed = 0
-        self.prediction = predictor.predict(self.history, hit_y)
+        is_particle_tap = (predictor_mode == "particle" and c.note_type == "tap" and
+                           c.appearance in ("cyan_bar", "yellow_bar"))
+        if is_particle_tap:
+            if self.particle_filter is None:
+                self.particle_filter = ParticlePredictor(
+                    particle_cfg, seed=particle_seed, track_id=self.track_id,
+                    physical_hit_y=physical_hit_y)
+            self.prediction = self.particle_filter.update(
+                self.history, hit_y, physical_hit_y=physical_hit_y)
+        else:
+            began = time.perf_counter()
+            try:
+                self.prediction = predictor.predict(self.history, hit_y)
+            finally:
+                predictor.elapsed = getattr(predictor, "elapsed", 0.0) + time.perf_counter() - began
         if self.status == "rejected":
             # Keep associating static clutter to its rejected ID.
             return
@@ -89,12 +111,27 @@ class Track:
 
 
 class Tracker:
-    def __init__(self, cfg: dict | None = None, hit_y: float = 352, predictor_cfg: dict | None = None):
+    def __init__(self, cfg: dict | None = None, hit_y: float = 352, predictor_cfg: dict | None = None,
+                 *, predictor_mode: str = "legacy", particle_cfg: dict | None = None,
+                 physical_hit_y: float | None = None):
         self.cfg, self.hit_y = cfg or {}, hit_y
         self.predictor = Predictor(predictor_cfg)
+        if predictor_mode not in ("legacy", "particle"):
+            raise ValueError("predictor mode must be particle or legacy")
+        self.predictor_mode = predictor_mode
+        self.particle_cfg = dict(particle_cfg or {})
+        self.particle_seed = int(self.particle_cfg.get("deterministic_seed", 20261030))
+        self.physical_hit_y = physical_hit_y
         self.tracks: list[Track] = []
         self.finished: list[Track] = []
+        self.recent_particle_tracks: list[Track] = []
         self.next_id = 1
+
+    @property
+    def elapsed(self) -> float:
+        return getattr(self.predictor, "elapsed", 0.0) + sum(
+            pf.elapsed for tr in (*self.tracks, *self.finished)
+            if (pf := getattr(tr, "particle_filter", None)) is not None)
 
     def pair_cost(self, tr: Track, c: Candidate, t: float) -> float | None:
         anchor = tr.appearance_anchor
@@ -134,7 +171,9 @@ class Tracker:
         if dy > self.predictor.cfg.get("max_velocity", 1800)*dt+3:
             return None
         velocity = tr.prediction.velocity
-        predicted_y = last_y + (max(0.0, velocity)*dt if velocity is not None else 0)
+        pf_y = tr.particle_filter.position_at(t) if tr.particle_filter else None
+        predicted_y = (pf_y if pf_y is not None else
+                       last_y + (max(0.0, velocity)*dt if velocity is not None else 0))
         tolerance = max(8.0,220*dt,min(15.0,(tr.bbox[3]+c.bbox[3])*0.35))
         if velocity is None:
             tolerance = min(32.0, 7.0 + (last_y/self.hit_y)*25) * max(1, dt*60)
@@ -143,12 +182,72 @@ class Tracker:
             return None
         return du/0.09 + residual/tolerance + 0.35*abs(np.log(ratio)) + color_penalty
 
+    def _particle_handoff_source(self, candidate: Candidate, t: float,
+                                  candidate_index: int, candidates: list[Candidate],
+                                  used_track_indexes: set[int]) -> Track | None:
+        """Return a unique, strictly gated lost Tap whose PF can continue this ID.
+
+        Ambiguous same-lane heads are deliberately left as separate tentative
+        tracks. This transfers estimator state only; LiveEngine still owns and
+        validates any previously scheduled intent/deadline.
+        """
+        if (self.predictor_mode != "particle" or candidate.note_type != "tap" or
+                candidate.appearance not in ("cyan_bar", "yellow_bar") or candidate.suspected_overlap):
+            return None
+        _, cy0, _, _ = candidate.bbox
+        cy = cy0 + candidate.bbox[3] / 2
+        u = (candidate.u_min + candidate.u_max) / 2
+        viable = []
+        possible_sources = [(index, old) for index, old in enumerate(self.tracks)]
+        possible_sources.extend((-index-1, old) for index, old in enumerate(self.recent_particle_tracks))
+        for index, old in possible_sources:
+            pf = old.particle_filter
+            lost_active = index >= 0 and old.status == "lost"
+            short_expired = index < 0 and old.reason == "track_expired"
+            if (index in used_track_indexes or not (lost_active or short_expired) or not old.was_confirmed or
+                    old.kind != "tap" or old.candidate.appearance != candidate.appearance or
+                    pf is None or not pf.initialized or not old.stable_keys or
+                    not set(old.stable_keys).intersection(candidate.candidate_keys)):
+                continue
+            dt = t - old.last_time
+            predicted = pf.position_at(t)
+            if predicted is None or not 0 < dt <= min(pf.max_coast_s, .09):
+                continue
+            if abs(u - old.history[-1][2]) > .025:
+                continue
+            old_width = max(old.candidate.u_max-old.candidate.u_min, .01)
+            new_width = max(candidate.u_max-candidate.u_min, .01)
+            if not .7 <= new_width/old_width <= 1.4:
+                continue
+            residual = abs(cy-predicted)
+            if residual > max(7., min(14., 180*dt)):
+                continue
+            viable.append((residual + 300*abs(u-old.history[-1][2]), index, old))
+        viable.sort(key=lambda row: row[0])
+        if not viable:
+            return None
+        # If another visible head covers these keys nearby, identity is
+        # ambiguous (usually a dense same-lane sequence or split body).
+        for other_index, other in enumerate(candidates):
+            if other_index == candidate_index or not set(other.candidate_keys).intersection(candidate.candidate_keys):
+                continue
+            oy = other.bbox[1] + other.bbox[3]/2
+            if abs(oy-cy) <= 26:
+                return None
+        if len(viable) > 1 and viable[1][0] - viable[0][0] < 5.:
+            return None
+        return viable[0][2]
+
     def update(self, candidates: list[Candidate], t: float, playing: bool = True) -> list[Track]:
+        self.recent_particle_tracks = [old for old in self.recent_particle_tracks
+                                       if old.particle_filter is not None and
+                                       0 <= t-old.last_time <= old.particle_filter.max_coast_s]
         if not playing:
             for tr in self.tracks:
                 tr.status, tr.reason = "completed", "gameplay_gate_closed"
             self.finished.extend(self.tracks)
             self.tracks = []
+            self.recent_particle_tracks.clear()
             return []
         pairs = []
         for i, tr in enumerate(self.tracks):
@@ -161,7 +260,9 @@ class Tracker:
         for _, _, i, j in sorted(pairs):
             if i in used_tracks or j in used_candidates:
                 continue
-            self.tracks[i].observe(candidates[j], t, self.predictor, self.hit_y, self.cfg)
+            self.tracks[i].observe(candidates[j], t, self.predictor, self.hit_y, self.cfg,
+                                   predictor_mode=self.predictor_mode, particle_cfg=self.particle_cfg,
+                                   particle_seed=self.particle_seed, physical_hit_y=self.physical_hit_y)
             used_tracks.add(i)
             used_candidates.add(j)
         for i, tr in enumerate(self.tracks):
@@ -172,7 +273,29 @@ class Tracker:
         for j, c in enumerate(candidates):
             if j not in used_candidates:
                 tr = Track(self.next_id, c)
-                tr.observe(c, t, self.predictor, self.hit_y, self.cfg)
+                source = self._particle_handoff_source(c, t, j, candidates, used_tracks)
+                if source is not None:
+                    tr.history = list(source.history)
+                    tr.bbox = source.bbox
+                    tr.observations = source.observations
+                    tr.first_time = source.first_time
+                    tr.y_min, tr.y_max = source.y_min, source.y_max
+                    tr.was_confirmed = source.was_confirmed
+                    tr.hit_history = list(source.hit_history)
+                    tr.key_history = list(source.key_history)
+                    tr.stable_keys = list(source.stable_keys)
+                    tr.appearance_anchor = source.appearance_anchor
+                    tr.particle_filter = source.particle_filter
+                    tr.physical_note_uid = source.physical_note_uid or f"physical:{source.track_id}"
+                    tr.source_track_ids = list(source.source_track_ids or [source.track_id]) + [self.next_id]
+                    tr.reidentified_from_id = source.track_id
+                    source.particle_filter = None
+                tr.observe(c, t, self.predictor, self.hit_y, self.cfg,
+                           predictor_mode=self.predictor_mode, particle_cfg=self.particle_cfg,
+                           particle_seed=self.particle_seed, physical_hit_y=self.physical_hit_y)
+                if not tr.physical_note_uid:
+                    tr.physical_note_uid = f"physical:{tr.track_id}"
+                    tr.source_track_ids = [tr.track_id]
                 self.tracks.append(tr)
                 self.next_id += 1
         active = []
@@ -183,6 +306,9 @@ class Tracker:
                 if tr.status != "rejected":
                     tr.status, tr.reason = "completed", tr.reason if tr.reason == "past_hit_line" else "track_expired"
                 self.finished.append(tr)
+                if (tr.reason == "track_expired" and tr.was_confirmed and
+                        tr.particle_filter is not None):
+                    self.recent_particle_tracks.append(tr)
             else:
                 active.append(tr)
         self.tracks = active

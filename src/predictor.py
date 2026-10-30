@@ -13,11 +13,22 @@ class Prediction:
     uncertainty: float | None = None
     reason: str = "insufficient_observations"
     inlier_fraction: float = 0.0
+    eta_p10: float | None = None
+    eta_p50: float | None = None
+    eta_p90: float | None = None
+    valid_crossing_mass: float | None = None
+    ess: float | None = None
+    real_observation_count: int | None = None
+    coast_ms: float = 0.0
+    physical_hit_time: float | None = None
+    predictor_mode: str = "legacy"
+    measurement_status: str = "legacy"
 
 
 class Predictor:
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or {}
+        self.elapsed = 0.0
 
     def predict(self, history: list[tuple[float, float, float]], hit_y: float) -> Prediction:
         """Theil–Sen slope and MAD residual rejection over recent observations.
