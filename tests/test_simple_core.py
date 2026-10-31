@@ -68,6 +68,27 @@ def test_static_pink_effect_does_not_confirm_as_tap():
     assert tracks[0].status != "confirmed"
 
 
+def test_pink_judgment_row_effect_with_small_drift_does_not_confirm():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02, "min_velocity": 20,
+         "min_displacement_px": 5}, hit_y=310.5)
+    for i in range(8):
+        tracks = tracker.update([candidate(310 + min(i, 3), appearance="pink_candidate")],
+                                1 + i / 60)
+    assert tracks[0].confirmed_note_type is None
+    assert tracks[0].reason == "pink_displacement_insufficient"
+
+
+def test_moving_pink_tap_still_confirms_after_displacement_gate():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02, "min_velocity": 20,
+         "min_displacement_px": 5}, hit_y=310.5)
+    for i in range(8):
+        tracks = tracker.update([candidate(180 + i * 8, appearance="pink_candidate")],
+                                1 + i / 60)
+    assert tracks[0].confirmed_note_type == "tap"
+
+
 def test_pink_tracker_does_not_switch_to_unrelated_cyan_identity():
     tracker = SimpleTracker({"confirm_observations": 3},
         {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)

@@ -48,9 +48,13 @@ def run_once(source, config, *, cache_enabled, repeat):
     candidate_rows = []
     pink_counts = {}
     decoded = 0
-    started = time.perf_counter()
+    wall_started = time.perf_counter()
+    detector_elapsed = 0.0
+    decode_elapsed = 0.0
     while True:
+        decode_started = time.perf_counter()
         ok, frame = cap.read()
+        decode_elapsed += time.perf_counter() - decode_started
         if not ok:
             break
         frame_index = decoded
@@ -59,7 +63,9 @@ def run_once(source, config, *, cache_enabled, repeat):
         detector_started = time.perf_counter()
         candidates = detect(frame, playfield, cfg["key_map"], detector_cfg,
                             diagnostics, profile=profile, frame_index=frame_index)
-        detector_ms = (time.perf_counter() - detector_started) * 1000
+        detector_duration = time.perf_counter() - detector_started
+        detector_elapsed += detector_duration
+        detector_ms = detector_duration * 1000
         frame_rows.append({"repeat": repeat, "frame": frame_index,
                            "detector_ms": detector_ms,
                            "candidate_count": len(candidates),
@@ -76,8 +82,8 @@ def run_once(source, config, *, cache_enabled, repeat):
         for reason, count in diagnostics.get("pink_rejection_counts", {}).items():
             pink_counts[reason] = pink_counts.get(reason, 0) + count
     cap.release()
-    elapsed = time.perf_counter() - started
-    return frame_rows, profile, candidate_rows, pink_counts, elapsed, decoded
+    wall_elapsed = time.perf_counter() - wall_started
+    return frame_rows, profile, candidate_rows, pink_counts, detector_elapsed, decode_elapsed, wall_elapsed, decoded
 
 
 def main():
@@ -90,13 +96,15 @@ def main():
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     all_frames, all_profile, all_candidates, pink_counts = [], {}, [], {}
-    elapsed, decoded = 0., 0
+    detector_elapsed, decode_elapsed, wall_elapsed, decoded = 0., 0., 0., 0
     for repeat in range(args.repeats):
-        rows, profile, candidates, counts, took, decoded = run_once(
+        rows, profile, candidates, counts, detector_took, decode_took, wall_took, decoded = run_once(
             args.source, args.config, cache_enabled=args.cache == "on", repeat=repeat)
         all_frames.extend(rows)
         all_candidates.extend(candidates)
-        elapsed += took
+        detector_elapsed += detector_took
+        decode_elapsed += decode_took
+        wall_elapsed += wall_took
         for name, values in profile.items():
             all_profile.setdefault(name, []).extend(values)
         for reason, count in counts.items():
@@ -121,7 +129,10 @@ def main():
         "git_sha": git_sha(), "python": sys.version, "platform": platform.platform(),
         "opencv": cv2.__version__, "source": str(args.source), "config": str(args.config),
         "repeats": args.repeats, "cache_enabled": args.cache == "on", "decoded_frames": decoded,
-        "detector_wall_seconds_excluding_decode": elapsed,
+        "detector_wall_seconds_excluding_decode": detector_elapsed,
+        "decode_wall_seconds": decode_elapsed,
+        "wall_seconds_including_decode": wall_elapsed,
+        "detector_measurement_definition": "sum of per-frame detect elapsed; cap.read decode excluded",
         "detector_ms_p50": percentile([r["detector_ms"] for r in warm], 50),
         "detector_ms_p95": percentile([r["detector_ms"] for r in warm], 95),
         "detector_ms_p99": percentile([r["detector_ms"] for r in warm], 99),

@@ -111,6 +111,13 @@ class SimpleTracker:
         self.min_observations = int(self.cfg.get("confirm_observations", 5))
         self.max_eta_s = float(self.cfg.get("max_eta_s", 1.5))
         self.seed = int(self.particle_cfg.get("deterministic_seed", 20261030))
+        # Pink visual effects can drift a few pixels at the judgment row while
+        # remaining stationary.  Require the same small physical displacement
+        # already used by the particle predictor before confirming pink; this
+        # is pink-specific and does not relax any global confirmation gate.
+        self.pink_min_displacement_px = float(
+            self.cfg.get("pink_min_displacement_px",
+                        self.particle_cfg.get("min_displacement_px", 5.0)))
 
     @staticmethod
     def _center(candidate: Candidate):
@@ -239,8 +246,15 @@ class SimpleTracker:
             track.status, track.reason = "completed", "past_physical_completion_line"
             return
         velocity = track.prediction.velocity
-        if (track.observations >= self.min_observations and velocity is not None and
-                math.isfinite(velocity) and velocity >= track.particle_filter.min_velocity):
+        displacement_ok = True
+        if candidate.appearance == "pink_candidate" and track.history:
+            ys = [point[1] for point in track.history]
+            displacement_ok = max(ys) - min(ys) >= self.pink_min_displacement_px
+            if not displacement_ok and track.observations >= self.min_observations:
+                track.reason = "pink_displacement_insufficient"
+        if (track.observations >= self.min_observations and displacement_ok and
+                velocity is not None and math.isfinite(velocity) and
+                velocity >= track.particle_filter.min_velocity):
             track.status = "confirmed"
             track.confirmed_note_type = "tap"
         if track.prediction.hit_time is not None:

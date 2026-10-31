@@ -288,9 +288,13 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
                      else "tap" if appearance == "pink_candidate" and pink_enabled and
                      edge_count>=2 and bh>=4 and path_bbox is None
                      else "unknown")
+        # Path-depth is the expensive part of candidate classification.  A
+        # candidate can only be a Hold when a matching path contour was found;
+        # avoid scanning the full frame for ordinary taps (including pink).
         depth = (path_depth(frame,playfield,cy,(u0+u1)/2,appearance,
                             mask=path_masks[appearance])
-                 if appearance in path_masks and cy>=250*rh/404 else 0)
+                 if appearance in path_masks and path_bbox is not None and
+                 cy>=250*rh/404 else 0)
         candidates.append(Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
                                     body_box,path_bbox,raw,False,depth))
     # An inner highlight can produce another long Sobel edge inside a complete
