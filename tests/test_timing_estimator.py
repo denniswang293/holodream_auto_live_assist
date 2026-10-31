@@ -19,7 +19,17 @@ def test_linear_timing_uses_last_valid_observation_after_dropout():
     observations = [(10.0, 100.0, .4), (10.05, 110.0, .4), (10.10, 120.0, .4)]
     result = estimator.estimate(observations, 140.0, 10.18, now=10.18)
     assert result.reason == "ok"
+    assert result.eta == pytest.approx(.02)
     assert result.hit_at == pytest.approx(10.20)
+
+
+def test_linear_timing_marks_prediction_expired_after_capture_dropout():
+    estimator = LinearTimingEstimator(max_observation_age_s=.20)
+    observations = [(10.0, 100.0, .4), (10.05, 110.0, .4), (10.10, 120.0, .4)]
+    result = estimator.estimate(observations, 122.0, 10.18, now=10.18)
+    assert result.reason == "expired_prediction"
+    assert result.eta is None
+    assert result.hit_at == pytest.approx(10.11)
 
 
 def test_linear_timing_rejects_expired_observation():
@@ -62,4 +72,5 @@ def test_linear_timing_ignores_malformed_tail_and_uses_last_valid_timestamp():
                     (2.10, 120.0, .4), (float("nan"), float("nan"), .4)]
     result = estimator.estimate(observations, 140.0, 2.15, now=2.15)
     assert result.reason == "ok"
+    assert result.eta == pytest.approx(.05)
     assert result.hit_at == pytest.approx(2.20)

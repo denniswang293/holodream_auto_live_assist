@@ -163,7 +163,7 @@ class TapPlanner:
                 decisions[track.track_id] = ShadowDecision(uid, track.track_id, "defer",
                     "track_not_current_confirmed", None, p.hit_time, trace.timing_quality if trace else None)
                 continue
-            if not is_simple_tap(c):
+            if not is_simple_tap(c) or track.confirmed_note_type != "tap":
                 decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
                     "not_confirmed_ordinary_tap", None, p.hit_time, trace.timing_quality if trace else None)
                 continue
@@ -189,6 +189,11 @@ class TapPlanner:
                 decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
                     "no_stable_verified_covered_key", None, p.hit_time, trace.timing_quality if trace else None)
                 continue
+            fixed = fixed_keys.get(uid)
+            if fixed is not None and fixed not in legal:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
+                    "fixed_key_not_legal", None, p.hit_time, trace.timing_quality if trace else None)
+                continue
             simple_timing_ok = (math.isfinite(p.hit_time) and math.isfinite(p.eta) and
                                 math.isfinite(p.uncertainty) and p.hit_time > now and
                                 p.eta > 0 and p.eta <= float(self.event_config.get("max_eta_s", .45)) and
@@ -198,8 +203,15 @@ class TapPlanner:
                     "timing_not_reliable", None, p.hit_time,
                     trace.timing_quality if trace else None)
                 continue
-            key = fixed_keys.get(uid) or max(legal, key=legal.get)
+            key = fixed or max(legal, key=legal.get)
             own = scheduler.pending_reservations.get(uid)
+            held_conflict = any(held_key == key and release_at > p.hit_time
+                                for held_key, (release_at, _) in scheduler.held.items())
+            if held_conflict:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
+                    "key_held_through_hit_time", None, p.hit_time,
+                    trace.timing_quality if trace else None)
+                continue
             conflict = any(other == key and owner != uid and own != (other, hit) and
                             abs(hit - p.hit_time) < self.conflict_window_s
                             for other, hit, owner in [
