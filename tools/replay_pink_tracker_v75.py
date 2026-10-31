@@ -4,9 +4,14 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 
 import cv2
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from src.detector import detect
 from src.geometry import Playfield
@@ -16,7 +21,7 @@ from src.simple_tracker import SimpleTracker, is_simple_tap
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--config", type=Path, default=Path("config.json"))
+    parser.add_argument("--config", type=Path, default=REPO_ROOT / "config.json")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--index", type=Path, default=None,
                         help="live_video_index.csv with source-frame capture timestamps")

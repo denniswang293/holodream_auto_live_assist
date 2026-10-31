@@ -20,6 +20,10 @@ from pathlib import Path
 
 import cv2
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from src.detector import detect
 from src.geometry import CalibratedGeometry
 from src.simple_tracker import SimpleTracker, is_simple_tap
@@ -178,9 +182,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--config", type=Path, default=Path("config.json"))
-    parser.add_argument("--geometry", type=Path, default=Path("config/geometry_live_assist.json"))
-    parser.add_argument("--out", type=Path, default=Path("output/assist/v755_tracker_association"))
+    parser.add_argument("--config", type=Path, default=REPO_ROOT / "config.json")
+    parser.add_argument("--geometry", type=Path, default=REPO_ROOT / "config/geometry_live_assist.json")
+    parser.add_argument("--out", type=Path, default=REPO_ROOT / "output/assist/v755_tracker_association")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     cfg = json.loads(args.config.read_text(encoding="utf-8-sig"))
