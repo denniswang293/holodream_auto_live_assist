@@ -33,16 +33,23 @@ class SimpleAssistCore:
             min_velocity=linear_cfg.get("min_velocity", 20),
             max_observation_age_s=linear_cfg.get("max_observation_age_ms", 200) / 1000
         ) if linear_cfg.get("enabled", True) else None
+        amend_cfg = dict(timing_cfg.get("tap_deadline_amend", {}) or {})
+        # LiveEngine also supplies flattened values for compatibility, while
+        # direct callers/tests commonly provide the nested config only.
+        amend_enabled = amend_cfg.get("enabled", timing_cfg.get("enabled", False))
+        freeze_window_ms = amend_cfg.get("freeze_window_ms", timing_cfg.get("freeze_window_ms", 30))
+        max_amend_step_ms = amend_cfg.get("max_amend_step_ms", timing_cfg.get("max_amend_step_ms", 40))
+        max_total_amend_ms = amend_cfg.get("max_total_amend_ms", timing_cfg.get("max_total_amend_ms", 80))
         self.transitions = []
         def record(row):
             self.transitions.append(dict(row))
             if on_transition:
                 on_transition(row)
         self.intents = TapIntentManager(record,
-            amend_enabled=timing_cfg.get("enabled", timing_cfg.get("tap_deadline_amend", False)),
-            freeze_window_ms=timing_cfg.get("freeze_window_ms", 30),
-            max_amend_step_ms=timing_cfg.get("max_amend_step_ms", 40),
-            max_total_amend_ms=timing_cfg.get("max_total_amend_ms", 80))
+            amend_enabled=bool(amend_enabled),
+            freeze_window_ms=freeze_window_ms,
+            max_amend_step_ms=max_amend_step_ms,
+            max_total_amend_ms=max_total_amend_ms)
         self.last_reasons: dict[int, str] = {}
         self.last_traces = {}
         self.decision_rows = []

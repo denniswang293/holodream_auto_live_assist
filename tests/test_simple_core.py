@@ -197,6 +197,35 @@ def test_shadow_planner_is_independent_and_never_sends_input():
     scheduler.close()
 
 
+@pytest.mark.parametrize("variant,expected", [
+    ("not_tap", "not_confirmed_ordinary_tap"),
+    ("fixed", "fixed_key_not_legal"),
+    ("held", "key_held_through_hit_time"),
+    ("conflict", "tap_key_conflict"),
+])
+def test_simplified_planner_checks_type_keys_hold_and_conflicts(variant, expected):
+    clock, _, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    track = add_particle_evidence(make_ready_track(key="F"))
+    track.history.insert(0, (9.8, 220, .4))
+    uid = "session:simple:1"
+    fixed = {}
+    if variant == "not_tap":
+        track.confirmed_note_type = "hold"
+    elif variant == "fixed":
+        fixed[uid] = "D"
+    elif variant == "held":
+        scheduler.held["F"] = (10.30, ActionIntent("hold", ("F",), 10.05, .01, "hold"))
+    elif variant == "conflict":
+        scheduler.recent.append(("F", 10.20))
+    planner.plan([track], 10., {"F", "D"}, scheduler, note_uids={1: uid}, fixed_keys=fixed)
+    decision = planner.simplified_plan([track], 10., {"F", "D"}, scheduler,
+                                       note_uids={1: uid}, fixed_keys=fixed)[1]
+    assert decision.status == "reject"
+    assert decision.reason == expected
+    scheduler.close()
+
+
 def test_simple_core_emits_per_frame_eta_and_shadow_rows():
     _, actuator, _, scheduler = armed_scheduler()
     core = SimpleAssistCore(session_id="session", tracker_cfg={},
@@ -214,6 +243,19 @@ def test_simple_core_emits_per_frame_eta_and_shadow_rows():
     assert shadow_rows[0]["mode"] == "shadow"
     assert actuator.calls == []
     scheduler.close()
+
+
+def test_simple_core_reads_nested_tap_deadline_amend_config():
+    core = SimpleAssistCore(session_id="session", tracker_cfg={},
+        particle_cfg={"max_uncertainty_s": .04}, hit_y=310.5,
+        event_cfg={"max_eta_s": .45}, min_y=190, known_keys={"F"},
+        timing_cfg={"tap_deadline_amend": {
+            "enabled": True, "freeze_window_ms": 17,
+            "max_amend_step_ms": 23, "max_total_amend_ms": 41}})
+    assert core.intents.amend_enabled is True
+    assert core.intents.freeze_window_s == pytest.approx(.017)
+    assert core.intents.max_amend_step_s == pytest.approx(.023)
+    assert core.intents.max_total_amend_s == pytest.approx(.041)
 
 
 def test_planner_traces_candidate_without_eta_without_crashing():
