@@ -4,8 +4,8 @@
   "tap_core": "simple_particle",
   "simple_intent_states": {
     "PENDING": 0,
-    "FIRED": 73,
-    "CANCELED": 1,
+    "FIRED": 70,
+    "CANCELED": 0,
     "EXPIRED": 1
   },
   "source_kind": "actual window capture",
@@ -593,7 +593,12 @@
       "min_score": 0.42,
       "min_lane_width": 0.7,
       "min_colored_fraction": 0.12,
-      "lane_min_overlap_fraction": 0.15
+      "lane_min_overlap_fraction": 0.15,
+      "pink_tap": {
+        "enabled": true,
+        "min_mask_fraction": 0.2,
+        "max_core_trim_px": 8
+      }
     },
     "gameplay": {
       "confirm_frames": 3,
@@ -637,6 +642,7 @@
       "backward_jitter_px": 3.5,
       "stationary_after_s": 0.2,
       "stationary_span_px": 5,
+      "pink_min_displacement_px": 5,
       "max_hit_drift_s": 0.08
     },
     "predictor": {
@@ -770,19 +776,19 @@
     "strategy": "exact_y_bounded_lru_v1",
     "lookups": {
       "lane_bounds_at_y": {
-        "hits": 148682,
+        "hits": 141104,
         "misses": 592,
         "maxsize": 2048,
         "currsize": 592
       },
       "outer_bounds_at_y": {
-        "hits": 79062,
+        "hits": 69565,
         "misses": 570,
         "maxsize": 2048,
         "currsize": 570
       },
       "row_lane_width": {
-        "hits": 106226,
+        "hits": 101361,
         "misses": 574,
         "maxsize": 2048,
         "currsize": 574
@@ -807,36 +813,34 @@
     "resolution_basis": "user_confirmed_any_covered_key",
     "recognition_accuracy": "UNVERIFIED"
   },
-  "processed_frames": 1355,
-  "acquired_frames": 1517,
-  "dropped_frames": 162,
+  "processed_frames": 1443,
+  "acquired_frames": 1526,
+  "dropped_frames": 83,
   "stale_frames": 0,
-  "events": 282,
-  "abstentions": 39,
+  "events": 300,
+  "abstentions": 33,
   "abstain_reasons": {
-    "selected_tap": 93,
-    "unstable_hit_time": 16,
-    "duplicate_hold_path": 15,
-    "hit_time_drift": 3,
-    "late_or_key_already_held": 1,
-    "past_hit_time": 5,
-    "game_state_or_focus_or_roi_loss": 1
+    "selected_tap": 90,
+    "duplicate_hold_path": 14,
+    "unstable_hit_time": 11,
+    "past_hit_time": 8,
+    "late_or_key_already_held": 1
   },
-  "sent_taps": 73,
-  "sent_holds": 26,
-  "sent_key_downs": 99,
+  "sent_taps": 70,
+  "sent_holds": 21,
+  "sent_key_downs": 91,
   "keyboard_backend": "Win32 SendInput",
   "keyboard_input_mode": "scan_code",
   "input_armed_at_start": false,
   "recycled_track_ids": [],
-  "capture_fps": 56.81533345466662,
-  "wall_processing_fps": 49.11155671625332,
-  "latency_p50_ms": 21.38559997547418,
-  "latency_p95_ms": 34.097130002919585,
+  "capture_fps": 58.248216698029616,
+  "wall_processing_fps": 52.06061281118814,
+  "latency_p50_ms": 17.01449998654425,
+  "latency_p95_ms": 30.581890046596524,
   "stop_reason": "global_escape_or_f12",
-  "wall_elapsed_s": 27.590247399988584,
+  "wall_elapsed_s": 27.71769140008837,
   "recording_async": true,
-  "recording_encoded_frames": 1355,
+  "recording_encoded_frames": 1443,
   "recording_dropped_frames": 0,
   "recording_clean_source": true,
   "recording_nominal_fps": 60,
