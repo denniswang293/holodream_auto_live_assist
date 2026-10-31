@@ -1,1 +1,0 @@
-﻿run_id,capture_sequence,source_frame,source_video_frame,capture_timestamp,processing_timestamp,frame_uid,stage,candidate_id,parent_proposal_id,raw_bbox,core_bbox,x,y,w,h,u_min,u_max,u_center,appearance,note_type,candidate_keys,score,passed,reject_reason,lane_span,trace_status

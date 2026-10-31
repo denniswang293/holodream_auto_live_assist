@@ -1,9 +1,0 @@
-{
-  "status": "PATCH_NOT_JUSTIFIED",
-  "experiment_executed": false,
-  "reason": "No two HIGH-confidence, visually verified physical notes share one proven gate failure; live/replay identity telemetry was absent in the existing run.",
-  "feature_flag": "tracker.experimental_local_reassociation.enabled",
-  "enabled": false,
-  "offline_only": true,
-  "legacy_input_path": "unchanged"
-}
