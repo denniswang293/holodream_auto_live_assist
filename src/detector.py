@@ -1,10 +1,15 @@
 """Calibrated horizontal note bodies from edges and HSV evidence."""
 from __future__ import annotations
 from dataclasses import dataclass, field as dataclass_field
+import time
 import cv2
 import numpy as np
 from .geometry import Playfield
 from .hold_visual import path_depth, path_mask
+
+
+_MORPH_KERNEL_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
+_PLAYFIELD_MASK_CACHE: dict[tuple[int, int, int, int, int], tuple[Playfield, np.ndarray]] = {}
 
 
 @dataclass
@@ -24,16 +29,25 @@ class Candidate:
 
 
 def _playfield_mask(shape: tuple[int, int], playfield: Playfield,
-                    reference_resolution: tuple[int, int]) -> np.ndarray:
+                    reference_resolution: tuple[int, int], *, cache_enabled: bool = True) -> np.ndarray:
     h,w = shape
     rw,rh = reference_resolution
     if tuple(reference_resolution)!=tuple(playfield.reference_resolution):
         raise ValueError("Detector and geometry reference coordinate systems differ")
+    key = (id(playfield), h, w, rw, rh)
+    if cache_enabled:
+        cached = _PLAYFIELD_MASK_CACHE.get(key)
+        if cached is not None and cached[0] is playfield:
+            return cached[1]
     pts = np.array(playfield.playfield_polygon(),dtype=np.float32)
     pts[:,0] *= w/rw
     pts[:,1] *= h/rh
     mask = np.zeros((h,w),np.uint8)
     cv2.fillPoly(mask,[pts.astype(np.int32)],255)
+    # Keep the geometry object in the value so an id cannot be reused for a
+    # different calibration while this process is alive.
+    if cache_enabled:
+        _PLAYFIELD_MASK_CACHE[key] = (playfield, mask)
     return mask
 
 
@@ -55,8 +69,13 @@ def _horizontal_bodies(edge: np.ndarray, playfield: Playfield, sx: float, sy: fl
         lane_width *= sx
         opening = max(5,round(lane_width*0.65))
         closing = max(1,round(lane_width*0.02))
-        region = cv2.morphologyEx(edge[y0:y1],cv2.MORPH_CLOSE,np.ones((1,closing),np.uint8))
-        result[y0:y1] = cv2.morphologyEx(region,cv2.MORPH_OPEN,np.ones((1,opening),np.uint8))
+        kernel_key = (opening, closing)
+        kernels = _MORPH_KERNEL_CACHE.get(kernel_key)
+        if kernels is None:
+            kernels = (np.ones((1,closing),np.uint8), np.ones((1,opening),np.uint8))
+            _MORPH_KERNEL_CACHE[kernel_key] = kernels
+        region = cv2.morphologyEx(edge[y0:y1],cv2.MORPH_CLOSE,kernels[0])
+        result[y0:y1] = cv2.morphologyEx(region,cv2.MORPH_OPEN,kernels[1])
     return result
 
 
@@ -93,17 +112,38 @@ def _merge_body_edges(boxes: list[tuple], playfield: Playfield, sx: float, sy: f
     return groups
 
 
-def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dict, diagnostics: dict | None = None) -> list[Candidate]:
+def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dict,
+           diagnostics: dict | None = None, profile: dict | None = None,
+           frame_index: int | None = None) -> list[Candidate]:
+    profile_started = time.perf_counter() if profile is not None else None
+    profile_marks = {}
+    def mark(name, started):
+        if profile is not None:
+            profile.setdefault(name, []).append((time.perf_counter()-started)*1000)
+    def section(name):
+        if profile is None:
+            return None
+        started = time.perf_counter()
+        profile_marks[name] = started
+        return started
     h,w = frame.shape[:2]
     rw,rh = playfield.reference_resolution
     if tuple(cfg["reference_resolution"])!=(rw,rh):
         raise ValueError("Detector config and model use different reference resolutions")
+    pink_cfg = dict(cfg.get("pink_tap", {}) or {})
+    pink_enabled = bool(pink_cfg.get("enabled", False))
+    pink_min_fraction = float(pink_cfg.get("min_mask_fraction", .20))
+    pink_trim_px = float(pink_cfg.get("max_core_trim_px", 8.0))
     def rejected_geometry(box,reason):
         if diagnostics is not None:
             diagnostics.setdefault("rejections",[]).append({"bbox":box,"reason":reason})
     sx,sy = w/rw,h/rh
+    started = section("hsv_roi")
     hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
-    roi = _playfield_mask((h,w),playfield,(rw,rh))
+    cache_enabled = bool(cfg.get("cache_enabled", True))
+    if not cache_enabled:
+        _MORPH_KERNEL_CACHE.clear()
+    roi = _playfield_mask((h,w),playfield,(rw,rh), cache_enabled=cache_enabled)
     # Disjoint hue ranges; pale/gray evidence never establishes tap semantics.
     ranges = {"cyan_bar": ((84,75,100),(112,255,255)),
               "yellow_bar": ((18,95,125),(37,255,255)),
@@ -113,11 +153,34 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
     masks = {name: cv2.inRange(hsv,np.array(low),np.array(high)) & roi
              for name,(low,high) in ranges.items()}
     masks["pink_candidate"] |= cv2.inRange(hsv,np.array([0,65,100]),np.array([8,255,255])) & roi
+
+    def pink_fraction(box):
+        x0,y0,w0,h0 = box
+        if w0 <= 0 or h0 <= 0:
+            return 0.0
+        return cv2.countNonZero(masks["pink_candidate"][y0:y0+h0, x0:x0+w0]) / max(w0*h0, 1)
+
+    def record_pink_rejection(box, reason, *, core_box=None):
+        if diagnostics is None:
+            return
+        fraction = pink_fraction(box)
+        if fraction < pink_min_fraction:
+            return
+        counts = diagnostics.setdefault("pink_rejection_counts", {})
+        counts[reason] = counts.get(reason, 0) + 1
+        samples = diagnostics.setdefault("pink_rejections", [])
+        if len(samples) < 32:
+            samples.append({"frame": frame_index, "bbox": box, "core_bbox": core_box or box,
+                            "reason": reason, "pink_fraction": fraction})
+    mark("hsv_roi", started)
+    started = section("gray_sobel_morphology")
     gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
     gradient = np.abs(cv2.Sobel(gray,cv2.CV_32F,0,1,ksize=3))
     edge = ((gradient >= cfg.get("edge_threshold",65)) & (hsv[:,:,2] >= 145)).astype(np.uint8)*255
     edge &= roi
     bodies = _horizontal_bodies(edge,playfield,sx,sy,len(key_map))
+    mark("gray_sobel_morphology", started)
+    started = section("contours_merge")
     contours,_ = cv2.findContours(bodies,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     if diagnostics is not None:
         diagnostics["raw_edge_contours"] = len(contours)
@@ -150,24 +213,45 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             continue
         edges.append(box)
     proposals = _merge_body_edges(edges,playfield,sx,sy,len(key_map))
+    mark("contours_merge", started)
+    started = section("path_masks_contours")
     path_masks = {'green_candidate':masks['green_candidate'],
                   'yellow_bar':path_mask(hsv,'yellow_bar') & roi}
     path_boxes = {}
     for appearance,mask in path_masks.items():
         path_contours,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         path_boxes[appearance] = [cv2.boundingRect(p) for p in path_contours]
+    mark("path_masks_contours", started)
+    started = section("candidate_classification")
     candidates = []
     for box,edge_count in proposals:
+        body_box = box
         x,y,bw,bh = box
         cy = (y+bh/2)/sy
+        # Pink arrow/glow edges may extend a small, measurable fringe beyond
+        # the calibrated outer rail. Trim only that pink-rich fringe; the
+        # physical ROI and lane gates remain mandatory.
+        if pink_enabled and pink_fraction(box) >= pink_min_fraction:
+            outer = playfield.outer_bounds_at_y(cy)
+            if outer is not None:
+                core_left = max(x, int(np.ceil(outer[0]*sx)))
+                core_right = min(x+bw, int(np.floor(outer[1]*sx)))
+                trim = max(0, core_left-x) + max(0, x+bw-core_right)
+                if trim <= pink_trim_px and core_right > core_left:
+                    box = (core_left, y, core_right-core_left, bh)
+                    x,y,bw,bh = box
+                    if diagnostics is not None and trim > 0:
+                        diagnostics["pink_core_trimmed"] = diagnostics.get("pink_core_trimmed", 0) + 1
         interval = playfield.safe_bbox_interval(x/sx,(x+bw)/sx,cy)
         if interval is None:
+            record_pink_rejection(body_box, "geometry_roi", core_box=box)
             record_gray(box, "geometry", "outside_physical_roi_or_projected_key_span")
             rejected_geometry(box,"outside_physical_roi_or_projected_key_span")
             continue
         left,right = playfield.bounds(cy)
         min_area = cfg.get("min_area",55)*max(.4,(right-left)/(playfield.bottom_right_x-playfield.bottom_left_x))*sx*sy
         if bw*bh < min_area or bw/max(bh,1) < cfg.get("min_aspect",2.0):
+            record_pink_rejection(body_box, "shape", core_box=box)
             record_gray(box, "shape", "min_area_or_aspect")
             continue
         evidence = {name: cv2.countNonZero(mask[y:y+bh,x:x+bw])/(bw*bh)
@@ -179,15 +263,18 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             raw |= masks["neutral_candidate"][y:y+bh,x:x+bw]
         fill = cv2.countNonZero(raw)/(bw*bh)
         if fill < .10:
+            record_pink_rejection(body_box, "fill", core_box=box)
             record_gray(box, "fill", "insufficient_body_fill")
             continue
         score = min(.96,.28+min(fill,1)*.30+min(1,bw/max(bh,1)/5)*.25+min(edge_count,2)*.05)
         if score < cfg.get("min_score",.42):
+            record_pink_rejection(body_box, "score", core_box=box)
             record_gray(box, "score", "below_min_score")
             continue
         u0,u1 = interval
         lanes = playfield.safe_candidate_lanes(x/sx,(x+bw)/sx,cy,cfg.get("lane_min_overlap_fraction",.15))
         if not lanes:
+            record_pink_rejection(body_box, "lane", core_box=box)
             record_gray(box, "lane", "no_projected_lane")
             continue
         path_bbox = None
@@ -198,12 +285,14 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         # a provisional conventional tap appearance; track motion must confirm.
         note_type = ("tap" if appearance in ("cyan_bar","yellow_bar","neutral_candidate") and
                      edge_count>=2 and bh>=4 and path_bbox is None
+                     else "tap" if appearance == "pink_candidate" and pink_enabled and
+                     edge_count>=2 and bh>=4 and path_bbox is None
                      else "unknown")
         depth = (path_depth(frame,playfield,cy,(u0+u1)/2,appearance,
                             mask=path_masks[appearance])
                  if appearance in path_masks and cy>=250*rh/404 else 0)
         candidates.append(Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
-                                    box,path_bbox,raw,False,depth))
+                                    body_box,path_bbox,raw,False,depth))
     # An inner highlight can produce another long Sobel edge inside a complete
     # colored head. IoU alone misses this containment when the fragment is thin.
     heads = [c for c in candidates if c.note_type=='tap']
@@ -231,4 +320,7 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             kept.append(c)
     for i,c in enumerate(kept):
         c.suspected_overlap = any(i!=j and _iou(c.bbox,other.bbox)>.12 for j,other in enumerate(kept))
+    mark("candidate_classification", started)
+    if profile is not None and profile_started is not None:
+        profile.setdefault("detector_total", []).append((time.perf_counter()-profile_started)*1000)
     return kept

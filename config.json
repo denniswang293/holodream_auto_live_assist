@@ -19,7 +19,12 @@
     "min_score": 0.42,
     "min_lane_width": 0.7,
     "min_colored_fraction": 0.12,
-    "lane_min_overlap_fraction": 0.15
+    "lane_min_overlap_fraction": 0.15,
+    "pink_tap": {
+      "enabled": true,
+      "min_mask_fraction": 0.20,
+      "max_core_trim_px": 8
+    }
   },
   "gameplay": {
     "confirm_frames": 3,

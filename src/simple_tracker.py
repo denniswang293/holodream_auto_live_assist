@@ -19,7 +19,7 @@ from .predictor import Prediction
 
 def is_simple_tap(candidate: Candidate) -> bool:
     return (candidate.note_type == "tap" and
-            candidate.appearance in ("cyan_bar", "yellow_bar", "neutral_candidate") and
+            candidate.appearance in ("cyan_bar", "yellow_bar", "pink_candidate", "neutral_candidate") and
             not candidate.suspected_overlap and candidate.path_bbox is None and
             candidate.hold_path_px <= 0)
 
@@ -119,7 +119,9 @@ class SimpleTracker:
 
     @staticmethod
     def _same_appearance_family(a: Candidate, b: Candidate) -> bool:
-        allowed = {"cyan_bar", "yellow_bar", "neutral_candidate"}
+        if a.appearance == "pink_candidate" or b.appearance == "pink_candidate":
+            return a.appearance == b.appearance == "pink_candidate"
+        allowed = {"cyan_bar", "yellow_bar", "pink_candidate", "neutral_candidate"}
         return a.appearance in allowed and b.appearance in allowed
 
     def _pair_cost(self, track: SimpleTrack, candidate: Candidate, timestamp: float):

@@ -36,7 +36,7 @@ def render(frame: np.ndarray, playfield: Playfield, tracks: list[Track], state: 
             px, py, pw, ph = c.path_bbox
             cv2.rectangle(image, (px,py), (px+pw,py+ph), (80,120,80), thickness)
         hit = f"hit={tr.prediction.hit_time:.3f}" if tr.eta() is not None else tr.reason
-        appearance = {"cyan_bar":"cyan","yellow_bar":"yellow","pink_candidate":"pink?", 
+        appearance = {"cyan_bar":"cyan","yellow_bar":"yellow","pink_candidate":"pink/tap", 
                       "green_candidate":"green?","neutral_candidate":"neutral?"}[c.appearance]
         key_text = f"cand:{'/'.join(tr.stable_keys)} input:?" if explicit_candidates else '/'.join(tr.stable_keys)
         label = f"#{tr.track_id} {tr.status} {appearance}/{c.note_type} {key_text} {hit}"
