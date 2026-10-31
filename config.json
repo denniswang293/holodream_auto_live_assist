@@ -41,6 +41,7 @@
     "backward_jitter_px": 3.5,
     "stationary_after_s": 0.20,
     "stationary_span_px": 5,
+    "pink_min_displacement_px": 5,
     "max_hit_drift_s": 0.08
   },
   "predictor": {
