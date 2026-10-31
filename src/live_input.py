@@ -130,7 +130,13 @@ class TapScheduler:
         if state != 'PLAYING':return 'game_state_not_playing'
         if not focused:return 'frame_focus_lost'
         if not roi:return 'roi_invalid'
-        if not 0 <= now-captured <= self.max_age:return 'validated_capture_expired'
+        # ``begin_decision`` validates the next capture before the engine does
+        # detector/tracker work.  During that work the published context still
+        # names the previous frame; prefer the in-flight capture while it is
+        # itself fresh, otherwise preserve the normal stale disarm behavior.
+        freshness_ts = (self.processing_capture if self.processing_capture is not None
+                        and self.processing_capture > captured else captured)
+        if not 0 <= now-freshness_ts <= self.max_age:return 'validated_capture_expired'
         if not self.focus_check():return 'foreground_window_changed'
         return ''
 
