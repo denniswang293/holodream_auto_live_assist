@@ -20,6 +20,8 @@ python -m pip install -r requirements-live.txt
 
 V7.1 flags 位於 `config/live_assist.json`：pending Tap deadline amendment 使用 30 ms freeze window 與 bounded revisions；judgment calibration 在有足夠遊戲判定標註前維持 shadow-only；Hold v2 使用短時間 head/body continuity，並保留既有的 bounded release 與失焦安全規則。
 
+Tap pipeline simplification 目前只輸出 `motion_reliable`、`timing_reliable` 及 Linear ETA shadow 診斷；`simplified_tap_planner.enabled` 預設關閉，尚未用未標註資料宣稱命中率改善。
+
 ## 輸出與資料
 
 每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。

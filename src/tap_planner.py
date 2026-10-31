@@ -34,17 +34,25 @@ class DecisionTrace:
     key_conflicts: dict[str, str]
     first_possible_schedule_at: float | None = None
     last_safe_schedule_at: float | None = None
+    motion_reliable: bool = False
+    timing_reliable: bool = False
+    timing_quality: float | None = None
+    linear_eta_s: float | None = None
+    linear_hit_at: float | None = None
+    linear_quality: float | None = None
 
 
 class TapPlanner:
     """Turn confirmed motion evidence into at most one key and one ETA."""
 
     def __init__(self, event_config: dict | None = None, *, min_y: float = 190.,
-                 max_uncertainty_s: float = .04, conflict_window_s: float = .035):
+                 max_uncertainty_s: float = .04, conflict_window_s: float = .035,
+                 simplified_mode: bool = False):
         self.event_config = dict(event_config or {})
         self.min_y = float(min_y)
         self.max_uncertainty_s = float(max_uncertainty_s)
         self.conflict_window_s = float(conflict_window_s)
+        self.simplified_mode = bool(simplified_mode)
 
     def _trace_gates(self, track: SimpleTrack, now: float, known_keys: set[str]):
         c, p = track.candidate, track.prediction
@@ -74,6 +82,13 @@ class TapPlanner:
             "particle_crossing_mass": bool(p.valid_crossing_mass is not None and
                 p.valid_crossing_mass >= float(cfg.get("min_valid_crossing_mass", .95))),
         }
+        gates["motion_reliable"] = (gates["track_confirmed_current"] and
+            gates["ordinary_tap_confirmed"] and gates["stable_key"] and
+            len(track.history) >= 3 and p.velocity is not None and
+            math.isfinite(p.velocity) and p.velocity > 0)
+        gates["timing_reliable"] = (gates["eta_available_finite"] and
+            gates["eta_future"] and gates["eta_within_horizon"] and
+            gates["eta_uncertainty_acceptable"])
         return gates
 
     def _reason(self, track: SimpleTrack, now: float, known_keys: set[str]):
@@ -163,9 +178,13 @@ class TapPlanner:
                 "particle_posterior_width", "particle_crossing_mass")) else None
             last_safe = (hit + scheduler.max_lateness if hit is not None and
                          hasattr(scheduler, "max_lateness") else None)
+            quality_gates = [gates[name] for name in ("particle_posterior_width",
+                "particle_crossing_mass", "eta_uncertainty_acceptable")]
+            timing_quality = sum(quality_gates) / len(quality_gates)
             self.last_traces[track.track_id] = DecisionTrace(uid, track.track_id, gates, reason,
                 track.prediction.eta, hit, track.prediction.uncertainty, conflicts,
-                first_possible, last_safe)
+                first_possible, last_safe, gates["motion_reliable"],
+                gates["timing_reliable"], timing_quality)
             if reason:
                 reasons[track.track_id] = reason
             else:

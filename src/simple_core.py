@@ -6,6 +6,7 @@ import json
 from .simple_tracker import SimpleTracker
 from .tap_intent import TapIntentManager
 from .tap_planner import TapPlanner
+from .timing_estimator import LinearTimingEstimator
 
 
 class SimpleAssistCore:
@@ -16,14 +17,19 @@ class SimpleAssistCore:
         self.session_id = session_id
         self.known_keys = set(known_keys)
         self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y)
+        timing_cfg = dict(timing_cfg or {})
         self.planner = TapPlanner(event_cfg, min_y=min_y,
-            max_uncertainty_s=float(particle_cfg.get("max_uncertainty_s", .04)))
+            max_uncertainty_s=float(particle_cfg.get("max_uncertainty_s", .04)),
+            simplified_mode=timing_cfg.get("simplified_tap_planner", {}).get("enabled", False))
+        linear_cfg = timing_cfg.get("linear_timing", {})
+        self.linear_timing = LinearTimingEstimator(
+            window=linear_cfg.get("window", 5),
+            min_velocity=linear_cfg.get("min_velocity", 20)) if linear_cfg.get("enabled", True) else None
         self.transitions = []
         def record(row):
             self.transitions.append(dict(row))
             if on_transition:
                 on_transition(row)
-        timing_cfg = dict(timing_cfg or {})
         self.intents = TapIntentManager(record,
             amend_enabled=timing_cfg.get("enabled", timing_cfg.get("tap_deadline_amend", False)),
             freeze_window_ms=timing_cfg.get("freeze_window_ms", 30),
@@ -66,6 +72,14 @@ class SimpleAssistCore:
         }}
         self.last_traces = traces
         for track in tracks:
+            trace = traces.get(track.track_id)
+            if trace is None or self.linear_timing is None:
+                continue
+            linear = self.linear_timing.estimate(track.history, self.tracker.hit_y, captured_at)
+            trace.linear_eta_s = linear.eta
+            trace.linear_hit_at = linear.hit_at
+            trace.linear_quality = linear.quality
+        for track in tracks:
             uid = self.note_uid(track.track_id)
             trace = traces.get(track.track_id)
             intent = self.intents.intents.get(uid)
@@ -96,6 +110,12 @@ class SimpleAssistCore:
                 "eta_s": trace.eta_s if trace and trace.eta_s is not None else "",
                 "hit_at": trace.hit_at if trace and trace.hit_at is not None else "",
                 "uncertainty_s": trace.uncertainty_s if trace and trace.uncertainty_s is not None else "",
+                "motion_reliable": trace.motion_reliable if trace else "",
+                "timing_reliable": trace.timing_reliable if trace else "",
+                "timing_quality": trace.timing_quality if trace and trace.timing_quality is not None else "",
+                "linear_eta_s": trace.linear_eta_s if trace and trace.linear_eta_s is not None else "",
+                "linear_hit_at": trace.linear_hit_at if trace and trace.linear_hit_at is not None else "",
+                "linear_quality": trace.linear_quality if trace and trace.linear_quality is not None else "",
                 "first_possible_schedule_at": (trace.first_possible_schedule_at
                     if trace and trace.first_possible_schedule_at is not None else ""),
                 "last_safe_schedule_at": (trace.last_safe_schedule_at

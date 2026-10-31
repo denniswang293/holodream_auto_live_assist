@@ -35,6 +35,7 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "process_begin", "process_end", "last_validated_capture", "scheduler_poll_at",
                 "inflight_frame_age_ms", "inflight_processing_ms", "frame_age_expired",
+                "gray_rejection_count", "detector_rejection_count",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
                 "tracked_count", "input_armed", "dropped_total", "video_frame", "acquire_queue_wait_ms",
@@ -44,7 +45,9 @@ FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_
 ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type", "lifecycle_state", "revision"]
 DECISION_FIELDS = ["timestamp", "note_uid", "track_id", "lifecycle_state", "reason", "key",
                    "eta_s", "hit_at", "uncertainty_s", "first_possible_schedule_at",
-                   "last_safe_schedule_at", "gates_json", "key_conflicts_json"]
+                   "last_safe_schedule_at", "motion_reliable", "timing_reliable",
+                   "timing_quality", "linear_eta_s", "linear_hit_at", "linear_quality",
+                   "gates_json", "key_conflicts_json"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:

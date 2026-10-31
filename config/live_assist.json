@@ -11,6 +11,17 @@
     "max_amend_step_ms": 40,
     "max_total_amend_ms": 80
   },
+  "simplified_tap_planner": {
+    "enabled": false,
+    "mode": "shadow",
+    "reason": "Keep legacy gates until paired replay confirms no false-positive increase"
+  },
+  "linear_timing": {
+    "enabled": true,
+    "mode": "shadow",
+    "window": 5,
+    "min_velocity": 20
+  },
   "judgment_calibration_v2": {
     "enabled": true,
     "mode": "shadow",

@@ -36,6 +36,47 @@ def test_simple_tracker_keeps_track_id_across_short_detector_dropout():
     assert tracks[0].missed == 0
 
 
+def test_neutral_to_neutral_tracks_across_frames():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    for i in range(4):
+        tracks = tracker.update([candidate(180 + i * 8, appearance="neutral_candidate")], 1 + i / 60)
+    assert len(tracks) == 1
+    assert tracks[0].observations == 4
+    assert tracks[0].appearance_history == ["neutral_candidate"] * 4
+
+
+def test_neutral_cyan_neutral_keeps_physical_identity():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    appearances = ("neutral_candidate", "cyan_bar", "neutral_candidate", "cyan_bar")
+    for i, appearance in enumerate(appearances):
+        tracks = tracker.update([candidate(180 + i * 8, appearance=appearance)], 1 + i / 60)
+    assert len(tracks) == 1
+    assert tracks[0].track_id == 1
+    assert tracks[0].appearance_history == list(appearances)
+
+
+def test_two_close_gray_taps_not_merged():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    tracks = tracker.update([
+        candidate(180, appearance="neutral_candidate", u=.35),
+        candidate(205, appearance="neutral_candidate", u=.65),
+    ], 1.0)
+    assert len(tracks) == 2
+
+
+def test_gray_background_line_never_becomes_tap_without_motion():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    for i in range(8):
+        tracks = tracker.update([candidate(180, appearance="neutral_candidate")], 1 + i / 60)
+    assert len(tracks) == 1
+    assert tracks[0].confirmed_note_type is None
+    assert tracks[0].status != "confirmed"
+
+
 def test_simple_tracker_does_not_merge_two_visible_same_lane_notes():
     tracker = SimpleTracker({"confirm_observations": 3},
         {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
@@ -134,7 +175,7 @@ def test_planner_emits_per_gate_trace_and_candidate_key_conflicts():
     assert proposals == {}
     assert reasons[track.track_id] == "tap_key_conflict"
     trace = planner.last_traces[track.track_id]
-    assert all(trace.gates.values())
+    assert all(value for key, value in trace.gates.items() if key not in {"motion_reliable"})
     assert trace.final_reason == "tap_key_conflict"
     assert trace.key_conflicts["F"] == "reserved_same_key_time"
     scheduler.close()

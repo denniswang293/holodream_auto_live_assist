@@ -122,17 +122,31 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
     if diagnostics is not None:
         diagnostics["raw_edge_contours"] = len(contours)
     edges = []
+    def record_gray(box, stage, reason):
+        if diagnostics is None:
+            return
+        x0, y0, w0, h0 = box
+        if w0 <= 0 or h0 <= 0:
+            return
+        neutral_fraction = cv2.countNonZero(masks["neutral_candidate"][y0:y0+h0, x0:x0+w0]) / max(w0*h0, 1)
+        if neutral_fraction >= .35:
+            diagnostics.setdefault("gray_rejections", []).append({
+                "bbox": box, "stage": stage, "reason": reason,
+                "neutral_fraction": neutral_fraction,
+            })
     for contour in contours:
         box = cv2.boundingRect(contour)
         x,y,bw,bh = box
         row = playfield.lane_bounds_at_y((y+bh/2)/sy)
         if row is None:
+            record_gray(box, "geometry", "outside_vertical_domain")
             rejected_geometry(box,"outside_vertical_domain")
             continue
         left,right = row[0],row[-1]
         if y/sy < playfield.top_y+8*rh/404 or bw/sx > (right-left)*.48:
             continue
         if bw/sx < playfield.row_lane_width((y+bh/2)/sy)*cfg.get("min_lane_width",.7) or bh/sy > 20*rh/404:
+            record_gray(box, "edge_shape", "insufficient_lane_width_or_height")
             continue
         edges.append(box)
     proposals = _merge_body_edges(edges,playfield,sx,sy,len(key_map))
@@ -148,11 +162,13 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         cy = (y+bh/2)/sy
         interval = playfield.safe_bbox_interval(x/sx,(x+bw)/sx,cy)
         if interval is None:
+            record_gray(box, "geometry", "outside_physical_roi_or_projected_key_span")
             rejected_geometry(box,"outside_physical_roi_or_projected_key_span")
             continue
         left,right = playfield.bounds(cy)
         min_area = cfg.get("min_area",55)*max(.4,(right-left)/(playfield.bottom_right_x-playfield.bottom_left_x))*sx*sy
         if bw*bh < min_area or bw/max(bh,1) < cfg.get("min_aspect",2.0):
+            record_gray(box, "shape", "min_area_or_aspect")
             continue
         evidence = {name: cv2.countNonZero(mask[y:y+bh,x:x+bw])/(bw*bh)
                     for name,mask in masks.items() if name != "neutral_candidate"}
@@ -163,13 +179,16 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             raw |= masks["neutral_candidate"][y:y+bh,x:x+bw]
         fill = cv2.countNonZero(raw)/(bw*bh)
         if fill < .10:
+            record_gray(box, "fill", "insufficient_body_fill")
             continue
         score = min(.96,.28+min(fill,1)*.30+min(1,bw/max(bh,1)/5)*.25+min(edge_count,2)*.05)
         if score < cfg.get("min_score",.42):
+            record_gray(box, "score", "below_min_score")
             continue
         u0,u1 = interval
         lanes = playfield.safe_candidate_lanes(x/sx,(x+bw)/sx,cy,cfg.get("lane_min_overlap_fraction",.15))
         if not lanes:
+            record_gray(box, "lane", "no_projected_lane")
             continue
         path_bbox = None
         if appearance in path_boxes:
