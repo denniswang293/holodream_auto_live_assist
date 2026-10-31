@@ -1,0 +1,18 @@
+{
+  "source": "C:\\Users\\USER\\Desktop\\holodream\\output\\v755_tracker_association\\diagnostic_off_on_ab.json",
+  "diagnostic_off_on": {
+    "trace_enabled_default": false,
+    "detector_signature_diff_frames": 0,
+    "tracker_signature_diff_frames": 0,
+    "decision_changes": "UNKNOWN (replay has no live scheduler)",
+    "candidate_order_unchanged": true,
+    "tracker_state_unchanged": true,
+    "legacy_input_path_changed": false,
+    "shadow_active": false,
+    "truth_status": "UNKNOWN"
+  },
+  "active_planner": false,
+  "legacy_input_path": "unchanged",
+  "feature_flag_patch": "not_applied",
+  "truth_status": "UNKNOWN"
+}
