@@ -12,15 +12,43 @@ def run(frame):
                   {**cfg["detector"],"reference_resolution":cfg["reference_resolution"]})
 
 
-def test_pink_is_unknown_and_preserves_mask():
+def test_pink_arrow_candidate_is_ordinary_tap_and_preserves_mask():
     frame = np.zeros((404,720,3),np.uint8)
     cv2.rectangle(frame,(280,200),(345,207),(255,70,255),-1)
     notes = run(frame)
     assert len(notes) == 1
     assert notes[0].appearance == "pink_candidate"
-    assert notes[0].note_type == "unknown"
+    assert notes[0].note_type == "tap"
     assert notes[0].raw_mask is not None
     assert notes[0].body_bbox == notes[0].bbox
+
+
+def test_pink_arrow_body_trims_small_outer_glow_and_keeps_lane_keys():
+    frame = np.zeros((404,720,3),np.uint8)
+    # Representative frame-285 geometry: the visible glow extends a few
+    # pixels beyond the calibrated right rail, while the body is a K/L Tap.
+    cv2.rectangle(frame,(432,219),(572,239),(255,70,255),-1)
+    diagnostics = {}
+    cfg = json.loads((Path(__file__).resolve().parents[1]/"config.json").read_text())
+    notes = detect(frame, Playfield.from_config(cfg["playfield"]), cfg["key_map"],
+                   {**cfg["detector"], "reference_resolution": cfg["reference_resolution"]}, diagnostics)
+    pink = [note for note in notes if note.appearance == "pink_candidate"]
+    assert len(pink) == 1
+    assert pink[0].note_type == "tap"
+    assert pink[0].candidate_keys == ["K", "L"]
+    assert pink[0].bbox[0] + pink[0].bbox[2] <= 567
+    assert diagnostics.get("pink_core_trimmed", 0) >= 1
+
+
+def test_pink_tap_feature_flag_can_roll_back_to_unknown():
+    frame = np.zeros((404,720,3),np.uint8)
+    cv2.rectangle(frame,(280,200),(345,207),(255,70,255),-1)
+    cfg = json.loads((Path(__file__).resolve().parents[1]/"config.json").read_text())
+    detector_cfg = {**cfg["detector"], "reference_resolution": cfg["reference_resolution"],
+                    "pink_tap": {"enabled": False}}
+    notes = detect(frame, Playfield.from_config(cfg["playfield"]), cfg["key_map"], detector_cfg)
+    assert len(notes) == 1 and notes[0].appearance == "pink_candidate"
+    assert notes[0].note_type == "unknown"
 
 
 def test_adjacent_bodies_are_not_joined():

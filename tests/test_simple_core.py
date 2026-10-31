@@ -58,6 +58,26 @@ def test_neutral_cyan_neutral_keeps_physical_identity():
     assert tracks[0].appearance_history == list(appearances)
 
 
+def test_static_pink_effect_does_not_confirm_as_tap():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    for i in range(8):
+        tracks = tracker.update([candidate(180, appearance="pink_candidate")], 1 + i / 60)
+    assert len(tracks) == 1
+    assert tracks[0].confirmed_note_type is None
+    assert tracks[0].status != "confirmed"
+
+
+def test_pink_tracker_does_not_switch_to_unrelated_cyan_identity():
+    tracker = SimpleTracker({"confirm_observations": 3},
+        {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
+    tracker.update([candidate(180, appearance="pink_candidate")], 1.0)
+    tracks = tracker.update([candidate(188, appearance="cyan_bar")], 1.02)
+    pink_track = next(track for track in tracks if track.track_id == 1)
+    assert pink_track.missed == 1
+    assert pink_track.appearance_history == ["pink_candidate"]
+
+
 def test_two_close_gray_taps_not_merged():
     tracker = SimpleTracker({"confirm_observations": 3},
         {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)
