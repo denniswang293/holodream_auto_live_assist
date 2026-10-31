@@ -32,6 +32,8 @@ class DecisionTrace:
     hit_at: float | None
     uncertainty_s: float | None
     key_conflicts: dict[str, str]
+    first_possible_schedule_at: float | None = None
+    last_safe_schedule_at: float | None = None
 
 
 class TapPlanner:
@@ -130,6 +132,13 @@ class TapPlanner:
         reasons, proposals = {}, {}
         eligible = []
         self.last_traces = {}
+        def reservations_for(owner_uid=None):
+            own = scheduler.pending_reservations.get(owner_uid) if owner_uid else None
+            recent = [(k, h, owner_uid if own == (k, h) else None)
+                      for k, h in scheduler.recent]
+            pending = [(intent.keys[0], intent.hit_at, uid)
+                       for uid, intent in scheduler.pending.items()]
+            return recent + pending
         for track in tracks:
             reason = self._reason(track, now, known_keys)
             uid = note_uids.get(track.track_id, f"simple:{track.track_id}")
@@ -140,21 +149,29 @@ class TapPlanner:
             for key in KEYS:
                 if key not in overlaps:
                     conflicts[key] = "not_covered_or_unverified"
-                elif hit is not None and any(other == key and abs(t-hit) < self.conflict_window_s for other, t in
-                          [(k, h) for k, h in scheduler.recent] +
-                          [(intent.keys[0], intent.hit_at) for intent in scheduler.pending.values()]):
+                elif hit is not None and any(other == key and owner != uid and
+                                             abs(t-hit) < self.conflict_window_s for other, t, owner in
+                          reservations_for(uid)):
                     conflicts[key] = "reserved_same_key_time"
                 else:
                     conflicts[key] = ""
+            first_possible = track.first_time if all(gates.get(name, False) for name in (
+                "track_confirmed_current", "ordinary_tap_confirmed", "stable_key",
+                "lane_span_valid", "eta_available_finite", "eta_future",
+                "eta_within_horizon", "eta_uncertainty_acceptable", "verified_covered_key",
+                "particle_initialized", "particle_real_observations",
+                "particle_posterior_width", "particle_crossing_mass")) else None
+            last_safe = (hit + scheduler.max_lateness if hit is not None and
+                         hasattr(scheduler, "max_lateness") else None)
             self.last_traces[track.track_id] = DecisionTrace(uid, track.track_id, gates, reason,
-                track.prediction.eta, hit, track.prediction.uncertainty, conflicts)
+                track.prediction.eta, hit, track.prediction.uncertainty, conflicts,
+                first_possible, last_safe)
             if reason:
                 reasons[track.track_id] = reason
             else:
                 eligible.append((track, uid))
 
-        reservations = [(key, hit) for key, hit in scheduler.recent]
-        reservations.extend((intent.keys[0], intent.hit_at) for intent in scheduler.pending.values())
+        reservations = reservations_for()
         held = {key: release for key, (release, intent) in scheduler.held.items()
                 if intent.note_type == "hold"}
         eligible.sort(key=lambda item: (item[0].prediction.hit_time, item[0].track_id))
@@ -172,9 +189,12 @@ class TapPlanner:
                 fixed = fixed_keys.get(uid)
                 row = []
                 trace = self.last_traces[track.track_id]
+                own_reservation = scheduler.pending_reservations.get(uid)
                 for key in KEYS:
-                    conflicts = any(other == key and abs(t - hit) < self.conflict_window_s
-                                    for other, t in reservations)
+                    conflicts = any(other == key and owner != uid and
+                                    own_reservation != (other, t) and
+                                    abs(t - hit) < self.conflict_window_s
+                                    for other, t, owner in reservations)
                     if fixed and key != fixed:
                         trace.key_conflicts[key] = "intent_key_frozen"
                         row.append(1e9)
@@ -198,7 +218,7 @@ class TapPlanner:
                 if j < len(KEYS) and costs[i][j] < unmatched:
                     key = KEYS[j]
                     hit = track.prediction.hit_time
-                    reservations.append((key, hit))
+                    reservations.append((key, hit, uid))
                     proposals[track.track_id] = TapProposal(uid, track.track_id, key, hit,
                         float(track.prediction.uncertainty),
                         f"confirmed={track.observations};velocity={track.prediction.velocity:.3f};"

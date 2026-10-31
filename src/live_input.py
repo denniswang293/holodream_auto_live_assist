@@ -66,7 +66,7 @@ class TapScheduler:
     def __init__(self, mode="assist", actuator=None, clock=time.perf_counter,
                  focus_check=lambda: True, modifiers_check=lambda: False, on_log=None,
                  max_age=.05, max_lateness=.015, duration=.025, max_uncertainty=.04,
-                 max_hold_s=6.):
+                 max_hold_s=6., stale_context_pause_ms=200):
         if mode != "assist":
             raise ValueError("Only the manually enabled Assist scheduler is supported")
         if not (0 < max_age <= .25 and 0 < max_lateness <= .05 and .005 <= duration <= .1
@@ -76,6 +76,9 @@ class TapScheduler:
         self.clock, self.focus_check, self.modifiers_check = clock, focus_check, modifiers_check
         self.on_log = on_log or (lambda row: None)
         self.max_age, self.max_lateness, self.duration = max_age, max_lateness, duration
+        self.stale_context_pause_s = float(stale_context_pause_ms) / 1000
+        if not 0 < self.stale_context_pause_s <= .5:
+            raise ValueError("stale context pause must be between 0 and 500 ms")
         self.max_uncertainty = max_uncertainty
         self.max_hold_s = max_hold_s
         self.lock = threading.RLock()
@@ -336,7 +339,7 @@ class TapScheduler:
                         self.arm_frame_wait_started_at = now
                         self._log('arm_waiting_for_fresh_frame',
                                   f'decision_age_ms={(now-captured)*1000:.2f}')
-                    if now-self.arm_frame_wait_started_at <= .2:
+                    if now-self.arm_frame_wait_started_at <= self.stale_context_pause_s:
                         return
                 if (self.armed and failure == 'validated_capture_expired' and
                         state == 'PLAYING' and focused and roi and self.focus_check()):
@@ -350,11 +353,12 @@ class TapScheduler:
                             self.decision_wait_started_at = now
                             self._log('decision_wait',
                                       f'old_decision_ms={(now-captured)*1000:.2f};key_down_paused')
-                        if now-self.decision_wait_started_at <= .2:
+                        if now-self.decision_wait_started_at <= self.stale_context_pause_s:
                             return
                 if self.armed or self.arm_requested:
                     self._log_readiness_failure(now,failure)
-                self.disarm("stale_frame_or_focus_loss")
+                self.disarm("stale_context_timeout" if failure == "validated_capture_expired"
+                             else "stale_frame_or_focus_loss")
                 return
             if self.waiting_for_arm_frame:
                 self.waiting_for_arm_frame = False

@@ -96,6 +96,10 @@ class SimpleAssistCore:
                 "eta_s": trace.eta_s if trace and trace.eta_s is not None else "",
                 "hit_at": trace.hit_at if trace and trace.hit_at is not None else "",
                 "uncertainty_s": trace.uncertainty_s if trace and trace.uncertainty_s is not None else "",
+                "first_possible_schedule_at": (trace.first_possible_schedule_at
+                    if trace and trace.first_possible_schedule_at is not None else ""),
+                "last_safe_schedule_at": (trace.last_safe_schedule_at
+                    if trace and trace.last_safe_schedule_at is not None else ""),
                 "gates_json": json.dumps(gates, sort_keys=True) if trace else "{}",
                 "key_conflicts_json": json.dumps(conflicts, sort_keys=True) if trace else "{}",
             })

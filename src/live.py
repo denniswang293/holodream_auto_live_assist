@@ -33,6 +33,8 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "revision", "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
                 "simple_track_status", "particle_rejection_streak", "particle_reinitializations"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
+                "process_begin", "process_end", "last_validated_capture", "scheduler_poll_at",
+                "inflight_frame_age_ms", "inflight_processing_ms", "frame_age_expired",
                 "gameplay_state", "focused", "roi_status", "frame_age_ms", "latency_ms", "processing_ms",
                 "capture_fps", "processing_fps", "latency_p50_ms", "latency_p95_ms", "stale_total", "candidate_count",
                 "tracked_count", "input_armed", "dropped_total", "video_frame", "acquire_queue_wait_ms",
@@ -41,7 +43,8 @@ FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_
                 "simple_core_ms", "diagnostic_write_ms"]
 ACTION_FIELDS = ["action", "reason", "timestamp", "event_id", "key", "scheduled_hit", "armed", "note_type", "lifecycle_state", "revision"]
 DECISION_FIELDS = ["timestamp", "note_uid", "track_id", "lifecycle_state", "reason", "key",
-                   "eta_s", "hit_at", "uncertainty_s", "gates_json", "key_conflicts_json"]
+                   "eta_s", "hit_at", "uncertainty_s", "first_possible_schedule_at",
+                   "last_safe_schedule_at", "gates_json", "key_conflicts_json"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:
@@ -173,6 +176,7 @@ def run(args):
                                  modifiers_check=modifier_check, on_log=log_action,
                                  max_age=max_age, duration=config.get("timing", {}).get("tap_duration_ms", 25)/1000,
                                  max_lateness=live_cfg.get("max_input_lateness_ms", 15)/1000,
+                                 stale_context_pause_ms=live_cfg.get("stale_context_pause_ms", 200),
                                  max_hold_s=live_cfg.get('hold_visual',{}).get('max_hold_s',6.),
                                  max_uncertainty=live_cfg.get("speculative_taps",{}).get("max_uncertainty_s",.04)
                                      if live_cfg.get("speculative_taps",{}).get("enabled") else .04)

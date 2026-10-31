@@ -233,6 +233,7 @@ class LiveEngine:
         self.hold_colors = {}
         self.hold_watch = {}
         self.hold_spans = {}
+        self.hold_pending_coast = {}
         if self.tap_rule:
             self.known_keys = self.tap_rule.allowed_keys
         self.last_decisions = {}
@@ -315,6 +316,7 @@ class LiveEngine:
         self.tracker.finished.clear()
         self.simple_core.tracker.update([], self.last_capture, playing=False)
         self.simple_tracks = []
+        self.hold_pending_coast.clear()
         if self.hold_tracker_v2:
             self.hold_tracker_v2.reset()
 
@@ -793,6 +795,16 @@ class LiveEngine:
         self.hold_watch = {event_id:watch for event_id,watch in self.hold_watch.items()
                            if event_id in current and any(intent.event_id==event_id
                            for _,intent in self.scheduler.held.values())}
+
+    def _hold_pending_still_valid(self, event_id, now, state, focused, roi_valid, stale):
+        record = self.hold_pending_coast.get(event_id)
+        intent = self.scheduler.pending.get(event_id)
+        if not record or intent is None or intent.note_type != "hold":
+            return False
+        return (record["generation"] == self.scheduler.arm_generation and
+                state == "PLAYING" and focused and roi_valid and not stale and
+                0 <= now - record["last_valid_head_at"] <= record["grace_s"] and
+                now <= intent.hit_at + self.scheduler.max_lateness)
 
     def process(self, frame, focused=True, roi_valid=True):
         wall_begin = time.perf_counter()
@@ -1276,6 +1288,14 @@ class LiveEngine:
                         tr.selected_key=keys[0]
                     if accepted and hold:
                         self.hold_spans[event_id] = ((tr.candidate.u_min,tr.candidate.u_max),intent.hit_at)
+                        self.hold_pending_coast[event_id] = {
+                            "generation": self.scheduler.arm_generation,
+                            "last_valid_head_at": tr.last_time,
+                            "grace_s": float(self.config.get("live", {}).get(
+                                "hold_tracker_v2", {}).get("dropout_grace_ms", 120)) / 1000,
+                            "span": (tr.candidate.u_min, tr.candidate.u_max),
+                            "appearance": tr.candidate.appearance,
+                        }
                     ordinary_tap = (tr.candidate.appearance in ('cyan_bar','yellow_bar') and
                                     tr.candidate.note_type=='tap' and not hold)
                     if (accepted and ordinary_tap and tr.status=='confirmed' and tr.history):
@@ -1319,6 +1339,27 @@ class LiveEngine:
             for event_id in list(self.scheduler.pending):
                 if event_id.startswith(f"{self.simple_core.session_id}:simple:"):
                     # The sole Tap intent owner is the Simple Core.
+                    continue
+                pending_intent = self.scheduler.pending.get(event_id)
+                if pending_intent is not None and pending_intent.note_type == "hold":
+                    if event_id in active_events:
+                        coast = self.hold_pending_coast.get(event_id)
+                        if coast is not None:
+                            coast["last_valid_head_at"] = finished
+                    elif self._hold_pending_still_valid(event_id, finished, state,
+                                                         focused, roi_valid, stale):
+                        active_events.add(event_id)
+                        self.scheduler._log("hold_pending_coast",
+                                            "confirmed_head_dropout_within_grace", pending_intent)
+                    else:
+                        coast = self.hold_pending_coast.get(event_id, {})
+                        self.hold_pending_coast.pop(event_id, None)
+                        remaining_ms = 1000 * (pending_intent.hit_at - finished)
+                        reason = (f"hold_head_dropout_expired;original_deadline={pending_intent.hit_at:.6f};"
+                                  f"remaining_ms={remaining_ms:.2f};"
+                                  f"last_valid_head_at={coast.get('last_valid_head_at', '')};"
+                                  f"association_reason=bounded_grace_exhausted")
+                        self.scheduler.withdraw(event_id, reason)
                     continue
                 coast = self.provisional_tap_losses.get(event_id)
                 if coast and event_id not in active_events:
@@ -1451,11 +1492,15 @@ class LiveEngine:
                 track_id: reason for track_id, reason in self.simple_decision_reasons.items()
                 if track_id in current_simple_ids}
             scheduler_started=time.perf_counter()
+            scheduler_poll_at = self.clock()
             self.scheduler.poll()
+            scheduler_poll_at = self.clock()
             measured["scheduler_update"]=time.perf_counter()-scheduler_started
             live_holds = set(self.scheduler.pending) | {intent.event_id for _,intent in self.scheduler.held.values()}
             self.hold_spans = {event_id:value for event_id,value in self.hold_spans.items()
                                if event_id in live_holds}
+            self.hold_pending_coast = {event_id:value for event_id,value in self.hold_pending_coast.items()
+                                       if event_id in live_holds}
             if self.simple_core is not None:
                 current_simple = {track.track_id: track for track in self.simple_tracks}
                 for transition in self.simple_core.drain_transitions():
@@ -1547,6 +1592,12 @@ class LiveEngine:
         self.process_times.append(finished)
         info = {"frame": frame.sequence, "capture_timestamp": frame.captured_at,
                 "acquired_timestamp": frame.acquired_at, "processing_timestamp": finished,
+                "process_begin": started, "process_end": finished,
+                "last_validated_capture": self.scheduler.context[0],
+                "scheduler_poll_at": scheduler_poll_at,
+                "inflight_frame_age_ms": max(0.0, started - frame.acquired_at) * 1000,
+                "inflight_processing_ms": (finished - started) * 1000,
+                "frame_age_expired": bool(stale),
                 "timestamp_source": frame.timestamp_source, "gameplay_state": state,
                 "focused": focused, "roi_status": "BLOCKED" if not roi_valid else "STALE" if stale else "ASPECT_FIT_16_9",
                 "frame_age_ms": age*1000, "latency_ms": latency*1000,
