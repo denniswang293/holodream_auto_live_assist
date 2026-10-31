@@ -4,8 +4,8 @@
   "tap_core": "simple_particle",
   "simple_intent_states": {
     "PENDING": 0,
-    "FIRED": 16,
-    "CANCELED": 2,
+    "FIRED": 70,
+    "CANCELED": 0,
     "EXPIRED": 0
   },
   "source_kind": "actual window capture",
@@ -680,6 +680,7 @@
       "capture_fps": 120,
       "keyboard_input_mode": "scan_code",
       "max_frame_age_ms": 60,
+      "stale_context_pause_ms": 200,
       "max_input_lateness_ms": 15,
       "input_advance_px": 30,
       "tap_deadline_amend": {
@@ -757,19 +758,19 @@
     "strategy": "exact_y_bounded_lru_v1",
     "lookups": {
       "lane_bounds_at_y": {
-        "hits": 60704,
+        "hits": 161137,
         "misses": 592,
         "maxsize": 2048,
         "currsize": 592
       },
       "outer_bounds_at_y": {
-        "hits": 36854,
-        "misses": 564,
+        "hits": 89262,
+        "misses": 570,
         "maxsize": 2048,
-        "currsize": 564
+        "currsize": 570
       },
       "row_lane_width": {
-        "hits": 46747,
+        "hits": 117379,
         "misses": 574,
         "maxsize": 2048,
         "currsize": 574
@@ -794,35 +795,33 @@
     "resolution_basis": "user_confirmed_any_covered_key",
     "recognition_accuracy": "UNVERIFIED"
   },
-  "processed_frames": 1251,
-  "acquired_frames": 1274,
-  "dropped_frames": 23,
+  "processed_frames": 2063,
+  "acquired_frames": 2215,
+  "dropped_frames": 152,
   "stale_frames": 0,
-  "events": 87,
-  "abstentions": 11,
+  "events": 577,
+  "abstentions": 44,
   "abstain_reasons": {
-    "selected_tap": 24,
-    "unstable_hit_time": 6,
-    "duplicate_hold_path": 1,
-    "tap_key_conflict": 1,
-    "past_hit_time": 3,
-    "stale_frame_or_focus_loss": 2
+    "selected_tap": 94,
+    "duplicate_hold_path": 20,
+    "unstable_hit_time": 18,
+    "past_hit_time": 6
   },
-  "sent_taps": 16,
-  "sent_holds": 5,
-  "sent_key_downs": 21,
+  "sent_taps": 70,
+  "sent_holds": 21,
+  "sent_key_downs": 91,
   "keyboard_backend": "Win32 SendInput",
   "keyboard_input_mode": "scan_code",
   "input_armed_at_start": false,
   "recycled_track_ids": [],
-  "capture_fps": 60.6790670880908,
-  "wall_processing_fps": 54.73728875452093,
-  "latency_p50_ms": 9.173400001600385,
-  "latency_p95_ms": 27.37100003287196,
+  "capture_fps": 60.4701344601405,
+  "wall_processing_fps": 55.40677834393621,
+  "latency_p50_ms": 14.114200021140277,
+  "latency_p95_ms": 31.55152997933328,
   "stop_reason": "global_escape_or_f12",
-  "wall_elapsed_s": 22.854621200007387,
+  "wall_elapsed_s": 37.23371149995364,
   "recording_async": true,
-  "recording_encoded_frames": 1251,
+  "recording_encoded_frames": 2063,
   "recording_dropped_frames": 0,
   "recording_clean_source": true,
   "recording_nominal_fps": 60,

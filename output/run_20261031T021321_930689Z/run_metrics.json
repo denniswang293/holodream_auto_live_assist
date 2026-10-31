@@ -1,0 +1,44 @@
+{
+  "metric_scope": "diagnostic_funnel; not game accuracy",
+  "tap_lifecycle_transitions": {
+    "NOT_SCHEDULED": 1587,
+    "DETECTED": 509,
+    "CONFIRMED": 96,
+    "PENDING": 70,
+    "SCHEDULED": 70,
+    "FIRED": 70
+  },
+  "input_action_counts": {
+    "arm_requested": 1,
+    "armed": 1,
+    "scheduled": 102,
+    "amended": 546,
+    "key_down": 91,
+    "key_up": 91,
+    "committed_near_judgment": 23,
+    "commit_retained": 17,
+    "hold_end": 18,
+    "track_gate_rejected": 9,
+    "canceled": 10,
+    "decision_wait": 2,
+    "decision_resumed": 2,
+    "abstain": 1,
+    "input_not_ready": 1,
+    "disarmed": 1
+  },
+  "simple_intent_terminal_states": {
+    "PENDING": 0,
+    "FIRED": 70,
+    "CANCELED": 0,
+    "EXPIRED": 0
+  },
+  "processed_frames": 2063,
+  "acquired_frames": 2215,
+  "capture_fps": 60.4701344601405,
+  "processing_fps": 55.40677834393621,
+  "latency_p50_ms": 14.114200021140277,
+  "latency_p95_ms": 31.55152997933328,
+  "dropped_frames": 152,
+  "stale_frames": 0,
+  "accuracy": "UNVERIFIED"
+}
