@@ -18,6 +18,7 @@ from .calibration import load_calibration, geometry_hash
 from .live_capture import AutoCapture, CaptureWorker, Region, normalization_transform
 from .live_engine import LiveEngine, draw_live_overlay
 from .live_input import TapScheduler
+from .live_identity_trace import LiveIdentityTraceWriter
 from .windows_runtime import DEFAULT_WINDOW_TITLE
 
 
@@ -147,6 +148,9 @@ def run(args):
     video_fps = live_cfg.get("capture_fps", 120)
     focus_check, modifier_check = target.focused, modifiers_down
     out = new_run_directory(args.out)
+    identity_cfg = dict(config.get("diagnostics", {}).get("live_identity_trace", {}) or {})
+    identity_trace = (LiveIdentityTraceWriter(out, out.name, identity_cfg)
+                      if identity_cfg.get("enabled", False) else None)
     print(f"Assist | geometry {geometry.status} | predictor {config['predictor']['mode']} | output: {out}", flush=True)
     print("Ctrl+Shift+Alt+Q toggles assist only; Esc/F12 stops. Input starts OFF.", flush=True)
     print(f"Actual physical capture rectangle: {region.bounds} (entire game display)",flush=True)
@@ -162,6 +166,8 @@ def run(args):
         input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
         for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log, intent_log, input_log):
             stack.callback(log.close)
+        if identity_trace is not None:
+            stack.callback(identity_trace.close)
         if args.record_overlay:
             from .live_async import EncoderWorker, VIDEO_INDEX_FIELDS
             from .live_profiling import StageProfiler
@@ -196,7 +202,8 @@ def run(args):
                                  max_uncertainty=live_cfg.get("speculative_taps",{}).get("max_uncertainty_s",.04)
                                      if live_cfg.get("speculative_taps",{}).get("enabled") else .04)
         stack.callback(scheduler.close)
-        engine = LiveEngine(config, geometry, scheduler, clock)
+        engine = LiveEngine(config, geometry, scheduler, clock,
+                            identity_trace=identity_trace)
         engine_holder["engine"]=engine
         print(f"Particle-based Tap assist + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
         from .windows_runtime import GlobalControls

@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "status": "NOT_AVAILABLE_FOR_EXISTING_RUN",
+  "reason": "run_20261031T181722_597143Z was recorded before V7.5.7 live_identity_trace was enabled",
+  "schema_ready": true,
+  "dropped_diagnostic_rows": null,
+  "trace_coverage_frames": 0
+}

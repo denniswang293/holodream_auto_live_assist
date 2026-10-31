@@ -1,0 +1,7 @@
+dataset,count,min_frame,max_frame,source
+video_frames,1443,0,1442,C:\Users\USER\Desktop\holodream\output\assist\run_20261031T181722_597143Z\live_source.mp4
+video_index_rows,1443,0,1442,C:\Users\USER\Desktop\holodream\output\assist\run_20261031T181722_597143Z\live_video_index.csv
+replay_trace_covered_frames,UNKNOWN,205,1328,raw trace missing; range from V7.5.6 reconciliation
+tracker_state_rows,UNKNOWN,205,1328,raw trace missing
+unique_replay_tracks,UNKNOWN,205,1328,raw trace missing
+live_lifecycle_uids,248,205,1411,C:\Users\USER\Desktop\holodream\output\assist\run_20261031T181722_597143Z\live_events.csv
