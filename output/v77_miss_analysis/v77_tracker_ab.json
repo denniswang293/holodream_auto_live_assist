@@ -1,0 +1,6 @@
+{
+  "status": "NO_ACTIVE_PATCH",
+  "reason": "No tracker threshold or association change; replay evidence only",
+  "active_path_changed": false,
+  "acceptance": "UNKNOWN"
+}

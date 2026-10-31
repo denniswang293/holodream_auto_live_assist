@@ -1,0 +1,31 @@
+{
+  "status": "NO_ACTIVE_PATCH",
+  "baseline": {
+    "replay_frames": 1048,
+    "candidate_final_rows": 8460,
+    "appearance": {
+      "cyan_bar": 5446,
+      "pink_candidate": 147,
+      "neutral_candidate": 508,
+      "green_candidate": 1439,
+      "yellow_bar": 920
+    },
+    "rejection_reasons": {
+      "edge_geometry": 2569,
+      "nested_suppression": 327,
+      "physical_roi": 486,
+      "edge_shape": 962,
+      "shape": 78,
+      "fill": 16
+    }
+  },
+  "experimental_neutral_tap": {
+    "enabled": false,
+    "reason": "No human-confirmed true gray note gate evidence yet"
+  },
+  "experimental_overlap_fragment": {
+    "enabled": false,
+    "reason": "No physical pairing truth yet"
+  },
+  "acceptance": "NOT_RUN; requires reviewed physical_note_review.csv"
+}

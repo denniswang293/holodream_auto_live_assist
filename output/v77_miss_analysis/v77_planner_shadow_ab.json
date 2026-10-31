@@ -1,0 +1,6 @@
+{
+  "status": "NO_ACTIVE_PATCH",
+  "reason": "Legacy remains active; shadow remains diagnostic-only",
+  "active_path_changed": false,
+  "acceptance": "UNKNOWN"
+}

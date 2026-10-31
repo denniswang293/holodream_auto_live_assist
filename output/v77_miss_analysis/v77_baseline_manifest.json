@@ -1,0 +1,187 @@
+{
+  "plan": "V7.7_NOTE_RECOGNITION_AND_MISS_FIX_PLAN",
+  "baseline_commit": "29d2791d059b5f43793bd1e7699cb02ecf6d97e0",
+  "run": "C:\\Users\\USER\\Desktop\\holodream\\output\\assist\\run_20261031T194457_212618Z",
+  "source_video": "C:\\Users\\USER\\Desktop\\holodream\\output\\assist\\run_20261031T194457_212618Z\\live_source.mp4",
+  "sha256": {
+    "live_video_index.csv": "1d803cde17de9d5331d8ca0a84560648beb9fb7f236a594224c411b3abd5ce89",
+    "live_frames.csv": "d663e09b2a96ce05f4c82921b3773bc95fae172015b7cbe51b449ada7d3e5528",
+    "live_events.csv": "36f2757d12a37dfbd446398472ce1d4e3eba096d77db873e6668e93ef6abc765",
+    "tap_intents.csv": "e9e21a09c0249c747aad1e1b8a993b8dfa71001f54896cc176323e383e06e839",
+    "tap_decisions.csv": "9c8fbc3fe51fb45fa6ec4df37153f15e2a29298300ee508e5ad2388ffd2ceb3b",
+    "tap_eta_comparison.csv": "a6e9cd5f88aa41bc684bbb4012796592814014944276f59f313e3bb900ac2ba6",
+    "tap_planner_shadow.csv": "e60103d6b1069c6908053a8c0867d32fc011dd070db3b62a1603447d5bec3367",
+    "live_key_actions.csv": "9e17b04bd70084089467f45914b574d1bec0f82eb7a23318eebb2a8d862df07a",
+    "live_run.json": "53231ba26feb90841a87dd8ed1f47dedb2f4b813496f1333f0063fa17d4217b0",
+    "run_metrics.json": "7cb9d2ab697291eb4e933f78734f209ce2dfc1601e775c633565a864fba169a3",
+    "live_source.mp4": "6d53fc35b9f6252d7b1747bdc922d56d0122281ebf6b927ffcf2ba4621e77c21"
+  },
+  "config": {
+    "reference_resolution": [
+      720,
+      404
+    ],
+    "key_map": [
+      "S",
+      "D",
+      "F",
+      "J",
+      "K",
+      "L"
+    ],
+    "playfield": {
+      "top_y": 28,
+      "top_left_x": 346,
+      "top_right_x": 374,
+      "hit_y": 352,
+      "bottom_left_x": 36,
+      "bottom_right_x": 684
+    },
+    "capture": {
+      "fps_target": 120,
+      "crop_game_window": true
+    },
+    "timing": {
+      "offset_ms": 0,
+      "tap_duration_ms": 25
+    },
+    "control": {
+      "dry_run": true,
+      "flick_mode": "unverified",
+      "hold_mode": "unverified"
+    },
+    "diagnostics": {
+      "live_identity_trace": {
+        "enabled": false,
+        "max_queue_rows": 4096,
+        "max_candidate_rows": 2000,
+        "max_pair_rows": 10000,
+        "sample_every": 1,
+        "case_frames": []
+      }
+    },
+    "detector": {
+      "edge_threshold": 65,
+      "min_area": 55,
+      "min_aspect": 2.0,
+      "min_score": 0.42,
+      "min_lane_width": 0.7,
+      "min_colored_fraction": 0.12,
+      "lane_min_overlap_fraction": 0.15,
+      "association_diagnostics": {
+        "enabled": false,
+        "max_candidate_rows": 2000,
+        "max_pair_rows": 10000
+      },
+      "pink_tap": {
+        "enabled": true,
+        "min_mask_fraction": 0.2,
+        "max_core_trim_px": 8
+      }
+    },
+    "gameplay": {
+      "confirm_frames": 3,
+      "hsv_lower": [
+        78,
+        65,
+        170
+      ],
+      "hsv_upper": [
+        104,
+        255,
+        255
+      ],
+      "min_cyan_fraction": 0.15,
+      "hud_regions": {
+        "score": [
+          80,
+          10,
+          280,
+          38
+        ],
+        "life": [
+          550,
+          10,
+          655,
+          40
+        ],
+        "pause": [
+          675,
+          10,
+          710,
+          50
+        ]
+      }
+    },
+    "tracker": {
+      "confirm_observations": 5,
+      "max_missed_frames": 8,
+      "max_gap_s": 0.16,
+      "max_u_step": 0.09,
+      "backward_jitter_px": 3.5,
+      "stationary_after_s": 0.2,
+      "stationary_span_px": 5,
+      "pink_min_displacement_px": 5,
+      "max_hit_drift_s": 0.08,
+      "experimental_local_reassociation": {
+        "enabled": false,
+        "offline_only": true
+      }
+    },
+    "predictor": {
+      "mode": "particle",
+      "window": 11,
+      "min_observations": 5,
+      "min_duration_s": 0.05,
+      "min_velocity": 20,
+      "max_velocity": 1800,
+      "min_displacement_px": 5,
+      "jitter_px": 3.5,
+      "lookahead_s": 1.5,
+      "max_uncertainty_s": 0.04,
+      "particle": {
+        "count": 128,
+        "ess_resample_fraction": 0.5,
+        "min_real_observations": 4,
+        "max_coast_ms": 90,
+        "max_posterior_width_ms": 40,
+        "min_valid_crossing_mass": 0.95,
+        "max_prediction_horizon_ms": 1500,
+        "use_acceleration": false,
+        "deterministic_seed": 20261030,
+        "measurement_model": "student_t",
+        "position_process_noise_px_sqrt_s": 1.8,
+        "velocity_process_noise_px_s_sqrt_s": 8.0,
+        "lane_process_noise_sqrt_s": 0.0015,
+        "position_measurement_noise_px": 3.0,
+        "lane_measurement_noise": 0.012,
+        "observation_gate_px": 32.0,
+        "min_velocity": 20,
+        "max_velocity": 1800
+      }
+    },
+    "events": {
+      "max_eta_s": 0.45,
+      "min_y": 190,
+      "max_hit_drift_s": 0.06
+    }
+  },
+  "geometry": {
+    "path": "config/geometry_live_assist.json",
+    "status": "pending_calibration"
+  },
+  "video_index": {
+    "rows": 1048,
+    "timestamp_rows": 1048,
+    "first_capture_timestamp": 237.4489457,
+    "last_capture_timestamp": 257.0817402,
+    "timestamp_coverage": 1.0,
+    "mapping": "video_frame -> capture_timestamp from live_video_index.csv"
+  },
+  "limitations": [
+    "No game judgment truth is recorded.",
+    "Physical note IDs are not derivable from lifecycle UID alone.",
+    "No geometry validation was performed; pending_calibration retained.",
+    "Dropped frames are background context only; no skip policy changed."
+  ]
+}

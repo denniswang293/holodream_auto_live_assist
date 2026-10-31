@@ -35,6 +35,21 @@ Tap pipeline simplification 目前只輸出 `motion_reliable`、`timing_reliable
 
 診斷佇列滿時只丟 telemetry row，不丟影格、不停止送鍵；`dropped_diagnostic_rows` 必須在 health 檔中檢查。`source_video_frame` 在錄影索引尚未完成時可能為空，應以 `source_frame + capture_timestamp` 事後 join，不能以 frame/60 代替原始時間。
 
+### V7.7 replay / miss analysis
+
+V7.7 的分析工具只做離線 replay，不呼叫 Scheduler 或 Actuator：
+
+```powershell
+py tools\run_v77_analysis.py
+```
+
+它使用 `output/assist/run_20261031T194457_212618Z/live_video_index.csv` 的
+`capture_timestamp` 對齊同一 run 的 `live_source.mp4`，輸出到
+`output/v77_miss_analysis/`。工具會產生候選、association、track trace、灰色／重疊／粉色案例、
+接觸圖與根因報告；不能把候選數、`FIRED` 或 `key_down` 當成遊戲命中率。幾何仍為
+`pending_calibration` 時不會自動改座標；未完成人工 physical-note review 前，不會啟用任何
+neutral/overlap 實驗修補。
+
 ## 輸出與資料
 
 每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。

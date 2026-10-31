@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "mode": "offline_replay",
+  "run_id": "run_20261031T194457_212618Z",
+  "source_video_frames": 1048,
+  "trace_coverage_frames": 1048,
+  "candidate_rows": 49846,
+  "pair_rows": 40299,
+  "attempt_rows": 1356,
+  "assignment_rows": 4213,
+  "track_rows": 5589,
+  "dropped_diagnostic_rows": 0,
+  "timestamp_source": "live_video_index.capture_timestamp",
+  "nominal_video_fps": 60.0,
+  "note": "FPS is not used to derive event timestamps."
+}
