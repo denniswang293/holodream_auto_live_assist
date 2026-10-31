@@ -166,6 +166,24 @@ def test_offer_result_has_fresh_structured_rejection_reason():
     scheduler.close()
 
 
+def test_scheduler_uses_fresh_inflight_capture_before_disarming_hold():
+    clock, actuator, rows, scheduler = armed_scheduler()
+    intent = ActionIntent("hold", ("F",), 10.05, .01, "hold", .5)
+    scheduler.held["F"] = (10.50, intent)
+    clock.now = 10.03
+    scheduler.begin_decision(10.03)
+    # The published context is still at 10.00, but the in-flight frame was
+    # validated at 10.03 and remains fresh at this poll.
+    clock.now = 10.061
+    scheduler.poll()
+    assert scheduler.armed is True
+    assert "stale_context_timeout" not in [row.get("reason") for row in rows]
+    scheduler.update_context(10.03, "PLAYING", True, True)
+    scheduler.disarm("test_cleanup")
+    assert actuator.calls[-1] == ("up", "F")
+    scheduler.close()
+
+
 def test_planner_emits_per_gate_trace_and_candidate_key_conflicts():
     _, _, _, scheduler = armed_scheduler()
     planner = TapPlanner({"max_eta_s": .45}, min_y=190)
