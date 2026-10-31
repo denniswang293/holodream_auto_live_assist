@@ -1,0 +1,11 @@
+{
+  "trace_enabled_default": false,
+  "detector_signature_diff_frames": 0,
+  "tracker_signature_diff_frames": 0,
+  "decision_changes": "UNKNOWN (replay has no live scheduler)",
+  "candidate_order_unchanged": true,
+  "tracker_state_unchanged": true,
+  "legacy_input_path_changed": false,
+  "shadow_active": false,
+  "truth_status": "UNKNOWN"
+}
