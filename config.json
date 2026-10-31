@@ -14,7 +14,7 @@
   "control": {"dry_run": true, "flick_mode": "unverified", "hold_mode": "unverified"},
   "diagnostics": {
     "live_identity_trace": {
-      "enabled": false,
+      "enabled": true,
       "max_queue_rows": 4096,
       "max_candidate_rows": 2000,
       "max_pair_rows": 10000,

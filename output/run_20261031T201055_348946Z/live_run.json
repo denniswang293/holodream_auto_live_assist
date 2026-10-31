@@ -4,9 +4,9 @@
   "tap_core": "simple_particle",
   "simple_intent_states": {
     "PENDING": 0,
-    "FIRED": 58,
-    "CANCELED": 2,
-    "EXPIRED": 1
+    "FIRED": 50,
+    "CANCELED": 1,
+    "EXPIRED": 0
   },
   "source_kind": "actual window capture",
   "window_title": "hololive-Dreams",
@@ -588,7 +588,7 @@
     },
     "diagnostics": {
       "live_identity_trace": {
-        "enabled": false,
+        "enabled": true,
         "max_queue_rows": 4096,
         "max_candidate_rows": 2000,
         "max_pair_rows": 10000,
@@ -795,19 +795,19 @@
     "strategy": "exact_y_bounded_lru_v1",
     "lookups": {
       "lane_bounds_at_y": {
-        "hits": 146695,
+        "hits": 98361,
         "misses": 592,
         "maxsize": 2048,
         "currsize": 592
       },
       "outer_bounds_at_y": {
-        "hits": 72200,
+        "hits": 49227,
         "misses": 570,
         "maxsize": 2048,
         "currsize": 570
       },
       "row_lane_width": {
-        "hits": 103317,
+        "hits": 72413,
         "misses": 574,
         "maxsize": 2048,
         "currsize": 574
@@ -832,36 +832,34 @@
     "resolution_basis": "user_confirmed_any_covered_key",
     "recognition_accuracy": "UNVERIFIED"
   },
-  "processed_frames": 1416,
-  "acquired_frames": 1561,
-  "dropped_frames": 145,
+  "processed_frames": 1202,
+  "acquired_frames": 1547,
+  "dropped_frames": 345,
   "stale_frames": 0,
-  "events": 284,
-  "abstentions": 32,
+  "events": 232,
+  "abstentions": 25,
   "abstain_reasons": {
-    "selected_tap": 76,
-    "unstable_hit_time": 11,
-    "past_hit_time": 8,
-    "duplicate_hold_path": 11,
-    "tap_key_conflict": 2,
-    "late_or_key_already_held": 1,
-    "game_state_or_focus_or_roi_loss": 2
+    "selected_tap": 63,
+    "duplicate_hold_path": 8,
+    "unstable_hit_time": 16,
+    "past_hit_time": 1,
+    "game_state_or_focus_or_roi_loss": 1
   },
-  "sent_taps": 58,
-  "sent_holds": 18,
-  "sent_key_downs": 76,
+  "sent_taps": 50,
+  "sent_holds": 13,
+  "sent_key_downs": 63,
   "keyboard_backend": "Win32 SendInput",
   "keyboard_input_mode": "scan_code",
   "input_armed_at_start": false,
   "recycled_track_ids": [],
-  "capture_fps": 64.26230598859065,
-  "wall_processing_fps": 57.209839059632394,
-  "latency_p50_ms": 22.98350000000937,
-  "latency_p95_ms": 31.485925000026782,
+  "capture_fps": 64.30539420665953,
+  "wall_processing_fps": 49.078624965715726,
+  "latency_p50_ms": 21.13085000007686,
+  "latency_p95_ms": 32.71472000020594,
   "stop_reason": "global_escape_or_f12",
-  "wall_elapsed_s": 24.750987299999906,
+  "wall_elapsed_s": 24.49131370000009,
   "recording_async": true,
-  "recording_encoded_frames": 1416,
+  "recording_encoded_frames": 1202,
   "recording_dropped_frames": 0,
   "recording_clean_source": true,
   "recording_nominal_fps": 60,
