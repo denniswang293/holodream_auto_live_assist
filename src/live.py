@@ -48,6 +48,16 @@ DECISION_FIELDS = ["timestamp", "note_uid", "track_id", "lifecycle_state", "reas
                    "last_safe_schedule_at", "motion_reliable", "timing_reliable",
                    "timing_quality", "linear_eta_s", "linear_hit_at", "linear_quality",
                    "gates_json", "key_conflicts_json"]
+SHADOW_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "track_id", "mode",
+                 "status", "reason", "key", "hit_at", "timing_quality", "legacy_result",
+                 "legacy_reason", "legacy_key", "legacy_hit_at", "input_sent"]
+ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "track_id",
+              "last_observation_timestamp", "pf_eta_s", "pf_hit_at", "pf_uncertainty_s",
+              "pf_eta_p10", "pf_eta_p50", "pf_eta_p90", "pf_crossing_mass", "linear_eta_s",
+              "linear_hit_at", "linear_velocity_px_s", "linear_quality", "prediction_status",
+              "linear_reason", "stale_observation", "legacy_planner_result", "legacy_planner_reason",
+              "shadow_planner_result", "shadow_planner_reason", "scheduler_result",
+              "scheduler_reason", "appearance"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:
@@ -146,9 +156,11 @@ def run(args):
         frame_log = CsvLog(out/"live_frames.csv", FRAME_FIELDS)
         key_log = CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
         decision_log = CsvLog(out/"tap_decisions.csv", DECISION_FIELDS)
+        shadow_log = CsvLog(out/"tap_planner_shadow.csv", SHADOW_FIELDS)
+        eta_log = CsvLog(out/"tap_eta_comparison.csv", ETA_FIELDS)
         intent_log = CsvLog(out/"tap_intents.csv", INTENT_FIELDS)
         input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
-        for log in (event_log, frame_log, key_log, decision_log, intent_log, input_log):
+        for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log, intent_log, input_log):
             stack.callback(log.close)
         if args.record_overlay:
             from .live_async import EncoderWorker, VIDEO_INDEX_FIELDS
@@ -246,6 +258,10 @@ def run(args):
                         reasons[event["abstain_reason"] or "selected_tap"] += 1
                 for decision in engine.simple_core.drain_decisions():
                     decision_log.write(decision)
+                for row in engine.simple_core.drain_shadow_rows():
+                    shadow_log.write(row)
+                for row in engine.simple_core.drain_eta_rows():
+                    eta_log.write(row)
                 image = draw_live_overlay(work, tracks, info, engine, dropped)
                 info["dropped_total"] = dropped
                 info["video_frame"] = ""

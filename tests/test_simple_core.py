@@ -13,6 +13,7 @@ from src.detector import Candidate
 from src.live_input import ActionIntent, MockActuator, TapScheduler, OfferResult
 from src.predictor import Prediction
 from src.simple_tracker import SimpleTracker
+from src.simple_core import SimpleAssistCore
 from src.tap_intent import TapIntentManager
 from src.tap_planner import TapPlanner, TapProposal
 
@@ -169,6 +170,7 @@ def test_planner_emits_per_gate_trace_and_candidate_key_conflicts():
     _, _, _, scheduler = armed_scheduler()
     planner = TapPlanner({"max_eta_s": .45}, min_y=190)
     track = add_particle_evidence(make_ready_track())
+    track.history.insert(0, (9.8, 220, .4))
     track.history[-1] = (10.0, 280, .4)
     scheduler.recent.append(("F", 10.20))
     proposals, reasons = planner.plan([track], 10., {"F"}, scheduler)
@@ -178,6 +180,39 @@ def test_planner_emits_per_gate_trace_and_candidate_key_conflicts():
     assert all(value for key, value in trace.gates.items() if key not in {"motion_reliable"})
     assert trace.final_reason == "tap_key_conflict"
     assert trace.key_conflicts["F"] == "reserved_same_key_time"
+    scheduler.close()
+
+
+def test_shadow_planner_is_independent_and_never_sends_input():
+    clock, actuator, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    track = add_particle_evidence(make_ready_track())
+    track.history.insert(0, (9.8, 220, .4))
+    proposals, _ = planner.plan([track], 10., {"F"}, scheduler)
+    decisions = planner.simplified_plan([track], 10., {"F"}, scheduler)
+    assert proposals[1].key == "F"
+    assert decisions[1].status == "schedule"
+    assert decisions[1].key == "F"
+    assert actuator.calls == []
+    scheduler.close()
+
+
+def test_simple_core_emits_per_frame_eta_and_shadow_rows():
+    _, actuator, _, scheduler = armed_scheduler()
+    core = SimpleAssistCore(session_id="session", tracker_cfg={},
+        particle_cfg={"max_uncertainty_s": .04}, hit_y=310.5,
+        event_cfg={"max_eta_s": .45}, min_y=190, known_keys={"F"},
+        timing_cfg={"simplified_tap_planner": {"enabled": False, "mode": "shadow"},
+                    "linear_timing": {"enabled": True}})
+    track = add_particle_evidence(make_ready_track())
+    core.plan_tracks([track], 10.0, 10.0, scheduler, enabled=True)
+    eta_rows = core.drain_eta_rows()
+    shadow_rows = core.drain_shadow_rows()
+    assert len(eta_rows) == len(shadow_rows) == 1
+    assert eta_rows[0]["note_uid"] == "session:simple:1"
+    assert "last_observation_timestamp" in eta_rows[0]
+    assert shadow_rows[0]["mode"] == "shadow"
+    assert actuator.calls == []
     scheduler.close()
 
 
