@@ -26,6 +26,8 @@ class Candidate:
     raw_mask: np.ndarray | None = dataclass_field(default=None, repr=False)
     suspected_overlap: bool = False
     hold_path_px: int = 0
+    diagnostic_id: str = ""
+    parent_proposal_id: str = ""
 
 
 def _playfield_mask(shape: tuple[int, int], playfield: Playfield,
@@ -134,6 +136,25 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
     pink_enabled = bool(pink_cfg.get("enabled", False))
     pink_min_fraction = float(pink_cfg.get("min_mask_fraction", .20))
     pink_trim_px = float(pink_cfg.get("max_core_trim_px", 8.0))
+    trace_cfg = dict(cfg.get("association_diagnostics", {}) or {})
+    trace_enabled = bool(trace_cfg.get("enabled", False))
+    trace_rows = diagnostics.setdefault("candidate_trace", []) if trace_enabled and diagnostics is not None else None
+    trace_limit = int(trace_cfg.get("max_candidate_rows", 2000))
+    trace_dropped = 0
+    def trace_add(row):
+        nonlocal trace_dropped
+        if trace_rows is None:
+            return
+        if len(trace_rows) >= trace_limit:
+            trace_dropped += 1
+            return
+        trace_rows.append(row)
+    def trace_base(stage, candidate_id, box, **extra):
+        x,y,bw,bh = box
+        return {"frame": frame_index, "stage": stage, "candidate_id": candidate_id,
+                "parent_proposal_id": extra.pop("parent_proposal_id", ""),
+                "raw_bbox": box, "core_bbox": extra.pop("core_bbox", box),
+                "x": x, "y": y, "w": bw, "h": bh, **extra}
     def rejected_geometry(box,reason):
         if diagnostics is not None:
             diagnostics.setdefault("rejections",[]).append({"bbox":box,"reason":reason})
@@ -197,22 +218,36 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
                 "bbox": box, "stage": stage, "reason": reason,
                 "neutral_fraction": neutral_fraction,
             })
-    for contour in contours:
+    for contour_index, contour in enumerate(contours):
         box = cv2.boundingRect(contour)
+        raw_id = f"{frame_index}:raw:{contour_index}"
         x,y,bw,bh = box
         row = playfield.lane_bounds_at_y((y+bh/2)/sy)
         if row is None:
+            trace_add(trace_base("raw_contour", raw_id, box, passed=False,
+                                 reject_reason="vertical_geometry"))
             record_gray(box, "geometry", "outside_vertical_domain")
             rejected_geometry(box,"outside_vertical_domain")
             continue
         left,right = row[0],row[-1]
         if y/sy < playfield.top_y+8*rh/404 or bw/sx > (right-left)*.48:
+            trace_add(trace_base("raw_contour", raw_id, box, passed=False,
+                                 reject_reason="edge_geometry"))
             continue
         if bw/sx < playfield.row_lane_width((y+bh/2)/sy)*cfg.get("min_lane_width",.7) or bh/sy > 20*rh/404:
+            trace_add(trace_base("raw_contour", raw_id, box, passed=False,
+                                 reject_reason="edge_shape"))
             record_gray(box, "edge_shape", "insufficient_lane_width_or_height")
             continue
+        trace_add(trace_base("raw_contour", raw_id, box, passed=True, reject_reason=""))
         edges.append(box)
     proposals = _merge_body_edges(edges,playfield,sx,sy,len(key_map))
+    proposal_ids = []
+    for proposal_index, (proposal_box, edge_count) in enumerate(proposals):
+        proposal_id = f"{frame_index}:proposal:{proposal_index}"
+        proposal_ids.append(proposal_id)
+        trace_add(trace_base("merge_proposal", proposal_id, proposal_box,
+                             passed=True, edge_count=edge_count, reject_reason=""))
     mark("contours_merge", started)
     started = section("path_masks_contours")
     path_masks = {'green_candidate':masks['green_candidate'],
@@ -224,7 +259,8 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
     mark("path_masks_contours", started)
     started = section("candidate_classification")
     candidates = []
-    for box,edge_count in proposals:
+    for proposal_index, (box,edge_count) in enumerate(proposals):
+        proposal_id = proposal_ids[proposal_index]
         body_box = box
         x,y,bw,bh = box
         cy = (y+bh/2)/sy
@@ -244,6 +280,9 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
                         diagnostics["pink_core_trimmed"] = diagnostics.get("pink_core_trimmed", 0) + 1
         interval = playfield.safe_bbox_interval(x/sx,(x+bw)/sx,cy)
         if interval is None:
+            trace_add(trace_base("candidate", proposal_id, body_box, passed=False,
+                                 parent_proposal_id=proposal_id, reject_reason="physical_roi",
+                                 core_bbox=box, edge_count=edge_count))
             record_pink_rejection(body_box, "geometry_roi", core_box=box)
             record_gray(box, "geometry", "outside_physical_roi_or_projected_key_span")
             rejected_geometry(box,"outside_physical_roi_or_projected_key_span")
@@ -251,6 +290,9 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         left,right = playfield.bounds(cy)
         min_area = cfg.get("min_area",55)*max(.4,(right-left)/(playfield.bottom_right_x-playfield.bottom_left_x))*sx*sy
         if bw*bh < min_area or bw/max(bh,1) < cfg.get("min_aspect",2.0):
+            trace_add(trace_base("candidate", proposal_id, body_box, passed=False,
+                                 parent_proposal_id=proposal_id, reject_reason="shape",
+                                 core_bbox=box, edge_count=edge_count))
             record_pink_rejection(body_box, "shape", core_box=box)
             record_gray(box, "shape", "min_area_or_aspect")
             continue
@@ -263,17 +305,26 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             raw |= masks["neutral_candidate"][y:y+bh,x:x+bw]
         fill = cv2.countNonZero(raw)/(bw*bh)
         if fill < .10:
+            trace_add(trace_base("candidate", proposal_id, body_box, passed=False,
+                                 parent_proposal_id=proposal_id, reject_reason="fill",
+                                 core_bbox=box, edge_count=edge_count))
             record_pink_rejection(body_box, "fill", core_box=box)
             record_gray(box, "fill", "insufficient_body_fill")
             continue
         score = min(.96,.28+min(fill,1)*.30+min(1,bw/max(bh,1)/5)*.25+min(edge_count,2)*.05)
         if score < cfg.get("min_score",.42):
+            trace_add(trace_base("candidate", proposal_id, body_box, passed=False,
+                                 parent_proposal_id=proposal_id, reject_reason="score",
+                                 core_bbox=box, edge_count=edge_count))
             record_pink_rejection(body_box, "score", core_box=box)
             record_gray(box, "score", "below_min_score")
             continue
         u0,u1 = interval
         lanes = playfield.safe_candidate_lanes(x/sx,(x+bw)/sx,cy,cfg.get("lane_min_overlap_fraction",.15))
         if not lanes:
+            trace_add(trace_base("candidate", proposal_id, body_box, passed=False,
+                                 parent_proposal_id=proposal_id, reject_reason="lane",
+                                 core_bbox=box, edge_count=edge_count))
             record_pink_rejection(body_box, "lane", core_box=box)
             record_gray(box, "lane", "no_projected_lane")
             continue
@@ -295,8 +346,17 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
                             mask=path_masks[appearance])
                  if appearance in path_masks and path_bbox is not None and
                  cy>=250*rh/404 else 0)
-        candidates.append(Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
-                                    body_box,path_bbox,raw,False,depth))
+        candidate = Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
+                              body_box,path_bbox,raw,False,depth,
+                              diagnostic_id=proposal_id, parent_proposal_id=proposal_id)
+        candidates.append(candidate)
+        trace_add(trace_base("candidate", proposal_id, body_box, passed=True,
+                             parent_proposal_id=proposal_id, core_bbox=box,
+                             appearance=appearance, note_type=note_type,
+                             candidate_keys="|".join(candidate.candidate_keys),
+                             u_min=u0, u_max=u1, edge_count=edge_count,
+                             path_bbox=path_bbox, suspected_overlap=False,
+                             reject_reason=""))
     # An inner highlight can produce another long Sobel edge inside a complete
     # colored head. IoU alone misses this containment when the fragment is thin.
     heads = [c for c in candidates if c.note_type=='tap']
@@ -316,14 +376,35 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         if nested:
             if diagnostics is not None:
                 diagnostics['nested_fragments_suppressed'] = diagnostics.get('nested_fragments_suppressed',0)+1
+            trace_add(trace_base("postprocess", c.diagnostic_id or "", c.bbox,
+                                 passed=False, parent_proposal_id=c.parent_proposal_id,
+                                 reject_reason="nested_suppression", appearance=c.appearance,
+                                 note_type=c.note_type))
         else:
             bodies.append(c)
     kept = []
     for c in sorted(bodies,key=lambda c:c.score,reverse=True):
         if not any(_iou(c.bbox,k.bbox)>.65 for k in kept):
             kept.append(c)
+        else:
+            trace_add(trace_base("postprocess", c.diagnostic_id or "", c.bbox,
+                                 passed=False, parent_proposal_id=c.parent_proposal_id,
+                                 reject_reason="duplicate_nms", appearance=c.appearance,
+                                 note_type=c.note_type))
     for i,c in enumerate(kept):
+        c.diagnostic_id = f"{frame_index}:candidate:{i}"
         c.suspected_overlap = any(i!=j and _iou(c.bbox,other.bbox)>.12 for j,other in enumerate(kept))
+        if trace_rows is not None:
+            trace_add(trace_base("candidate_final", c.diagnostic_id, c.bbox,
+                                 passed=True, parent_proposal_id=c.parent_proposal_id,
+                                 core_bbox=c.bbox, appearance=c.appearance,
+                                 note_type=c.note_type,
+                                 candidate_keys="|".join(c.candidate_keys),
+                                 u_min=c.u_min, u_max=c.u_max,
+                                 suspected_overlap=c.suspected_overlap,
+                                 reject_reason=""))
+    if trace_rows is not None:
+        diagnostics["candidate_trace_dropped_rows"] = trace_dropped
     mark("candidate_classification", started)
     if profile is not None and profile_started is not None:
         profile.setdefault("detector_total", []).append((time.perf_counter()-profile_started)*1000)

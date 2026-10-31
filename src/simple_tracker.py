@@ -131,40 +131,76 @@ class SimpleTracker:
         allowed = {"cyan_bar", "yellow_bar", "pink_candidate", "neutral_candidate"}
         return a.appearance in allowed and b.appearance in allowed
 
-    def _pair_cost(self, track: SimpleTrack, candidate: Candidate, timestamp: float):
-        dt = timestamp - track.last_time
-        if not 0 < dt <= self.max_gap_s:
+    def _pair_cost(self, track: SimpleTrack, candidate: Candidate, timestamp: float,
+                   audit: dict | None = None):
+        def reject(reason):
+            if audit is not None:
+                audit["accepted"] = False
+                audit["reject_reason"] = reason
+                audit["total_cost"] = "INF"
             return None
+        dt = timestamp - track.last_time
+        if audit is not None:
+            old_y, old_u = self._center(track.candidate)
+            audit.update({"track_id": track.track_id,
+                          "candidate_id": getattr(candidate, "diagnostic_id", ""),
+                          "track_status_before": track.status,
+                          "track_last_time": track.last_time,
+                          "last_real_observation_ts": track.last_time,
+                          "observation_age_ms": max(0., dt * 1000),
+                          "delta_t_ms": dt * 1000,
+                          "predicted_y": None,
+                          "predicted_u": None,
+                          "observed_y": self._center(candidate)[0],
+                          "observed_u": self._center(candidate)[1],
+                          "dy_px": None, "du": None,
+                          "motion_continuity": "unknown",
+                          "accepted": False, "reject_reason": "",
+                          "total_cost": "INF"})
+        if not 0 < dt <= self.max_gap_s:
+            return reject("timestamp_gap_or_nonpositive")
         if not self._same_appearance_family(track.candidate, candidate):
             track.association_reject_reason = "appearance_family_mismatch"
-            return None
+            return reject("appearance_family_mismatch")
         if not set(track.candidate.candidate_keys).intersection(candidate.candidate_keys):
-            return None
+            return reject("candidate_key_no_intersection")
         old_y, old_u = self._center(track.candidate)
         new_y, new_u = self._center(candidate)
         du = abs(new_u - old_u)
+        if audit is not None:
+            audit["du"] = du
         if du > self.max_u_step:
-            return None
+            return reject("lane_step_exceeded")
         old_width = max(track.candidate.u_max - track.candidate.u_min, .01)
         new_width = max(candidate.u_max - candidate.u_min, .01)
         ratio = new_width / old_width
         if not .45 <= ratio <= 2.2:
-            return None
+            return reject("span_width_ratio")
         velocity = track.prediction.velocity
         predicted_y = old_y + max(0., velocity or 0.) * dt
         tolerance = max(9., min(24., 8. + max(0., velocity or 0.) * dt * .65))
         residual = abs(new_y - predicted_y)
+        if audit is not None:
+            audit.update({"predicted_y": predicted_y, "predicted_u": old_u,
+                          "dy_px": new_y - predicted_y,
+                          "motion_continuity": "forward" if new_y >= old_y else "backward_or_jitter",
+                          "residual_px": residual, "tolerance_px": tolerance,
+                          "span_width_ratio": ratio})
         if new_y < old_y - max(3.5, track.candidate.bbox[3] * .35):
-            return None
+            return reject("backward_motion")
         if residual > tolerance:
-            return None
+            return reject("motion_residual")
         span_overlap = max(0., min(candidate.u_max, track.candidate.u_max) -
                            max(candidate.u_min, track.candidate.u_min))
         span_union = max(candidate.u_max, track.candidate.u_max) - min(candidate.u_min, track.candidate.u_min)
         transition_penalty = .12 if track.candidate.appearance != candidate.appearance else 0.0
-        return (residual / tolerance + du / max(self.max_u_step, .001) +
-                .25 * abs(math.log(ratio)) + .1 * (1 - span_overlap / max(span_union, .001)) +
-                transition_penalty)
+        total_cost = (residual / tolerance + du / max(self.max_u_step, .001) +
+                      .25 * abs(math.log(ratio)) + .1 * (1 - span_overlap / max(span_union, .001)) +
+                      transition_penalty)
+        if audit is not None:
+            audit.update({"accepted": True, "reject_reason": "", "total_cost": total_cost,
+                          "span_overlap": span_overlap / max(span_union, .001)})
+        return total_cost
 
     @staticmethod
     def _deduplicate_visible(candidates: list[Candidate]):
@@ -261,7 +297,9 @@ class SimpleTracker:
             track.hit_history.append(track.prediction.hit_time)
             track.hit_history = track.hit_history[-5:]
 
-    def update(self, candidates: list[Candidate], timestamp: float, playing: bool = True):
+    def update(self, candidates: list[Candidate], timestamp: float, playing: bool = True,
+               trace: dict | None = None, frame_index: int | None = None,
+               capture_gap_ms: float | None = None):
         started = time.perf_counter()
         self.finished = []
         self.last_unknown_association_audit = []
@@ -273,23 +311,60 @@ class SimpleTracker:
             self.stage_times = {"matching_s": 0., "unknown_association_s": 0.}
             return []
         candidates = self._deduplicate_visible([c for c in candidates if is_simple_tap(c)])
+        if trace is not None:
+            trace.setdefault("pair_rows", [])
+            trace.setdefault("track_rows", [])
+            trace.setdefault("assignment_rows", [])
+            trace.setdefault("dropped_rows", 0)
+        trace_limit = int(trace.get("max_rows", 10000)) if trace is not None else 0
+        def trace_append(bucket, row):
+            if trace is None:
+                return
+            target = trace.setdefault(bucket, [])
+            if sum(len(trace.get(k, [])) for k in ("pair_rows", "track_rows", "assignment_rows")) >= trace_limit:
+                trace["dropped_rows"] = trace.get("dropped_rows", 0) + 1
+                return
+            target.append(row)
         previous = list(self.tracks)
         costs = []
         unmatched_cost = 5.
         for track in previous:
             row = []
             for candidate in candidates:
-                cost = self._pair_cost(track, candidate, timestamp)
+                audit = {}
+                cost = self._pair_cost(track, candidate, timestamp, audit=audit)
+                audit.update({"frame": frame_index, "timestamp": timestamp,
+                              "candidate_id": getattr(candidate, "diagnostic_id", ""),
+                              "candidate_bbox": candidate.bbox,
+                              "candidate_keys": "|".join(candidate.candidate_keys),
+                              "candidate_appearance": candidate.appearance})
+                trace_append("pair_rows", audit)
                 row.append(cost if cost is not None else 1e6)
             row.extend([unmatched_cost] * len(previous))
             costs.append(row)
         pairs = assign(costs) if costs else []
+        selected_by_candidate = {j: i for i, j in pairs if j < len(candidates) and costs[i][j] < unmatched_cost}
+        for row in (trace.get("pair_rows", []) if trace is not None else []):
+            if row.get("frame") != frame_index or row.get("timestamp") != timestamp:
+                continue
+            candidate_id = row.get("candidate_id")
+            candidate_index = next((j for j,c in enumerate(candidates)
+                                    if getattr(c, "diagnostic_id", "") == candidate_id), None)
+            assigned_track = selected_by_candidate.get(candidate_index) if candidate_index is not None else None
+            row["assigned"] = assigned_track is not None and row.get("track_id") == previous[assigned_track].track_id
+            competitors = [previous[i].track_id for i in range(len(previous))
+                           if candidate_index is not None and costs[i][candidate_index] < unmatched_cost]
+            row["competition_track_ids"] = "|".join(str(t) for t in competitors)
         matched_tracks, matched_candidates = set(), set()
         for i, j in pairs:
             if j < len(candidates) and costs[i][j] < unmatched_cost:
                 self._observe(previous[i], candidates[j], timestamp)
                 matched_tracks.add(i)
                 matched_candidates.add(j)
+                trace_append("assignment_rows", {"frame": frame_index, "timestamp": timestamp,
+                    "track_id": previous[i].track_id, "candidate_id": getattr(candidates[j], "diagnostic_id", ""),
+                    "assigned": True, "unmatched_cost": unmatched_cost, "competition_track_ids": "|".join(
+                        str(previous[k].track_id) for k in range(len(previous)) if costs[k][j] < unmatched_cost)})
         active = []
         for i, track in enumerate(previous):
             if i not in matched_tracks:
@@ -298,10 +373,13 @@ class SimpleTracker:
                 track.reason = "no_current_observation"
                 track.association_reject_reason = "no_current_observation"
                 track.continuity = "coasting"
-            if (track.missed > self.max_missed or timestamp - track.last_time > self.max_gap_s or
-                    track.status == "completed"):
+            expired_by_missed = track.missed > self.max_missed
+            expired_by_gap = timestamp - track.last_time > self.max_gap_s
+            if (expired_by_missed or expired_by_gap or track.status == "completed"):
                 if track.reason != "past_physical_completion_line":
-                    track.reason = "track_expired"
+                    track.reason = ("track_expired_max_missed" if expired_by_missed else
+                                    "track_expired_max_gap" if expired_by_gap else
+                                    "track_expired")
                 self.finished.append(track)
             else:
                 active.append(track)
@@ -309,6 +387,39 @@ class SimpleTracker:
             if j not in matched_candidates:
                 active.append(self._new_track(candidate, timestamp))
         self.tracks = active
+        if trace is not None:
+            for i, track in enumerate(previous):
+                matched = i in matched_tracks
+                trace_append("track_rows", {"frame": frame_index, "timestamp": timestamp,
+                    "track_id": track.track_id, "track_uid": track.physical_note_uid,
+                    "matched_this_frame": matched, "real_observation_this_frame": matched,
+                    "coasting_this_frame": not matched and track in active,
+                    "last_real_observation_timestamp": track.last_time,
+                    "time_since_last_real_observation_ms": max(0., (timestamp-track.last_time)*1000),
+                    "capture_gap_ms": capture_gap_ms if capture_gap_ms is not None else "",
+                    "missed_frames": track.missed, "track_status": track.status,
+                    "confirmed_note_type": track.confirmed_note_type or "",
+                    "observation_count": track.observations,
+                    "stable_keys": "|".join(track.stable_keys),
+                    "appearance": track.candidate.appearance, "bbox": track.candidate.bbox,
+                    "prediction_reason": track.prediction.reason,
+                    "termination_reason": track.reason if track in self.finished else "",
+                    "state_transition": "matched" if matched else "coasting" if track in active else "terminated"})
+            for track in active:
+                if track not in previous:
+                    trace_append("track_rows", {"frame": frame_index, "timestamp": timestamp,
+                        "track_id": track.track_id, "track_uid": track.physical_note_uid,
+                        "matched_this_frame": False, "real_observation_this_frame": True,
+                        "coasting_this_frame": False, "last_real_observation_timestamp": track.last_time,
+                        "time_since_last_real_observation_ms": 0.,
+                        "capture_gap_ms": capture_gap_ms if capture_gap_ms is not None else "",
+                        "missed_frames": track.missed, "track_status": track.status,
+                        "confirmed_note_type": track.confirmed_note_type or "",
+                        "observation_count": track.observations,
+                        "stable_keys": "|".join(track.stable_keys),
+                        "appearance": track.candidate.appearance, "bbox": track.candidate.bbox,
+                        "prediction_reason": track.prediction.reason,
+                        "termination_reason": "", "state_transition": "new"})
         self.stage_times = {"matching_s": time.perf_counter() - started,
                             "unknown_association_s": 0.}
         return list(active)
