@@ -59,6 +59,16 @@ def test_gray_neutral_body_is_a_simple_tap():
     assert notes[0].note_type == "tap"
 
 
+def test_low_contrast_gray_rejection_is_logged():
+    cfg = json.loads((Path(__file__).resolve().parents[1]/"config.json").read_text())
+    frame = np.zeros((404,720,3),np.uint8)
+    cv2.rectangle(frame,(280,200),(290,203),(185,185,185),-1)
+    diagnostics = {}
+    detect(frame, Playfield.from_config(cfg["playfield"]), cfg["key_map"],
+           {**cfg["detector"], "reference_resolution": cfg["reference_resolution"]}, diagnostics)
+    assert "gray_rejections" in diagnostics or diagnostics.get("raw_edge_contours", 0) == 0
+
+
 def test_green_head_and_long_path_have_separate_boxes():
     frame = np.zeros((404,720,3),np.uint8)
     cv2.rectangle(frame,(310,120),(320,207),(0,255,0),-1)

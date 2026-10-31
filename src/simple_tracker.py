@@ -42,6 +42,10 @@ class SimpleTrack:
     confirmed_note_type: str | None = None
     selected_key: str | None = None
     appearance_anchor: str = ""
+    appearance_history: list[str] = field(default_factory=list)
+    association_reject_reason: str = ""
+    track_parent: int | None = None
+    continuity: str = "new"
     particle_filter: ParticlePredictor | None = None
     last_association: dict = field(default_factory=dict)
     particle_rejection_streak: int = 0
@@ -115,13 +119,15 @@ class SimpleTracker:
 
     @staticmethod
     def _same_appearance_family(a: Candidate, b: Candidate) -> bool:
-        return a.appearance in ("cyan_bar", "yellow_bar") and b.appearance in ("cyan_bar", "yellow_bar")
+        allowed = {"cyan_bar", "yellow_bar", "neutral_candidate"}
+        return a.appearance in allowed and b.appearance in allowed
 
     def _pair_cost(self, track: SimpleTrack, candidate: Candidate, timestamp: float):
         dt = timestamp - track.last_time
         if not 0 < dt <= self.max_gap_s:
             return None
         if not self._same_appearance_family(track.candidate, candidate):
+            track.association_reject_reason = "appearance_family_mismatch"
             return None
         if not set(track.candidate.candidate_keys).intersection(candidate.candidate_keys):
             return None
@@ -146,7 +152,10 @@ class SimpleTracker:
         span_overlap = max(0., min(candidate.u_max, track.candidate.u_max) -
                            max(candidate.u_min, track.candidate.u_min))
         span_union = max(candidate.u_max, track.candidate.u_max) - min(candidate.u_min, track.candidate.u_min)
-        return residual / tolerance + du / max(self.max_u_step, .001) + .25 * abs(math.log(ratio)) + .1 * (1 - span_overlap / max(span_union, .001))
+        transition_penalty = .12 if track.candidate.appearance != candidate.appearance else 0.0
+        return (residual / tolerance + du / max(self.max_u_step, .001) +
+                .25 * abs(math.log(ratio)) + .1 * (1 - span_overlap / max(span_union, .001)) +
+                transition_penalty)
 
     @staticmethod
     def _deduplicate_visible(candidates: list[Candidate]):
@@ -159,7 +168,7 @@ class SimpleTracker:
                 old_y = old.bbox[1] + old.bbox[3] / 2
                 overlap = max(0., min(candidate.u_max, old.u_max) - max(candidate.u_min, old.u_min))
                 min_width = min(candidate.u_max - candidate.u_min, old.u_max - old.u_min)
-                if (candidate.appearance == old.appearance and
+                if (SimpleTracker._same_appearance_family(candidate, old) and
                         candidate.candidate_keys == old.candidate_keys and
                         abs(y - old_y) <= max(2., min(candidate.bbox[3], old.bbox[3]) * .5) and
                         min_width > 0 and overlap / min_width >= .92):
@@ -172,7 +181,8 @@ class SimpleTracker:
     def _new_track(self, candidate: Candidate, timestamp: float):
         y, u = self._center(candidate)
         track = SimpleTrack(self.next_id, candidate, [(timestamp, y, u)], timestamp, timestamp,
-                            appearance_anchor=candidate.appearance)
+                            appearance_anchor=candidate.appearance,
+                            appearance_history=[candidate.appearance])
         self.next_id += 1
         track.key_history.append(tuple(candidate.candidate_keys))
         track.stable_keys = list(candidate.candidate_keys)
@@ -187,6 +197,10 @@ class SimpleTracker:
         track.history.append((timestamp, y, u))
         track.history = track.history[-24:]
         track.observations += 1
+        track.appearance_history.append(candidate.appearance)
+        track.appearance_history = track.appearance_history[-12:]
+        track.continuity = "continued" if track.observations > 1 else "new"
+        track.association_reject_reason = ""
         track.missed = 0
         track.status = "tentative"
         track.reason = ""
@@ -266,6 +280,8 @@ class SimpleTracker:
                 track.missed += 1
                 track.status = "lost"
                 track.reason = "no_current_observation"
+                track.association_reject_reason = "no_current_observation"
+                track.continuity = "coasting"
             if (track.missed > self.max_missed or timestamp - track.last_time > self.max_gap_s or
                     track.status == "completed"):
                 if track.reason != "past_physical_completion_line":

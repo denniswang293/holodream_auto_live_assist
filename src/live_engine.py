@@ -287,6 +287,7 @@ class LiveEngine:
         self.commit_entry_y = (min(self.judgment_bar_top,self.trigger_y-12.5*self.pixel_scale_y)
                                if self.judgment_bar_top is not None else None)
         self.dc = {**config.get("detector", {}), "reference_resolution": geometry.reference_resolution}
+        self.last_detector_diagnostics = {}
         self.session_id = uuid.uuid4().hex[:12]
         self.simple_core = None
         self.simple_tracks = []
@@ -296,7 +297,12 @@ class LiveEngine:
             event_cfg=config.get("events", {}),
             min_y=float(config.get("events", {}).get("min_y",190*self.pixel_scale_y)),
             known_keys=self.known_keys,
-            timing_cfg=config.get("live", {}).get("tap_deadline_amend", {}))
+            timing_cfg={
+                **config.get("live", {}).get("tap_deadline_amend", {}),
+                "tap_deadline_amend": config.get("live", {}).get("tap_deadline_amend", {}),
+                "simplified_tap_planner": config.get("live", {}).get("simplified_tap_planner", {}),
+                "linear_timing": config.get("live", {}).get("linear_timing", {}),
+            })
         self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}
         self.track_births, self.recycled_ids = {}, set()
@@ -836,7 +842,10 @@ class LiveEngine:
             state = self.gate.update(work)
             measured["state_detector"] = time.perf_counter()-phase
             phase = time.perf_counter()
-            candidates = self.detector(work, self.geometry, self.config["key_map"], self.dc) if state == "PLAYING" else []
+            self.last_detector_diagnostics = {}
+            candidates = (self.detector(work, self.geometry, self.config["key_map"], self.dc,
+                                        self.last_detector_diagnostics)
+                          if state == "PLAYING" else [])
             measured["note_detector"] = time.perf_counter()-phase
             prediction_before = self.tracker.elapsed
             phase = time.perf_counter()
@@ -1598,6 +1607,8 @@ class LiveEngine:
                 "inflight_frame_age_ms": max(0.0, started - frame.acquired_at) * 1000,
                 "inflight_processing_ms": (finished - started) * 1000,
                 "frame_age_expired": bool(stale),
+                "gray_rejection_count": len(self.last_detector_diagnostics.get("gray_rejections", [])),
+                "detector_rejection_count": len(self.last_detector_diagnostics.get("rejections", [])),
                 "timestamp_source": frame.timestamp_source, "gameplay_state": state,
                 "focused": focused, "roi_status": "BLOCKED" if not roi_valid else "STALE" if stale else "ASPECT_FIT_16_9",
                 "frame_age_ms": age*1000, "latency_ms": latency*1000,
