@@ -19,7 +19,7 @@ from .predictor import Prediction
 
 def is_simple_tap(candidate: Candidate) -> bool:
     return (candidate.note_type == "tap" and
-            candidate.appearance in ("cyan_bar", "yellow_bar") and
+            candidate.appearance in ("cyan_bar", "yellow_bar", "neutral_candidate") and
             not candidate.suspected_overlap and candidate.path_bbox is None and
             candidate.hold_path_px <= 0)
 

@@ -72,7 +72,8 @@ class Track:
         _, y, _, h = c.bbox
         cy = y+h/2
         was_confirmed_tap = self.confirmed_note_type == "tap" and self.was_confirmed
-        reliable_tap = (c.note_type == "tap" and c.appearance in ("cyan_bar","yellow_bar") and
+        reliable_tap = (c.note_type == "tap" and c.appearance in
+                        ("cyan_bar", "yellow_bar", "neutral_candidate") and
                         c.path_bbox is None and c.hold_path_px <= 0)
         identity_enabled=(particle_cfg or {}).get("identity_continuity",{}).get("enabled",True)
         degraded = (identity_enabled and predictor_mode == "particle" and was_confirmed_tap and

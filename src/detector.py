@@ -177,7 +177,8 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             path_bbox = max(paths,key=lambda p:p[2]*p[3],default=None)
         # Paired horizontal edges plus colored body evidence establish only
         # a provisional conventional tap appearance; track motion must confirm.
-        note_type = ("tap" if appearance in ("cyan_bar","yellow_bar") and edge_count>=2 and bh>=4
+        note_type = ("tap" if appearance in ("cyan_bar","yellow_bar","neutral_candidate") and
+                     edge_count>=2 and bh>=4 and path_bbox is None
                      else "unknown")
         depth = (path_depth(frame,playfield,cy,(u0+u1)/2,appearance,
                             mask=path_masks[appearance])

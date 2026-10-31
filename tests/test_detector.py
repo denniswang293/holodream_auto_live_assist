@@ -50,6 +50,15 @@ def test_conventional_tap_requires_colored_horizontal_body():
     assert notes[0].note_type == "tap"
 
 
+def test_gray_neutral_body_is_a_simple_tap():
+    frame = np.zeros((404,720,3),np.uint8)
+    cv2.rectangle(frame,(280,200),(345,207),(205,205,205),-1)
+    notes = run(frame)
+    assert len(notes) == 1
+    assert notes[0].appearance == "neutral_candidate"
+    assert notes[0].note_type == "tap"
+
+
 def test_green_head_and_long_path_have_separate_boxes():
     frame = np.zeros((404,720,3),np.uint8)
     cv2.rectangle(frame,(310,120),(320,207),(0,255,0),-1)
