@@ -42,6 +42,17 @@ class DecisionTrace:
     linear_quality: float | None = None
 
 
+@dataclass(frozen=True)
+class ShadowDecision:
+    note_uid: str
+    track_id: int
+    status: str
+    reason: str
+    key: str | None
+    hit_at: float | None
+    timing_quality: float | None
+
+
 class TapPlanner:
     """Turn confirmed motion evidence into at most one key and one ETA."""
 
@@ -137,6 +148,94 @@ class TapPlanner:
         return {key: max(0., min(c.u_max, (KEYS.index(key)+1)/6) -
                          max(c.u_min, KEYS.index(key)/6))
                 for key in legal_keys if key in KEYS and key in c.candidate_keys and key in track.stable_keys}
+
+    def simplified_plan(self, tracks: list[SimpleTrack], now: float, known_keys: set[str],
+                        scheduler, *, note_uids: dict[int, str] | None = None,
+                        fixed_keys: dict[str, str] | None = None):
+        """Calculate the simplified Planner independently without scheduling input."""
+        note_uids, fixed_keys = note_uids or {}, fixed_keys or {}
+        decisions = {}
+        for track in tracks:
+            uid = note_uids.get(track.track_id, f"simple:{track.track_id}")
+            trace = self.last_traces.get(track.track_id)
+            c, p = track.candidate, track.prediction
+            if track.status != "confirmed" or track.missed:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "defer",
+                    "track_not_current_confirmed", None, p.hit_time, trace.timing_quality if trace else None)
+                continue
+            if not is_simple_tap(c):
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
+                    "not_confirmed_ordinary_tap", None, p.hit_time, trace.timing_quality if trace else None)
+                continue
+            if not track.history or len(track.history) < 3:
+                reason = "motion_not_reliable"
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "defer", reason,
+                    None, p.hit_time, trace.timing_quality if trace else None)
+                continue
+            if p.hit_time is None or p.eta is None:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "defer",
+                    "prediction_unavailable", None, None, trace.timing_quality if trace else None)
+                continue
+            if p.hit_time <= now or p.eta <= 0:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
+                    "hit_time_not_future", None, p.hit_time, trace.timing_quality if trace else None)
+                continue
+            if p.eta > float(self.event_config.get("max_eta_s", .45)):
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "defer",
+                    "eta_outside_horizon", None, p.hit_time, trace.timing_quality if trace else None)
+                continue
+            legal = self._covered_keys(track, set(c.candidate_keys) & set(track.stable_keys) & known_keys)
+            if not legal:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
+                    "no_stable_verified_covered_key", None, p.hit_time, trace.timing_quality if trace else None)
+                continue
+            simple_timing_ok = (math.isfinite(p.hit_time) and math.isfinite(p.eta) and
+                                math.isfinite(p.uncertainty) and p.hit_time > now and
+                                p.eta > 0 and p.eta <= float(self.event_config.get("max_eta_s", .45)) and
+                                p.uncertainty <= self.max_uncertainty_s)
+            if not simple_timing_ok:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "defer",
+                    "timing_not_reliable", None, p.hit_time,
+                    trace.timing_quality if trace else None)
+                continue
+            key = fixed_keys.get(uid) or max(legal, key=legal.get)
+            own = scheduler.pending_reservations.get(uid)
+            conflict = any(other == key and owner != uid and own != (other, hit) and
+                            abs(hit - p.hit_time) < self.conflict_window_s
+                            for other, hit, owner in [
+                                *( (k, h, None) for k, h in scheduler.recent ),
+                                *((i.keys[0], i.hit_at, event_id)
+                                  for event_id, i in scheduler.pending.items())])
+            if conflict:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "reject",
+                    "tap_key_conflict", None, p.hit_time, trace.timing_quality if trace else None)
+            else:
+                decisions[track.track_id] = ShadowDecision(uid, track.track_id, "schedule",
+                    "simplified_eligible", key, p.hit_time, trace.timing_quality if trace else None)
+        return decisions
+
+    def simplified_proposals(self, tracks: list[SimpleTrack], decisions: dict[int, ShadowDecision]):
+        """Convert only shadow-approved decisions to scheduler proposals.
+
+        This is intentionally separate from ``plan`` so active rollout can be
+        enabled and rolled back without changing the legacy planner itself.
+        """
+        proposals = {}
+        for track in tracks:
+            decision = decisions.get(track.track_id)
+            if decision is None or decision.status != "schedule" or decision.key is None or decision.hit_at is None:
+                continue
+            uncertainty = track.prediction.uncertainty
+            if uncertainty is None or not math.isfinite(uncertainty):
+                continue
+            proposals[track.track_id] = TapProposal(
+                decision.note_uid, track.track_id, decision.key, decision.hit_at,
+                float(uncertainty),
+                f"shadow_confirmed={track.observations};velocity={track.prediction.velocity:.3f};"
+                f"span={track.candidate.u_min:.6f}:{track.candidate.u_max:.6f}",
+                (track.candidate.u_min, track.candidate.u_max),
+                track.candidate.appearance, track.history[-1][1] if track.history else None)
+        return proposals
 
     def plan(self, tracks: list[SimpleTrack], now: float, known_keys: set[str], scheduler,
              *, note_uids: dict[int, str] | None = None,
