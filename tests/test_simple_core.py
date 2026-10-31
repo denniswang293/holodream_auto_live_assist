@@ -199,6 +199,21 @@ def test_pending_amend_freeze_window_does_not_move_deadline():
     scheduler.close()
 
 
+def test_planner_ignores_same_note_pending_reservation_but_keeps_other_conflict():
+    clock, _, _, scheduler = armed_scheduler()
+    manager = TapIntentManager(amend_enabled=True)
+    first = TapProposal("session:simple:self", 10, "F", 10.20, .01, "first")
+    manager.schedule({10: first}, scheduler, 10.0)
+    track = add_particle_evidence(make_ready_track(track_id=10, hit_at=10.21, key="F"))
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    proposals, reasons = planner.plan([track], 10.02, {"F"}, scheduler,
+                                      note_uids={10: first.note_uid},
+                                      fixed_keys={first.note_uid: "F"})
+    assert reasons[10] == ""
+    assert proposals[10].key == "F"
+    scheduler.close()
+
+
 def test_intent_manager_freezes_key_and_deadline_after_acceptance():
     clock, _, rows, scheduler = armed_scheduler()
     transitions = []

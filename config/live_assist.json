@@ -2,6 +2,7 @@
   "capture_fps": 120,
   "keyboard_input_mode": "scan_code",
   "max_frame_age_ms": 60,
+  "stale_context_pause_ms": 200,
   "max_input_lateness_ms": 15,
   "input_advance_px": 30,
   "tap_deadline_amend": {
