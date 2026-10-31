@@ -321,11 +321,34 @@ class SimpleTracker:
             if trace is None:
                 return
             target = trace.setdefault(bucket, [])
-            if sum(len(trace.get(k, [])) for k in ("pair_rows", "track_rows", "assignment_rows")) >= trace_limit:
+            if sum(len(trace.get(k, [])) for k in
+                   ("pair_rows", "track_rows", "assignment_rows", "attempt_rows")) >= trace_limit:
                 trace["dropped_rows"] = trace.get("dropped_rows", 0) + 1
                 return
             target.append(row)
         previous = list(self.tracks)
+        raw_candidate_count = len(candidates)
+        if trace is not None and raw_candidate_count == 0:
+            if previous:
+                for track in previous:
+                    trace_append("attempt_rows", {
+                        "frame": frame_index, "timestamp": timestamp,
+                        "track_id": track.track_id,
+                        "track_uid": track.physical_note_uid,
+                        "skip_reason": "zero_candidate",
+                        "matched_this_frame": False,
+                    })
+            else:
+                trace_append("attempt_rows", {
+                    "frame": frame_index, "timestamp": timestamp,
+                    "skip_reason": "zero_candidate_no_active_track",
+                })
+        if trace is not None and raw_candidate_count > len(candidates):
+            trace_append("attempt_rows", {
+                "frame": frame_index, "timestamp": timestamp,
+                "skip_reason": "dedup_suppressed",
+                "suppressed_count": raw_candidate_count - len(candidates),
+            })
         costs = []
         unmatched_cost = 5.
         for track in previous:
@@ -343,6 +366,22 @@ class SimpleTracker:
             row.extend([unmatched_cost] * len(previous))
             costs.append(row)
         pairs = assign(costs) if costs else []
+        if trace is not None and candidates:
+            for i, track in enumerate(previous):
+                compatible = any(costs[i][j] < 1e6 for j in range(len(candidates)))
+                if not compatible:
+                    trace_append("attempt_rows", {
+                        "frame": frame_index, "timestamp": timestamp,
+                        "track_id": track.track_id,
+                        "track_uid": track.physical_note_uid,
+                        "skip_reason": "no_compatible_candidate",
+                        "matched_this_frame": False,
+                    })
+            if not previous:
+                trace_append("attempt_rows", {
+                    "frame": frame_index, "timestamp": timestamp,
+                    "skip_reason": "no_active_track",
+                })
         selected_by_candidate = {j: i for i, j in pairs if j < len(candidates) and costs[i][j] < unmatched_cost}
         for row in (trace.get("pair_rows", []) if trace is not None else []):
             if row.get("frame") != frame_index or row.get("timestamp") != timestamp:
@@ -392,6 +431,7 @@ class SimpleTracker:
                 matched = i in matched_tracks
                 trace_append("track_rows", {"frame": frame_index, "timestamp": timestamp,
                     "track_id": track.track_id, "track_uid": track.physical_note_uid,
+                    "candidate_id": getattr(track.candidate, "diagnostic_id", ""),
                     "matched_this_frame": matched, "real_observation_this_frame": matched,
                     "coasting_this_frame": not matched and track in active,
                     "last_real_observation_timestamp": track.last_time,
@@ -409,6 +449,7 @@ class SimpleTracker:
                 if track not in previous:
                     trace_append("track_rows", {"frame": frame_index, "timestamp": timestamp,
                         "track_id": track.track_id, "track_uid": track.physical_note_uid,
+                        "candidate_id": getattr(track.candidate, "diagnostic_id", ""),
                         "matched_this_frame": False, "real_observation_this_frame": True,
                         "coasting_this_frame": False, "last_real_observation_timestamp": track.last_time,
                         "time_since_last_real_observation_ms": 0.,

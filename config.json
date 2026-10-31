@@ -12,6 +12,16 @@
   "capture": {"fps_target": 120, "crop_game_window": true},
   "timing": {"offset_ms": 0, "tap_duration_ms": 25},
   "control": {"dry_run": true, "flick_mode": "unverified", "hold_mode": "unverified"},
+  "diagnostics": {
+    "live_identity_trace": {
+      "enabled": false,
+      "max_queue_rows": 4096,
+      "max_candidate_rows": 2000,
+      "max_pair_rows": 10000,
+      "sample_every": 1,
+      "case_frames": []
+    }
+  },
   "detector": {
     "edge_threshold": 65,
     "min_area": 55,
@@ -47,7 +57,11 @@
     "stationary_after_s": 0.20,
     "stationary_span_px": 5,
     "pink_min_displacement_px": 5,
-    "max_hit_drift_s": 0.08
+    "max_hit_drift_s": 0.08,
+    "experimental_local_reassociation": {
+      "enabled": false,
+      "offline_only": true
+    }
   },
   "predictor": {
     "mode": "particle",

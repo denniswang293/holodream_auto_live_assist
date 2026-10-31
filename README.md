@@ -22,6 +22,19 @@ V7.1 flags 位於 `config/live_assist.json`：pending Tap deadline amendment 使
 
 Tap pipeline simplification 目前只輸出 `motion_reliable`、`timing_reliable` 及 Linear ETA shadow 診斷；`simplified_tap_planner.enabled` 預設關閉，尚未用未標註資料宣稱命中率改善。
 
+### V7.5.7 Live identity telemetry（預設關閉）
+
+`config.json` 的 `diagnostics.live_identity_trace.enabled` 預設為 `false`。只有在離線 dry-run 或明確的診斷實機測試時才開啟；它不會改變 Legacy Tap 輸入路徑，也不會啟用 Simplified Planner、放寬 association/PF gate 或新增鍵盤操作。
+
+啟用後，每次 `output/assist/run_*` 會非同步、有限佇列地寫入：
+
+- `live_candidate_trace.csv`：raw/merged/final candidate、bbox、normalized lane、appearance、gate reason。
+- `live_association_attempts.csv`：pair、assignment，以及 `zero_candidate`、`no_compatible_candidate`、`dedup_suppressed` 等 sentinel。
+- `live_track_identity.csv`：track/candidate/note UID、matched/coasting/status、intent state。
+- `live_identity_trace_health.json`：佇列容量、寫入/丟棄列數與 frame coverage。
+
+診斷佇列滿時只丟 telemetry row，不丟影格、不停止送鍵；`dropped_diagnostic_rows` 必須在 health 檔中檢查。`source_video_frame` 在錄影索引尚未完成時可能為空，應以 `source_frame + capture_timestamp` 事後 join，不能以 frame/60 代替原始時間。
+
 ## 輸出與資料
 
 每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。

@@ -155,9 +155,15 @@ def track_decision(track,now,known_keys,event_cfg):
 
 
 class LiveEngine:
-    def __init__(self, config, geometry, scheduler, clock=time.perf_counter, detector=detect):
+    def __init__(self, config, geometry, scheduler, clock=time.perf_counter, detector=detect,
+                 identity_trace=None):
         self.config, self.geometry, self.scheduler, self.clock = config, geometry, scheduler, clock
         self.detector = detector
+        self.identity_trace = identity_trace
+        self.identity_trace_config = dict(
+            config.get("diagnostics", {}).get("live_identity_trace", {}) or {})
+        self.identity_trace_enabled = bool(
+            self.identity_trace_config.get("enabled", False) and identity_trace is not None)
         self.geometry_hash = geometry_hash(geometry.document)
         self.known_keys = verified_keys(config, self.geometry_hash)
         self.tap_rule = AnyCoveredKeyRule.from_config(config,self.geometry_hash)
@@ -287,6 +293,13 @@ class LiveEngine:
         self.commit_entry_y = (min(self.judgment_bar_top,self.trigger_y-12.5*self.pixel_scale_y)
                                if self.judgment_bar_top is not None else None)
         self.dc = {**config.get("detector", {}), "reference_resolution": geometry.reference_resolution}
+        if self.identity_trace_enabled:
+            association_cfg = dict(self.dc.get("association_diagnostics", {}) or {})
+            association_cfg.update({
+                "enabled": True,
+                "max_candidate_rows": int(self.identity_trace_config.get("max_candidate_rows", 2000)),
+            })
+            self.dc["association_diagnostics"] = association_cfg
         self.last_detector_diagnostics = {}
         self.session_id = uuid.uuid4().hex[:12]
         self.simple_core = None
@@ -310,6 +323,7 @@ class LiveEngine:
         self.latencies, self.capture_times, self.process_times = deque(maxlen=600), deque(maxlen=120), deque(maxlen=120)
         self.stale, self.events, self.abstentions, self.frames = 0, 0, 0, 0
         self.stage_times = {}
+        self._identity_trace_frame = None
 
     def invalidate(self, reason="invalid_frame"):
         self.scheduler.disarm(reason)
@@ -673,6 +687,40 @@ class LiveEngine:
         if self.diagnostic_sink is not None:
             self.diagnostic_sink(name,row)
 
+    def _submit_identity_trace(self, frame, processing_timestamp, state):
+        """Submit bounded Tap identity evidence after decisions are complete."""
+        if not self.identity_trace_enabled or self.identity_trace is None:
+            return
+        trace = self._identity_trace_frame or {}
+        attempts = list(trace.get("attempt_rows", ()))
+        if not trace and state != "PLAYING":
+            attempts.append({"frame": frame.sequence, "timestamp": frame.captured_at,
+                             "skip_reason": f"gameplay_gate_{state.lower()}"})
+        if trace.get("dropped_rows", 0):
+            attempts.append({"frame": frame.sequence, "timestamp": frame.captured_at,
+                             "skip_reason": "trace_capped",
+                             "dropped_rows": trace.get("dropped_rows", 0)})
+        detector_dropped = self.last_detector_diagnostics.get("candidate_trace_dropped_rows", 0)
+        if detector_dropped:
+            attempts.append({"frame": frame.sequence, "timestamp": frame.captured_at,
+                             "skip_reason": "detector_trace_capped",
+                             "dropped_rows": detector_dropped})
+        track_rows = []
+        for source in trace.get("track_rows", ()):
+            row = dict(source)
+            track_id = row.get("track_id", "")
+            uid = self.simple_core.note_uid(track_id) if track_id != "" else ""
+            intent = self.simple_core.intents.intents.get(uid) if uid else None
+            row.update({"note_uid": uid,
+                        "intent_state": (intent.state if intent else ""),
+                        "intent_key": (intent.key if intent else "")})
+            track_rows.append(row)
+        self.identity_trace.submit_frame(
+            frame, processing_timestamp,
+            self.last_detector_diagnostics.get("candidate_trace", ()),
+            trace.get("pair_rows", ()), attempts,
+            trace.get("assignment_rows", ()), track_rows, state)
+
     def _emit_tap_decision(self, tr, event_id, frame, now, stage, result,
                            reason="", retryable=False, *, scheduled=None,
                            final_action="PENDING", final_reason=""):
@@ -814,14 +862,18 @@ class LiveEngine:
 
     def process(self, frame, focused=True, roi_valid=True):
         wall_begin = time.perf_counter()
+        self._identity_trace_frame = None
         measured = dict.fromkeys(("normalization","state_detector","note_detector","tracking","prediction",
                                   "unknown_association","tracker_matching","diagnostic_write","decision"),0.0)
         started = self.clock()
+        previous_capture = self.last_capture
         if not (math.isfinite(frame.captured_at) and math.isfinite(frame.acquired_at) and
                 frame.acquired_at >= frame.captured_at and frame.captured_at > self.last_capture):
             self.invalidate("invalid_or_nonmonotonic_capture_clock")
             raise ValueError("Capture timestamps must be finite and strictly monotonic")
         self.last_capture = frame.captured_at
+        capture_gap_ms = ((frame.captured_at - previous_capture) * 1000
+                          if math.isfinite(previous_capture) else None)
         self.capture_times.append(frame.captured_at)
         self.frames += 1
         age = started-frame.captured_at
@@ -843,8 +895,10 @@ class LiveEngine:
             measured["state_detector"] = time.perf_counter()-phase
             phase = time.perf_counter()
             self.last_detector_diagnostics = {}
+            detector_kwargs = ({"frame_index": frame.sequence}
+                               if self.identity_trace_enabled else {})
             candidates = (self.detector(work, self.geometry, self.config["key_map"], self.dc,
-                                        self.last_detector_diagnostics)
+                                        self.last_detector_diagnostics, **detector_kwargs)
                           if state == "PLAYING" else [])
             measured["note_detector"] = time.perf_counter()-phase
             prediction_before = self.tracker.elapsed
@@ -858,8 +912,13 @@ class LiveEngine:
                                    if self.hold_tracker_v2 else
                                    [c for c in raw_holds if c.hold_path_px >= self.hold_path_px])
             simple_started = time.perf_counter()
+            simple_trace = ({"max_rows": int(self.identity_trace_config.get("max_pair_rows", 10000))}
+                            if self.identity_trace_enabled else None)
             self.simple_tracks = self.simple_core.tracker.update(
-                simple_candidates, frame.captured_at, playing=state == "PLAYING")
+                simple_candidates, frame.captured_at, playing=state == "PLAYING",
+                trace=simple_trace,
+                frame_index=frame.sequence if self.identity_trace_enabled else None,
+                capture_gap_ms=capture_gap_ms)
             simple_elapsed = time.perf_counter() - simple_started
             tracks = self.tracker.update(hold_candidates, frame.captured_at,
                                          playing=state == "PLAYING")
@@ -870,6 +929,7 @@ class LiveEngine:
             measured["unknown_association"] = self.tracker.stage_times.get("unknown_association_s",0.0)
             measured["tracker_matching"] = max(0.0,
                 self.tracker.stage_times.get("matching_s",0.0)-measured["prediction"])
+            self._identity_trace_frame = simple_trace
             diagnostic_started=time.perf_counter()
             for audit in self.tracker.last_unknown_association_audit:
                 self._emit_diagnostic("unknown_association",{"source_frame":frame.sequence,**audit})
@@ -1594,6 +1654,7 @@ class LiveEngine:
                 "last_reliable_tap_at":tracked.last_reliable_tap_at if tracked.last_reliable_tap_at is not None else "",
                 "tracker_status":tracked.status})
         measured["diagnostic_write"] += time.perf_counter()-late_diagnostic_started
+        self._submit_identity_trace(frame, finished, state)
         self.tracker.finished.clear()
         self.collector.rows.clear()  # live CSV is streamed; no growing frame/event queue
         self.stale += stale
