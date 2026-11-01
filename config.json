@@ -22,7 +22,7 @@
       "case_frames": []
     },
     "trace_snapshot": {
-      "enabled": false,
+      "enabled": true,
       "max_rows": 512,
       "schema_version": "v791.1"
     }
