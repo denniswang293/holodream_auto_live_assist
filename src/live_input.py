@@ -295,6 +295,97 @@ class TapScheduler:
             self._log("amended", f"revision={intent.revision}", intent, intent.keys[0])
             return OfferResult(True, "amended", intent.event_id, now)
 
+    def rekey_result(self, accepted, reason, event_id, timestamp, *, intent=None, key=""):
+        """Return a structured rekey result and make rejection observable."""
+        if not accepted:
+            self._log("rekey_rejected", reason, intent, key)
+        return OfferResult(bool(accepted), reason, event_id, timestamp)
+
+    def rekey_pending(self, intent, *, expected_revision=0,
+                      expected_arm_generation=None, old_key=None,
+                      hold_until=None, min_lead_s=.03):
+        """Atomically replace a pending Tap key for a verified Hold conflict.
+
+        The deadline is immutable.  This path is intentionally stricter than
+        normal scheduling: it requires fresh focused PLAYING context, the same
+        arm generation, an uncommitted pending Tap, and at least the existing
+        30 ms freeze window before the Tap deadline.
+        """
+        with self.lock:
+            now = self.clock()
+            current = self.pending.get(intent.event_id)
+            if current is None:
+                return self.rekey_result(False, "pending_intent_missing", intent.event_id,
+                                         now, intent=intent, key=intent.keys[0])
+            if current.note_type != "tap" or intent.note_type != "tap":
+                return self.rekey_result(False, "tap_only_rekey", intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            if current.revision != expected_revision:
+                return self.rekey_result(False, "stale_intent_revision", intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            if (expected_arm_generation is None or
+                    expected_arm_generation != self.arm_generation):
+                return self.rekey_result(False, "arm_generation_mismatch", intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            if not self.armed:
+                return self.rekey_result(False, "assist_disarmed", intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            if intent.event_id in self.suspended:
+                return self.rekey_result(False, "pending_tap_suspended", intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            failure = self._readiness_failure(now)
+            if failure:
+                return self.rekey_result(False, failure, intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            if self.modifiers_check():
+                return self.rekey_result(False, "physical_modifier_held", intent.event_id,
+                                         now, intent=current, key=intent.keys[0])
+            old_key = current.keys[0] if old_key is None else old_key
+            new_key = intent.keys[0] if len(intent.keys) == 1 else ""
+            if old_key != current.keys[0]:
+                return self.rekey_result(False, "old_key_mismatch", intent.event_id,
+                                         now, intent=current, key=new_key)
+            if new_key not in list("SDFJKL"):
+                return self.rekey_result(False, "invalid_rekey_key", intent.event_id,
+                                         now, intent=current, key=new_key)
+            if new_key == old_key:
+                return self.rekey_result(False, "alternative_key_same_as_current", intent.event_id,
+                                         now, intent=current, key=new_key)
+            if not math.isfinite(current.hit_at) or now >= current.hit_at - max(.03, min_lead_s):
+                return self.rekey_result(False, "rekey_freeze_window", intent.event_id,
+                                         now, intent=current, key=new_key)
+            if hold_until is not None and current.hit_at >= hold_until:
+                return self.rekey_result(False, "hold_interval_no_overlap", intent.event_id,
+                                         now, intent=current, key=new_key)
+            if new_key in self.held and self.held[new_key][0] > current.hit_at:
+                return self.rekey_result(False, "alternative_key_held", intent.event_id,
+                                         now, intent=current, key=new_key)
+            reservation = self.pending_reservations.get(intent.event_id)
+            if reservation != (old_key, current.hit_at):
+                return self.rekey_result(False, "pending_reservation_missing", intent.event_id,
+                                         now, intent=current, key=new_key)
+            for event_id, other in self.pending.items():
+                if event_id == intent.event_id:
+                    continue
+                if other.keys[0] == new_key and (
+                        other.note_type == "hold" or
+                        abs(other.hit_at - current.hit_at) < .035):
+                    return self.rekey_result(False, "alternative_key_pending_conflict",
+                                             intent.event_id, now, intent=current, key=new_key)
+            for recent_key, recent_hit in self.recent:
+                if recent_key == new_key and abs(recent_hit - current.hit_at) < .035:
+                    return self.rekey_result(False, "alternative_key_recent_conflict",
+                                             intent.event_id, now, intent=current, key=new_key)
+            self._remove_pending_reservation(intent.event_id)
+            self.recent.append((new_key, current.hit_at))
+            self.pending_reservations[intent.event_id] = (new_key, current.hit_at)
+            self.pending[intent.event_id] = intent
+            detail = (f"old_key={old_key};new_key={new_key};"
+                      f"revision={intent.revision};hold_until="
+                      f"{hold_until if hold_until is not None else ''}")
+            self._log("tap_rekey_for_hold_conflict", detail, intent, new_key)
+            return OfferResult(True, "tap_rekey_for_hold_conflict", intent.event_id, now)
+
     def _remove_pending_reservation(self, event_id):
         reservation = self.pending_reservations.pop(event_id,None)
         if reservation in self.recent:

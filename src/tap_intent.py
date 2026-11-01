@@ -1,7 +1,7 @@
 """Single-owner, immutable lifecycle for accepted Simple Core Tap actions."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .live_input import ActionIntent
 from .intent_store import IntentRevision
@@ -28,6 +28,7 @@ class TapIntent:
     total_amend_ms: float = 0.0
     state: str = "PENDING"
     transitions: list[dict] = field(default_factory=list)
+    valid_keys: tuple[str, ...] = ()
 
     def action(self):
         return ActionIntent(self.note_uid, (self.key,), self.hit_at,
@@ -111,7 +112,8 @@ class TapIntentManager:
                                 old.arm_generation, old.created_at, proposal.uncertainty,
                                 proposal.evidence, old.lane_span, old.appearance,
                                 proposal.observed_y, revision, old.initial_hit_at or old.hit_at,
-                                old.total_amend_ms + abs(delta) * 1000)
+                                old.total_amend_ms + abs(delta) * 1000,
+                                old.state, list(old.transitions), old.valid_keys)
                             result = scheduler.amend_pending(amended.action(),
                                 expected_revision=old.revision,
                                 freeze_window_s=self.freeze_window_s)
@@ -142,7 +144,7 @@ class TapIntentManager:
             intent = TapIntent(proposal.note_uid, proposal.key, proposal.hit_at,
                                generation, now, proposal.uncertainty, proposal.evidence,
                                proposal.lane_span, proposal.appearance, proposal.observed_y,
-                               0, proposal.hit_at, 0.0)
+                               0, proposal.hit_at, 0.0, valid_keys=tuple(proposal.valid_keys))
             result = scheduler.offer(intent.action())
             if result.accepted:
                 self.intents[proposal.note_uid] = intent
@@ -165,6 +167,49 @@ class TapIntentManager:
                            arm_generation=generation)
         self.last_rejections = dict(rejected)
         return accepted, rejected
+
+    def rekey_for_hold_conflict(self, note_uid: str, new_key: str, scheduler,
+                                now: float, *, hold_until: float | None = None,
+                                expected_revision: int | None = None,
+                                blocked_event_ids: set[str] | None = None):
+        """Atomically move one pending Tap to a previously verified key.
+
+        This is deliberately separate from normal ETA amendment.  It is only
+        called by the LiveEngine after a new Hold has been accepted, and it
+        never changes the Tap deadline or invents a key from geometry.
+        """
+        intent = self.intents.get(note_uid)
+        if intent is None or intent.state != "PENDING":
+            return scheduler.rekey_result(False, "tap_not_pending", note_uid, now)
+        if blocked_event_ids and note_uid in blocked_event_ids:
+            return scheduler.rekey_result(False, "tap_already_committed", note_uid, now)
+        if expected_revision is not None and intent.revision != expected_revision:
+            return scheduler.rekey_result(False, "stale_intent_revision", note_uid, now)
+        valid = set(intent.valid_keys) & set("SDFJKL")
+        if new_key not in valid:
+            return scheduler.rekey_result(False, "alternative_key_not_verified", note_uid, now)
+        if new_key == intent.key:
+            return scheduler.rekey_result(False, "alternative_key_same_as_current", note_uid, now)
+        if hold_until is not None and not intent.hit_at < hold_until:
+            return scheduler.rekey_result(False, "hold_interval_no_overlap", note_uid, now)
+        amended = replace(intent, key=new_key, revision=intent.revision + 1)
+        result = scheduler.rekey_pending(
+            amended.action(), expected_revision=intent.revision,
+            expected_arm_generation=intent.arm_generation,
+            old_key=intent.key, hold_until=hold_until)
+        if not result.accepted:
+            return result
+        amended.transitions = list(intent.transitions) + [{
+            "state": "REKEYED", "timestamp": now,
+            "reason": "tap_rekey_for_hold_conflict",
+            "old_key": intent.key, "new_key": new_key,
+            "revision": amended.revision,
+            "hit_at": amended.hit_at}]
+        self.intents[note_uid] = amended
+        self._emit(note_uid, "REKEYED", now, "tap_rekey_for_hold_conflict",
+                   key=new_key, old_key=intent.key, hit_at=amended.hit_at,
+                   revision=amended.revision)
+        return result
 
     def record_action(self, action: dict):
         note_uid = action.get("event_id", "")

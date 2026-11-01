@@ -20,6 +20,9 @@ class TapProposal:
     lane_span: tuple[float, float] = (0., 0.)
     appearance: str = ""
     observed_y: float | None = None
+    # Preserve the keys already verified by the candidate and stable mapping.
+    # The narrow Hold-conflict path may choose only from this evidence.
+    valid_keys: tuple[str, ...] = ()
 
 
 @dataclass
@@ -246,7 +249,11 @@ class TapPlanner:
                 f"shadow_confirmed={track.observations};velocity={track.prediction.velocity:.3f};"
                 f"span={track.candidate.u_min:.6f}:{track.candidate.u_max:.6f}",
                 (track.candidate.u_min, track.candidate.u_max),
-                track.candidate.appearance, track.history[-1][1] if track.history else None)
+                track.candidate.appearance, track.history[-1][1] if track.history else None,
+                tuple(key_name for key_name in KEYS
+                      if key_name in self._covered_keys(
+                          track, set(track.candidate.candidate_keys)
+                          & set(track.stable_keys))))
         return proposals
 
     def plan(self, tracks: list[SimpleTrack], now: float, known_keys: set[str], scheduler,
@@ -354,7 +361,8 @@ class TapPlanner:
                         f"confirmed={track.observations};velocity={track.prediction.velocity:.3f};"
                         f"span={track.candidate.u_min:.6f}:{track.candidate.u_max:.6f}",
                         (track.candidate.u_min, track.candidate.u_max),
-                        track.candidate.appearance, track.history[-1][1])
+                        track.candidate.appearance, track.history[-1][1],
+                        tuple(key_name for key_name in KEYS if key_name in overlaps))
                     reasons[track.track_id] = ""
                 else:
                     reasons[track.track_id] = "tap_key_conflict"

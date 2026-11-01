@@ -396,6 +396,111 @@ def test_pending_amend_freeze_window_does_not_move_deadline():
     scheduler.close()
 
 
+def test_pending_tap_rekeys_once_for_verified_hold_conflict():
+    clock, actuator, rows, scheduler = armed_scheduler()
+    manager = TapIntentManager(
+        lambda row: rows.append(row), amend_enabled=True, freeze_window_ms=30)
+    scheduler.on_log = lambda row: (rows.append(row), manager.record_action(row))
+    proposal = TapProposal("session:simple:hold-conflict", 11, "D", 10.20, .01,
+                           "verified", valid_keys=("S", "D", "F"))
+    accepted, rejected = manager.schedule({11: proposal}, scheduler, 10.0)
+    assert accepted and not rejected
+    hold = ActionIntent("hold-conflict-hold", ("D",), 10.10, .01, "hold", .5)
+    assert scheduler.offer(hold).accepted
+    result = manager.rekey_for_hold_conflict(
+        proposal.note_uid, "S", scheduler, 10.0, hold_until=10.40)
+    assert result.accepted
+    assert scheduler.pending[proposal.note_uid].keys == ("S",)
+    assert manager.intents[proposal.note_uid].key == "S"
+    assert scheduler.pending_reservations[proposal.note_uid] == ("S", 10.20)
+    assert any(row.get("action") == "tap_rekey_for_hold_conflict" and
+               "old_key=D" in row.get("reason", "") and "new_key=S" in row.get("reason", "")
+               for row in rows)
+
+    clock.now = 10.10
+    scheduler.update_context(clock.now, "PLAYING", True, True)
+    scheduler.poll()
+    clock.now = 10.20
+    scheduler.update_context(clock.now, "PLAYING", True, True)
+    scheduler.poll()
+    assert actuator.calls[:2] == [("down", "D"), ("down", "S")]
+    assert sum(call == ("down", "D") for call in actuator.calls) == 1
+    assert sum(call == ("down", "S") for call in actuator.calls) == 1
+    scheduler.release_hold(hold.event_id)
+    assert actuator.calls[-1] == ("up", "D")
+    scheduler.close()
+
+
+def test_pending_tap_rekey_requires_verified_alternative_and_does_not_guess():
+    _, actuator, _, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:no-alt", 12, "D", 10.20, .01,
+                           "verified", valid_keys=("D",))
+    assert manager.schedule({12: proposal}, scheduler, 10.0)[0]
+    result = manager.rekey_for_hold_conflict(proposal.note_uid, "S", scheduler, 10.0,
+                                              hold_until=10.40)
+    assert not result.accepted and result.reason == "alternative_key_not_verified"
+    assert scheduler.pending[proposal.note_uid].keys == ("D",)
+    assert actuator.calls == []
+    scheduler.close()
+
+
+def test_pending_tap_rekey_rejects_occupied_alternative_and_freeze_window():
+    clock, _, _, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:occupied", 13, "D", 10.20, .01,
+                           "verified", valid_keys=("D", "S"))
+    assert manager.schedule({13: proposal}, scheduler, 10.0)[0]
+    scheduler.held["S"] = (10.50, ActionIntent("existing-hold", ("S",), 10.10, .01,
+                                                  "hold", .5))
+    result = manager.rekey_for_hold_conflict(proposal.note_uid, "S", scheduler, 10.0,
+                                              hold_until=10.40)
+    assert not result.accepted and result.reason == "alternative_key_held"
+    del scheduler.held["S"]
+    clock.now = 10.18
+    scheduler.update_context(clock.now, "PLAYING", True, True)
+    result = manager.rekey_for_hold_conflict(proposal.note_uid, "S", scheduler, clock.now,
+                                              hold_until=10.40)
+    assert not result.accepted and result.reason == "rekey_freeze_window"
+    scheduler.close()
+
+
+def test_pending_tap_rekey_rejects_generation_focus_and_stale_context():
+    clock, _, _, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:safety", 14, "D", 10.20, .01,
+                           "verified", valid_keys=("D", "S"))
+    assert manager.schedule({14: proposal}, scheduler, 10.0)[0]
+    scheduler.arm_generation = 2
+    result = manager.rekey_for_hold_conflict(proposal.note_uid, "S", scheduler, 10.0,
+                                              hold_until=10.40)
+    assert not result.accepted and result.reason == "arm_generation_mismatch"
+    scheduler.close()
+
+    clock, _, _, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:focus", 15, "D", 10.20, .01,
+                           "verified", valid_keys=("D", "S"))
+    assert manager.schedule({15: proposal}, scheduler, 10.0)[0]
+    scheduler.context = (10.0, "PLAYING", False, True)
+    result = manager.rekey_for_hold_conflict(proposal.note_uid, "S", scheduler, 10.0,
+                                              hold_until=10.40)
+    assert not result.accepted and result.reason == "frame_focus_lost"
+    scheduler.close()
+
+    clock, _, _, scheduler = armed_scheduler()
+    manager = TapIntentManager()
+    proposal = TapProposal("session:simple:stale", 16, "D", 10.20, .01,
+                           "verified", valid_keys=("D", "S"))
+    assert manager.schedule({16: proposal}, scheduler, 10.0)[0]
+    scheduler.update_context(9.0, "PLAYING", True, True)
+    clock.now = 10.0
+    result = manager.rekey_for_hold_conflict(proposal.note_uid, "S", scheduler, 10.0,
+                                              hold_until=10.40)
+    assert not result.accepted and result.reason == "validated_capture_expired"
+    scheduler.close()
+
+
 def test_planner_ignores_same_note_pending_reservation_but_keeps_other_conflict():
     clock, _, _, scheduler = armed_scheduler()
     manager = TapIntentManager(amend_enabled=True)

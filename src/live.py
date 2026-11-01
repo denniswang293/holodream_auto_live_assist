@@ -67,19 +67,49 @@ PF_GATE_SHADOW_FIELDS = ["capture_timestamp", "processing_timestamp", "source_fr
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:
-    def __init__(self, path, fields):
+    def __init__(self, path, fields, *, batch_size=1, batch_interval_s=0.0):
         self.file = path.open("x", newline="", encoding="utf-8-sig")
         self.writer = csv.DictWriter(self.file, fieldnames=fields)
         self.writer.writeheader()
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.batch_size = max(1, int(batch_size))
+        self.batch_interval_s = max(0.0, float(batch_interval_s))
+        self._pending_rows = 0
+        self._last_flush = time.monotonic()
 
     def write(self, row):
         with self.lock:
             self.writer.writerow(row)
+            self._pending_rows += 1
+            now = time.monotonic()
+            if (self.batch_size == 1 or self._pending_rows >= self.batch_size or
+                    (self.batch_interval_s and now - self._last_flush >= self.batch_interval_s)):
+                self.flush()
+
+    def flush(self):
+        with self.lock:
+            if self.file.closed:
+                return
             self.file.flush()
+            self._pending_rows = 0
+            self._last_flush = time.monotonic()
 
     def close(self):
-        self.file.close()
+        with self.lock:
+            if self.file.closed:
+                return
+            # Always expose the final short batch before closing.
+            self.file.flush()
+            self._pending_rows = 0
+            self._last_flush = time.monotonic()
+            self.file.close()
+
+
+def _render_overlay_if_recording(recorder, work, tracks, info, engine, dropped):
+    """Render only when an encoder is active; decision logic is unaffected."""
+    if recorder is None:
+        return None
+    return draw_live_overlay(work, tracks, info, engine, dropped)
 
 
 class RecordingIndexLog(CsvLog):
@@ -166,14 +196,18 @@ def run(args):
     print(f"Actual physical capture rectangle: {region.bounds} (entire game display)",flush=True)
     wall_started = time.perf_counter()
     with ExitStack() as stack:
-        event_log = CsvLog(out/"live_events.csv", EVENT_FIELDS)
-        frame_log = CsvLog(out/"live_frames.csv", FRAME_FIELDS)
+        # High-rate diagnostics use a bounded, time/row based flush.  Action
+        # logs remain immediate so safety and input state are observable.
+        def diagnostic_log(filename, fields):
+            return CsvLog(out/filename, fields, batch_size=64, batch_interval_s=.2)
+        event_log = diagnostic_log("live_events.csv", EVENT_FIELDS)
+        frame_log = diagnostic_log("live_frames.csv", FRAME_FIELDS)
         key_log = CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
-        decision_log = CsvLog(out/"tap_decisions.csv", DECISION_FIELDS)
-        shadow_log = CsvLog(out/"tap_planner_shadow.csv", SHADOW_FIELDS)
-        eta_log = CsvLog(out/"tap_eta_comparison.csv", ETA_FIELDS)
-        pf_gate_shadow_log = CsvLog(out/"pf_gate_shadow.csv", PF_GATE_SHADOW_FIELDS)
-        intent_log = CsvLog(out/"tap_intents.csv", INTENT_FIELDS)
+        decision_log = diagnostic_log("tap_decisions.csv", DECISION_FIELDS)
+        shadow_log = diagnostic_log("tap_planner_shadow.csv", SHADOW_FIELDS)
+        eta_log = diagnostic_log("tap_eta_comparison.csv", ETA_FIELDS)
+        pf_gate_shadow_log = diagnostic_log("pf_gate_shadow.csv", PF_GATE_SHADOW_FIELDS)
+        intent_log = diagnostic_log("tap_intents.csv", INTENT_FIELDS)
         input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
         for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log,
                     pf_gate_shadow_log, intent_log, input_log):
@@ -283,10 +317,10 @@ def run(args):
                     eta_log.write(row)
                 for row in engine.simple_core.drain_pf_gate_shadow_rows():
                     pf_gate_shadow_log.write(row)
-                image = draw_live_overlay(work, tracks, info, engine, dropped)
                 info["dropped_total"] = dropped
                 info["video_frame"] = ""
                 if recorder:
+                    image = _render_overlay_if_recording(recorder, work, tracks, info, engine, dropped)
                     job = SimpleNamespace(work=work,info=dict(info),event_ids='|'.join(e['event_id'] for e in events))
                     recorder.offer(job,image)
                 frame_log.write(info)

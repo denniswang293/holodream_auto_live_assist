@@ -911,6 +911,51 @@ class LiveEngine:
                 0 <= now - record["last_valid_head_at"] <= record["grace_s"] and
                 now <= intent.hit_at + self.scheduler.max_lateness)
 
+    def _hold_conflict_until(self, track, intent):
+        """Return a bounded predicted Hold occupation end, or None."""
+        path_px = float(getattr(track.candidate, "hold_path_px", 0) or 0)
+        velocity = track.prediction.velocity
+        if (not math.isfinite(path_px) or path_px <= 0 or velocity is None or
+                not math.isfinite(velocity) or velocity <= 0):
+            return None
+        duration = path_px / velocity
+        if not math.isfinite(duration) or duration <= 0:
+            return None
+        duration = min(self.scheduler.max_hold_s, max(.06, duration))
+        return intent.hit_at + duration
+
+    def _rekey_pending_taps_for_hold_conflict(self, hold_track, hold_intent, now):
+        """Use only previously verified Tap keys when a new Hold claims one."""
+        if not self.tap_rule or self.simple_core is None or hold_intent.note_type != "hold":
+            return
+        hold_until = self._hold_conflict_until(hold_track, hold_intent)
+        if hold_until is None:
+            return
+        hold_key = hold_intent.keys[0]
+        key_order = tuple(key for key in self.config.get("key_map", "SDFJKL")
+                          if key in self.known_keys)
+        for uid, tap_intent in list(self.simple_core.intents.intents.items()):
+            if (tap_intent.state != "PENDING" or
+                    tap_intent.arm_generation != self.scheduler.arm_generation or
+                    tap_intent.key != hold_key or not tap_intent.valid_keys or
+                    not hold_intent.hit_at <= tap_intent.hit_at < hold_until or
+                    uid in self.occlusion_commits or uid in self.edge_fragment_commits):
+                continue
+            alternatives = [key for key in key_order
+                            if key in tap_intent.valid_keys and key != hold_key]
+            if not alternatives:
+                self.scheduler._log("rekey_rejected", "alternative_key_not_verified",
+                                    tap_intent, hold_key)
+                continue
+            for alternative in alternatives:
+                result = self.simple_core.intents.rekey_for_hold_conflict(
+                    uid, alternative, self.scheduler, now,
+                    hold_until=hold_until,
+                    expected_revision=tap_intent.revision,
+                    blocked_event_ids=set(self.occlusion_commits))
+                if result.accepted:
+                    break
+
     def process(self, frame, focused=True, roi_valid=True):
         wall_begin = time.perf_counter()
         self._identity_trace_frame = None
@@ -1416,6 +1461,10 @@ class LiveEngine:
                             "span": (tr.candidate.u_min, tr.candidate.u_max),
                             "appearance": tr.candidate.appearance,
                         }
+                        # A new Hold may claim the key of an already pending
+                        # Tap. Rekey only through previously verified key
+                        # evidence; the Hold itself is never changed.
+                        self._rekey_pending_taps_for_hold_conflict(tr, intent, finished)
                     ordinary_tap = (tr.candidate.appearance in ('cyan_bar','yellow_bar') and
                                     tr.candidate.note_type=='tap' and not hold)
                     if (accepted and ordinary_tap and tr.status=='confirmed' and tr.history):

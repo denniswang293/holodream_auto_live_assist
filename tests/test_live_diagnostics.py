@@ -1,7 +1,8 @@
 import csv
+from contextlib import ExitStack
 
 from src.live import (ACTION_FIELDS, DECISION_FIELDS, EVENT_FIELDS, INTENT_FIELDS,
-                      CsvLog)
+                      CsvLog, _render_overlay_if_recording)
 
 
 def test_tap_decision_csv_preserves_per_gate_and_key_conflict_trace(tmp_path):
@@ -27,3 +28,46 @@ def test_live_csv_schemas_keep_legacy_event_and_action_columns():
     assert {"event_id", "predicted_hit_time", "resolved_keys"}.issubset(EVENT_FIELDS)
     assert {"action", "reason", "timestamp", "event_id", "key", "lifecycle_state", "revision"}.issubset(ACTION_FIELDS)
     assert {"note_uid", "state", "reason"}.issubset(INTENT_FIELDS)
+
+
+def test_batched_csv_flushes_short_tail_and_preserves_order(tmp_path):
+    path = tmp_path / "batched.csv"
+    log = CsvLog(path, ["n"], batch_size=64, batch_interval_s=60)
+    log.write({"n": 1})
+    log.write({"n": 2})
+    log.close()
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        assert [row["n"] for row in csv.DictReader(stream)] == ["1", "2"]
+
+
+def test_batched_csv_flushes_when_exitstack_unwinds_after_error(tmp_path):
+    path = tmp_path / "exception.csv"
+    try:
+        with ExitStack() as stack:
+            log = CsvLog(path, ["n"], batch_size=64, batch_interval_s=60)
+            stack.callback(log.close)
+            log.write({"n": 7})
+            raise RuntimeError("fixture failure")
+    except RuntimeError:
+        pass
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        assert [row["n"] for row in csv.DictReader(stream)] == ["7"]
+
+
+def test_critical_action_log_remains_immediate(tmp_path):
+    path = tmp_path / "actions.csv"
+    log = CsvLog(path, ["action"], batch_size=1)
+    log.write({"action": "armed"})
+    log.close()
+    with path.open(newline="", encoding="utf-8-sig") as stream:
+        assert next(csv.DictReader(stream))["action"] == "armed"
+
+
+def test_overlay_is_not_rendered_without_recorder(monkeypatch):
+    calls = []
+    monkeypatch.setattr("src.live.draw_live_overlay",
+                        lambda *args: calls.append(args) or "overlay")
+    assert _render_overlay_if_recording(None, None, None, {}, None, 0) is None
+    assert calls == []
+    assert _render_overlay_if_recording(object(), None, None, {}, None, 0) == "overlay"
+    assert len(calls) == 1
