@@ -1,0 +1,16 @@
+{
+  "status": "PATCH_NOT_JUSTIFIED",
+  "baseline": "existing Legacy + PF path",
+  "patch_off": "same as baseline",
+  "patch_on": "NOT_RUN; no qualifying HIGH-confidence physical cases",
+  "physical_case_count": 40,
+  "physical_case_appearances": {
+    "pink_candidate": 10,
+    "neutral_candidate": 13,
+    "cyan_bar": 16,
+    "yellow_bar": 1
+  },
+  "negative_controls": "see negative_controls.csv",
+  "game_accuracy": "UNKNOWN",
+  "reason": "Cases are unreviewed and geometry is pending_calibration; no active repair is safe."
+}

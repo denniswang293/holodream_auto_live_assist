@@ -50,6 +50,20 @@ py tools\run_v77_analysis.py
 `pending_calibration` 時不會自動改座標；未完成人工 physical-note review 前，不會啟用任何
 neutral/overlap 實驗修補。
 
+### V7.8 live trace root-cause analysis
+
+當 `diagnostics.live_identity_trace.enabled` 開啟後，可針對指定 run 執行逐 UID
+根因分析；工具只讀取本地 CSV/影片，不會送出鍵盤輸入：
+
+```powershell
+py tools\analyze_v78_live_trace.py
+```
+
+結果輸出至 `output/v78_live_trace_root_cause/`。所有 frame 關聯使用
+`source_frame + capture_timestamp` 對照 `live_video_index.csv`；沒有把 `FIRED`、
+`key_down` 或 UID 數量當成遊戲命中率。實驗修補維持關閉，人工核對
+`physical_notes_review.csv` 前不會切換 Active 路徑。
+
 ## 輸出與資料
 
 每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。

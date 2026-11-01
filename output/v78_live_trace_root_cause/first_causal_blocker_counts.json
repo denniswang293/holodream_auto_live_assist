@@ -1,0 +1,11 @@
+{
+  "counts": {
+    "KEY_DOWN_LOGGED_GAME_TRUTH_UNKNOWN": 50,
+    "TRACK_COAST_TIMEOUT": 115,
+    "NOT_ENOUGH_OBSERVATIONS": 17,
+    "eta_outside_horizon": 3,
+    "below_event_min_y": 7,
+    "particle_posterior_too_wide": 3
+  },
+  "game_accuracy": "UNKNOWN"
+}
