@@ -22,6 +22,15 @@
       "case_frames": []
     }
   },
+  "pf_assisted_reassociation": {
+    "enabled": false,
+    "mode": "shadow",
+    "offline_only": true,
+    "require_real_candidate": true,
+    "allow_coasting_to_fire": false,
+    "preserve_hard_gates": true,
+    "min_score_margin": 0.5
+  },
   "detector": {
     "edge_threshold": 65,
     "min_area": 55,

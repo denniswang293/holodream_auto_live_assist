@@ -255,6 +255,8 @@ class LiveEngine:
         self.judgment_bar_top = geometry.document.get('live_measurement',{}).get('judgment_bar_top_y')
         self.gate = GameplayGate(config.get("gameplay"), geometry.reference_resolution)
         tracker_cfg = {**config.get("tracker", {}), "key_map": config["key_map"]}
+        tracker_cfg["pf_assisted_reassociation"] = dict(
+            config.get("pf_assisted_reassociation", {}) or {})
         # Advancing input changes the prediction target, not the physical end
         # of the visible note. Keep tracking until the measured judgment row.
         tracker_cfg['completion_y'] = geometry.hit_y
@@ -719,7 +721,8 @@ class LiveEngine:
             frame, processing_timestamp,
             self.last_detector_diagnostics.get("candidate_trace", ()),
             trace.get("pair_rows", ()), attempts,
-            trace.get("assignment_rows", ()), track_rows, state)
+            trace.get("assignment_rows", ()), track_rows, state,
+            trace.get("pf_reassociation_rows", ()))
 
     def _emit_tap_decision(self, tr, event_id, frame, now, stage, result,
                            reason="", retryable=False, *, scheduled=None,

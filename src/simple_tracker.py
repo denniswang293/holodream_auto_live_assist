@@ -14,6 +14,7 @@ import time
 from .assignment import assign
 from .detector import Candidate
 from .particle_predictor import ParticlePredictor
+from .pf_reassociation import PFAssistedReassociation
 from .predictor import Prediction
 
 
@@ -118,6 +119,8 @@ class SimpleTracker:
         self.pink_min_displacement_px = float(
             self.cfg.get("pink_min_displacement_px",
                         self.particle_cfg.get("min_displacement_px", 5.0)))
+        self.pf_reassociation = PFAssistedReassociation(
+            self.cfg.get("pf_assisted_reassociation", {}))
 
     @staticmethod
     def _center(candidate: Candidate):
@@ -315,6 +318,7 @@ class SimpleTracker:
             trace.setdefault("pair_rows", [])
             trace.setdefault("track_rows", [])
             trace.setdefault("assignment_rows", [])
+            trace.setdefault("pf_reassociation_rows", [])
             trace.setdefault("dropped_rows", 0)
         trace_limit = int(trace.get("max_rows", 10000)) if trace is not None else 0
         def trace_append(bucket, row):
@@ -322,12 +326,36 @@ class SimpleTracker:
                 return
             target = trace.setdefault(bucket, [])
             if sum(len(trace.get(k, [])) for k in
-                   ("pair_rows", "track_rows", "assignment_rows", "attempt_rows")) >= trace_limit:
+                   ("pair_rows", "track_rows", "assignment_rows", "attempt_rows", "pf_reassociation_rows")) >= trace_limit:
                 trace["dropped_rows"] = trace.get("dropped_rows", 0) + 1
                 return
             target.append(row)
         previous = list(self.tracks)
         raw_candidate_count = len(candidates)
+        if trace is not None and self.pf_reassociation.enabled:
+            for row in self.pf_reassociation.propose(previous, candidates, timestamp):
+                trace_append("pf_reassociation_rows", {
+                    "frame": frame_index, "timestamp": timestamp,
+                    "old_uid": row.get("old_uid", ""),
+                    "track_id": row.get("track_id", ""),
+                    "candidate_id": row.get("candidate_id", ""),
+                    "candidate_appearance": row.get("candidate_appearance", ""),
+                    "candidate_note_type": row.get("candidate_note_type", ""),
+                    "candidate_keys": row.get("candidate_keys", ""),
+                    "pf_predicted_y": row.get("pf_predicted_y", ""),
+                    "pf_predicted_u": row.get("pf_predicted_u", ""),
+                    "pf_sigma_y": row.get("pf_sigma_y", ""),
+                    "pf_sigma_u": row.get("pf_sigma_u", ""),
+                    "pf_association_score": row.get("pf_association_score", ""),
+                    "score_margin": row.get("score_margin", ""),
+                    "coast_ms": row.get("coast_ms", ""),
+                    "competitor_track_ids": row.get("competitor_track_ids", ""),
+                    "gate_result": row.get("gate_result", ""),
+                    "decision": row.get("decision", ""),
+                    "reason": row.get("reason", ""),
+                    "real_candidate": row.get("real_candidate", False),
+                    "input_sent": False,
+                })
         if trace is not None and raw_candidate_count == 0:
             if previous:
                 for track in previous:

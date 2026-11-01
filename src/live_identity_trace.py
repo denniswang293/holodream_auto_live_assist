@@ -46,6 +46,15 @@ TRACK_FIELDS = [
     "state_transition", "intent_state", "intent_key", "trace_status",
 ]
 
+PF_REASSOCIATION_FIELDS = [
+    "run_id", "capture_sequence", "source_frame", "source_video_frame",
+    "capture_timestamp", "processing_timestamp", "frame_uid", "old_uid", "track_id",
+    "candidate_id", "candidate_appearance", "candidate_note_type", "candidate_keys",
+    "pf_predicted_y", "pf_predicted_u", "pf_sigma_y", "pf_sigma_u",
+    "pf_association_score", "score_margin", "coast_ms", "competitor_track_ids",
+    "gate_result", "decision", "reason", "real_candidate", "input_sent", "trace_status",
+]
+
 
 class LiveIdentityTraceWriter:
     """Write bounded telemetry rows without blocking the capture loop."""
@@ -70,7 +79,8 @@ class LiveIdentityTraceWriter:
             for name, fields in (
                     ("live_candidate_trace.csv", CANDIDATE_FIELDS),
                     ("live_association_attempts.csv", ASSOCIATION_FIELDS),
-                    ("live_track_identity.csv", TRACK_FIELDS)):
+                    ("live_track_identity.csv", TRACK_FIELDS),
+                    ("pf_reassociation_proposals.csv", PF_REASSOCIATION_FIELDS)):
                 fh = (self.directory / name).open("w", newline="", encoding="utf-8-sig")
                 self._files[name] = fh
                 self._writers[name] = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
@@ -133,7 +143,7 @@ class LiveIdentityTraceWriter:
 
     def submit_frame(self, frame, processing_timestamp, detector_rows,
                      pair_rows, attempt_rows, assignment_rows, track_rows,
-                     state: str):
+                     state: str, pf_rows=None):
         if not self.enabled or self._closed:
             return
         meta = self._metadata(frame, processing_timestamp)
@@ -167,6 +177,10 @@ class LiveIdentityTraceWriter:
             row["note_uid"] = row.get("note_uid") or f"{self.run_id}:simple:{track_id}" if track_id != "" else ""
             row["trace_status"] = f"track_trace:{state}"
             self._submit("live_track_identity.csv", row, frame)
+        for source in (pf_rows or ()):
+            row = {**meta, **{k: self._text(v) for k, v in source.items()}}
+            row["trace_status"] = "pf_reassociation_trace"
+            self._submit("pf_reassociation_proposals.csv", row, frame)
 
     def health_snapshot(self) -> dict:
         with self._lock:

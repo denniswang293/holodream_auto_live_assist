@@ -116,19 +116,22 @@ class ParticlePredictor:
     def identity_association_score(self, candidate, timestamp: float, reference_span: tuple[float, float],
                                    supported_keys: set[str] | list[str], selected_key: str | None = None,
                                    *, max_sigma: float | None = None,
-                                   allow_pinned_key: bool = False) -> dict:
+                                   allow_pinned_key: bool = False,
+                                   allow_confirmed_candidate: bool = False) -> dict:
         began = time.perf_counter()
         try:
             return self._identity_association_score(candidate,timestamp,reference_span,
                 supported_keys,selected_key,max_sigma=max_sigma,
-                allow_pinned_key=allow_pinned_key)
+                allow_pinned_key=allow_pinned_key,
+                allow_confirmed_candidate=allow_confirmed_candidate)
         finally:
             self.association_elapsed += time.perf_counter()-began
 
     def _identity_association_score(self, candidate, timestamp: float, reference_span: tuple[float, float],
                                     supported_keys: set[str] | list[str], selected_key: str | None = None,
                                     *, max_sigma: float | None = None,
-                                    allow_pinned_key: bool = False) -> dict:
+                                    allow_pinned_key: bool = False,
+                                    allow_confirmed_candidate: bool = False) -> dict:
         """Score a low-quality observation against the predicted physical Tap.
 
         This is a scale-normalized association diagnostic, not a probability.
@@ -148,7 +151,8 @@ class ParticlePredictor:
         if dt > self.max_coast_s:
             result["reason"] = "identity_coast_expired"
             return result
-        if (candidate.note_type != "unknown" or candidate.appearance not in
+        allowed_note_types = {"unknown", "tap"} if allow_confirmed_candidate else {"unknown"}
+        if (candidate.note_type not in allowed_note_types or candidate.appearance not in
                 ("cyan_bar", "yellow_bar", "neutral_candidate") or
                 candidate.suspected_overlap or candidate.path_bbox is not None or
                 candidate.hold_path_px > 0):

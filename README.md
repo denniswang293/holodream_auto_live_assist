@@ -35,34 +35,13 @@ Tap pipeline simplification 目前只輸出 `motion_reliable`、`timing_reliable
 
 診斷佇列滿時只丟 telemetry row，不丟影格、不停止送鍵；`dropped_diagnostic_rows` 必須在 health 檔中檢查。`source_video_frame` 在錄影索引尚未完成時可能為空，應以 `source_frame + capture_timestamp` 事後 join，不能以 frame/60 代替原始時間。
 
-### V7.7 replay / miss analysis
+### V7.8.1 PF-assisted continuity（預設關閉）
 
-V7.7 的分析工具只做離線 replay，不呼叫 Scheduler 或 Actuator：
-
-```powershell
-py tools\run_v77_analysis.py
-```
-
-它使用 `output/assist/run_20261031T194457_212618Z/live_video_index.csv` 的
-`capture_timestamp` 對齊同一 run 的 `live_source.mp4`，輸出到
-`output/v77_miss_analysis/`。工具會產生候選、association、track trace、灰色／重疊／粉色案例、
-接觸圖與根因報告；不能把候選數、`FIRED` 或 `key_down` 當成遊戲命中率。幾何仍為
-`pending_calibration` 時不會自動改座標；未完成人工 physical-note review 前，不會啟用任何
-neutral/overlap 實驗修補。
-
-### V7.8 live trace root-cause analysis
-
-當 `diagnostics.live_identity_trace.enabled` 開啟後，可針對指定 run 執行逐 UID
-根因分析；工具只讀取本地 CSV/影片，不會送出鍵盤輸入：
-
-```powershell
-py tools\analyze_v78_live_trace.py
-```
-
-結果輸出至 `output/v78_live_trace_root_cause/`。所有 frame 關聯使用
-`source_frame + capture_timestamp` 對照 `live_video_index.csv`；沒有把 `FIRED`、
-`key_down` 或 UID 數量當成遊戲命中率。實驗修補維持關閉，人工核對
-`physical_notes_review.csv` 前不會切換 Active 路徑。
+`config.json` 的 `pf_assisted_reassociation.enabled` 預設為 `false`、`mode` 為
+`shadow`。開啟時只對實際 Detector candidate 產生 PF 配對提案，保留 appearance、lane、
+時間與不確定性 hard gate；不建立虛擬 observation、不改 Legacy assignment、不由 coasting
+直接送鍵。啟用 identity telemetry 時，提案會寫入
+`pf_reassociation_proposals.csv`。回退方式是將該 flag 設回 `false`。
 
 ## 輸出與資料
 
