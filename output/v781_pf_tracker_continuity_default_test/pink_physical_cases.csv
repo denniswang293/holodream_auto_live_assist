@@ -1,0 +1,11 @@
+﻿physical_note_id,source_frame,capture_timestamp,source_video_frame,candidate_id,track_id,appearance,note_type,lane_span,bbox,status,game_judgment,crop_path
+pn-001,278,29150.7915845,273,278:candidate:5,,pink_candidate,unknown,0.672510:0.985077,"[376,36,31,2]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-001.jpg
+pn-002,280,29150.8220504,275,280:candidate:5,,pink_candidate,unknown,0.668029:0.982395,"[376,37,32,3]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-002.jpg
+pn-003,281,29150.8371159,276,281:candidate:4,,pink_candidate,unknown,0.668029:0.992219,"[376,37,33,3]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-003.jpg
+pn-004,282,29150.8524418,277,282:candidate:3,,pink_candidate,tap,0.677853:0.992219,"[377,36,32,5]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-004.jpg
+pn-005,284,29150.8840383,278,284:candidate:4,,pink_candidate,tap,0.673350:0.999004,"[377,37,34,6]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-005.jpg
+pn-006,285,29150.8995156,279,285:candidate:5,,pink_candidate,unknown,0.671899:0.994858,"[377,38,34,5]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-006.jpg
+pn-007,286,29150.9149447,280,286:candidate:1,,pink_candidate,tap,0.678412:0.996113,"[378,39,34,5]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-007.jpg
+pn-008,288,29150.9463007,281,288:candidate:5,,pink_candidate,unknown,0.666327:0.997327,"[377,40,36,5]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-008.jpg
+pn-009,289,29150.9615913,282,289:candidate:5,,pink_candidate,tap,0.664989:0.993360,"[377,40,36,6]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-009.jpg
+pn-010,291,29150.9931438,283,291:candidate:5,,pink_candidate,tap,0.670010:0.999644,"[378,42,37,5]",UNREVIEWED,UNKNOWN,output\v781_pf_tracker_continuity_default_test\case_crops\pn-010.jpg

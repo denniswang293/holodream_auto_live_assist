@@ -1,1 +1,9 @@
-﻿case_id,old_uid,candidate_id,source_frame,decision,reason,confidence
+﻿case_id,source_frame,capture_timestamp,old_uid,track_id,candidate_id,appearance,decision,reason,score,score_margin,baseline_same_uid_assigned,baseline_track_ids,ab_classification,confidence,physical_truth
+pf-001,205,29149.6541615,simple:1000000,1000000,205:candidate:0,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.06589335271426228,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-002,207,29149.6855368,simple:1000000,1000000,207:candidate:0,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.15236383559405997,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-003,209,29149.7176579,simple:1000000,1000000,209:candidate:0,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.06623437811647974,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-004,210,29149.7334982,simple:1000000,1000000,210:candidate:1,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.20178783518924895,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-005,211,29149.7495019,simple:1000000,1000000,211:candidate:1,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.035843394612145245,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-006,212,29149.764346,simple:1000000,1000000,212:candidate:0,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.2290181100934444,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-007,213,29149.780606,simple:1000000,1000000,213:candidate:1,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.02782080760213652,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN
+pf-008,214,29149.796062,simple:1000000,1000000,214:candidate:0,cyan_bar,SHADOW_REACQUIRE_PROPOSAL,pf_real_candidate_match,0.05994065324419476,,True,1000000,proposal_not_incremental_recovery,HIGH,UNKNOWN

@@ -1,1 +1,2 @@
 ﻿case_id,negative_control,decision,reason,physical_truth
+all,PF shadow never writes input,PASS,input_sent values are false,UNKNOWN
