@@ -1,0 +1,37 @@
+{
+  "status": "READY",
+  "run_dir": "C:\\Users\\USER\\Desktop\\holodream\\output\\run_20261101T034646_232725Z",
+  "sha256": {
+    "live_source.mp4": "7964386de004e95c277ecf5adfd558d92eb69dfccf7d796a95e573ce5562077b",
+    "live_video_index.csv": "dcd8206f6620decf03ecda6db3e94d26c5b5a50eb93fbe1a20b1c341565bd672",
+    "live_candidate_trace.csv": "f2d2703f59c7b04ce78224dcbb203f80f1be87d077da2d4d8f38e122ba3ca741",
+    "live_association_attempts.csv": "9f50595b5444ff472f029cb2a1af5a8077e3c90626395901e9e40d77136a003c",
+    "live_track_identity.csv": "64352a7f1be00b9a94f9d63339be55417c21c1f49a4169a076cb9e315748780d",
+    "pf_reassociation_proposals.csv": "2c581779cb9adc0ed7bdf79a48219bb762074f6eb987b3355cdbeb995df6fe9d",
+    "tap_intents.csv": "f355abdd65a5f36533bc7b49a284247ee75e6e859794cc9d6c85da148c6b74fe",
+    "tap_decisions.csv": "29e82b17118f336ae2cd8dc9444eeebfe44aa234b5f1c62f9b19c47a5efa407c",
+    "live_key_actions.csv": "a8fab1d58f19b8a5f4fbb18c7d3b43b4ab07ccaebe077efdda6cbc9e08e5918d",
+    "live_identity_trace_health.json": "04639431d3215259397d2f5ff4cac154545fa173cb57dcb853747e3029e50729",
+    "live_events.csv": "1e4eccffda69d4b45b232a81c2832a5f46f92d191308120df9a29f0c56227d17",
+    "live_run.json": "5ff8b0133c5cc0977150da4c76639590663aa5e70c8ecf4d0dbda9ab12ded29e",
+    "run_metrics.json": "7190bd69bac777403b2e561a83c643d36e8033acf4d8fa7820f2c0baf9d0e17c"
+  },
+  "row_counts": {
+    "live_source.mp4": null,
+    "live_video_index.csv": 577,
+    "live_candidate_trace.csv": 16469,
+    "live_association_attempts.csv": 16124,
+    "live_track_identity.csv": 2012,
+    "pf_reassociation_proposals.csv": 12689,
+    "tap_intents.csv": 365,
+    "tap_decisions.csv": 344,
+    "live_key_actions.csv": 112,
+    "live_identity_trace_health.json": null,
+    "live_events.csv": 441,
+    "live_run.json": null,
+    "run_metrics.json": null
+  },
+  "v786_outputs_present": true,
+  "timestamp_policy": "source_frame + capture_timestamp + live_video_index; no frame/60",
+  "physical_truth": "UNKNOWN"
+}

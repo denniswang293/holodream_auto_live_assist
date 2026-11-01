@@ -16,6 +16,11 @@ Run: `C:\Users\USER\Desktop\holodream\output\run_20261101T034646_232725Z`
 - Stable software-continuity cases: **2**; unstable: **1**.
 - These are Shadow simulation results, not game hits.
 
+## Confirmed-not-fired
+
+- First blocker categories for 18 UIDs: `{'UNKNOWN': 9, 'ETA': 1, 'PLANNER_GATE': 8}`.
+- `track_not_current_confirmed` and `assist_disarmed` are not treated as proven final root causes; they remain UNKNOWN without state proof.
+
 ## Identity review
 
 - Review rows: **28**; all initially `UNREVIEWED/UNKNOWN`.

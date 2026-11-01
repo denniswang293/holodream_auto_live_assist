@@ -1,0 +1,4 @@
+﻿case_id,uid,track_id,baseline_status,experimental_status,real_observation_support,stable_incremental_reacquisition,duplicate_uid,identity_switch,wrong_lane_key,game_judgment
+case_399_simple5,simple:5,5,baseline_coasting,stable_reacquired,4,True,False,False,False,UNKNOWN
+case_525_simple12,simple:12,12,baseline_coasting,stable_reacquired,6,True,False,False,False,UNKNOWN
+case_408_simple5,simple:5,5,baseline_coasting,unstable_recovery,0,False,False,False,False,UNKNOWN

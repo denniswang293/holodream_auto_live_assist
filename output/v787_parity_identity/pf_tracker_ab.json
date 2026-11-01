@@ -1,0 +1,21 @@
+{
+  "semantic_assignment_parity": "PARTIAL",
+  "raw_recorded_rows": 3308,
+  "recorded_unique_edges": 1654,
+  "replay_unique_edges": 1656,
+  "extra_edges": 2,
+  "missing_edges": 0,
+  "baseline_same_uid_recoveries": 79,
+  "B_rescue_transitions": 3,
+  "B_stable_incremental_recoveries": 2,
+  "B_unstable_recoveries": 1,
+  "manually_confirmed_physical_recoveries": 0,
+  "manual_negative_controls_verified": 0,
+  "input_sent_shadow": false,
+  "uid_switch": 0,
+  "duplicate_uid": 0,
+  "wrong_key_lane": 0,
+  "game_accuracy": "UNKNOWN",
+  "active_enabled": false,
+  "decision": "SHADOW_ONLY_NEEDS_REVIEW"
+}

@@ -1,0 +1,9 @@
+{
+  "status": "SHADOW_ONLY_NEEDS_REVIEW",
+  "semantic_assignment_parity": "PARTIAL",
+  "uid_lifecycle_parity": "PARTIAL",
+  "physical_identity_verified_successes": 0,
+  "physical_negative_controls_verified": 0,
+  "active_enabled": false,
+  "reason": "Two semantic extra edges remain trace-semantics differences and all identity rows are UNREVIEWED/UNKNOWN."
+}

@@ -1,0 +1,10 @@
+{
+  "recorded_assigned_rows": 3308,
+  "replay_assignment_rows": 1656,
+  "recorded_duplicate_rows": 1654,
+  "replay_duplicate_rows": 0,
+  "recorded_unique_edges": 1654,
+  "replay_unique_edges": 1656,
+  "event_granularity_note": "live assigned rows contain exact duplicate edges from pair and assignment trace rows",
+  "physical_truth": "UNKNOWN"
+}

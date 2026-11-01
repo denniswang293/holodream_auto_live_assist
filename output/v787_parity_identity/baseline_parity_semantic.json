@@ -1,0 +1,26 @@
+{
+  "recorded_unique_edges": 1654,
+  "replay_unique_edges": 1656,
+  "missing_edges": 0,
+  "extra_edges": 2,
+  "semantic_assignment_parity": "PARTIAL",
+  "track_id_mapping_count": 37,
+  "physical_truth": "UNKNOWN",
+  "missing_examples": [],
+  "extra_examples": [
+    [
+      "385",
+      "29152.4751039",
+      "1000003",
+      "385:candidate:0",
+      "assignment"
+    ],
+    [
+      "546",
+      "29154.9874954",
+      "1000014",
+      "546:candidate:11",
+      "assignment"
+    ]
+  ]
+}

@@ -185,15 +185,37 @@ def physical_review(v785_controls: list[dict], case_rows: list[dict], source: Pa
     return rows
 
 
-def root_and_confirmed(v785_dir: Path, out: Path) -> None:
+def root_and_confirmed(v785_dir: Path, run_dir: Path, out: Path) -> None:
     lifecycle = read_csv(v785_dir / "pf_state_lifecycle_audit.csv") if (v785_dir / "pf_state_lifecycle_audit.csv").exists() else []
     write_csv(out / "pf_state_root_cause.csv", [{"episode_id": r.get("episode_id", ""), "track_id": r.get("track_id", ""), "note_uid": r.get("note_uid", ""), "first_root_cause": r.get("unavailable_reason", "UNKNOWN"), "observation_count": r.get("observation_count", ""), "pf_initialized": r.get("pf_initialized", ""), "evidence": r.get("evidence", ""), "confidence": r.get("confidence", "") } for r in lifecycle if r.get("unavailable_reason") in {"PF_NEVER_INITIALIZED", "SOURCE_TRACE_INSUFFICIENT"}])
-    confirmed = read_csv(v785_dir / "confirmed_not_fired_audit.csv") if (v785_dir / "confirmed_not_fired_audit.csv").exists() else []
+    intents = read_csv(run_dir / "tap_intents.csv")
+    decisions = read_csv(run_dir / "tap_decisions.csv")
+    confirmed_uids = {r.get("note_uid") for r in intents if r.get("state") == "CONFIRMED"}
+    fired_uids = {r.get("note_uid") for r in intents if r.get("state") == "FIRED"}
+    confirmed = []
+    for uid in sorted(confirmed_uids - fired_uids):
+        ds = sorted((r for r in decisions if r.get("note_uid") == uid), key=lambda r: number(r.get("timestamp"), 0) or 0)
+        last = next((r for r in reversed(ds) if r.get("reason")), None)
+        confirmed.append({"note_uid": uid, "confirmed": True, "fired": False, "first_blocker": (last or {}).get("reason", "UNKNOWN"), "blocker_timestamp": (last or {}).get("timestamp", ""), "lifecycle_state": (last or {}).get("lifecycle_state", "")})
     rows = []
     for r in confirmed:
         reason = (r.get("first_blocker") or "").lower()
-        category = "TRACKER" if "track" in reason else "PF_STATE" if "pf" in reason else "ETA" if "eta" in reason or "tim" in reason else "PLANNER_GATE" if "planner" in reason or "gate" in reason else "SCHEDULER" if "sched" in reason or "deadline" in reason else "ACTUATOR" if "key" in reason or "act" in reason else "UNKNOWN"
-        rows.append({**r, "blocker_category": category, "game_judgment": "UNKNOWN", "evidence": "tap_decisions.csv + live_key_actions.csv"})
+        if "track_not_current_confirmed" in reason or "assist_disarmed" in reason:
+            category = "UNKNOWN"
+            blocker = f"{r.get('first_blocker','')}_not_final_without_state_proof"
+        elif "pf" in reason:
+            category, blocker = "PF_STATE", r.get("first_blocker", "")
+        elif "eta" in reason or "tim" in reason:
+            category, blocker = "ETA", r.get("first_blocker", "")
+        elif "below_event_min_y" in reason or "planner" in reason or "gate" in reason:
+            category, blocker = "PLANNER_GATE", r.get("first_blocker", "")
+        elif "sched" in reason or "deadline" in reason:
+            category, blocker = "SCHEDULER", r.get("first_blocker", "")
+        elif "key" in reason or "act" in reason:
+            category, blocker = "ACTUATOR", r.get("first_blocker", "")
+        else:
+            category, blocker = "UNKNOWN", r.get("first_blocker", "")
+        rows.append({**r, "first_blocker": blocker, "blocker_category": category, "game_judgment": "UNKNOWN", "evidence": "tap_decisions.csv + live_key_actions.csv; state proof unavailable for transient gate"})
     write_csv(out / "confirmed18_first_blocker.csv", rows)
 
 
@@ -239,14 +261,15 @@ def run(args: argparse.Namespace) -> int:
     # Reuse the V7.8.5 evidence crops as source-linked manual controls.
     controls = read_csv(v785_dir / "pf_rescue_negative_controls.csv") if (v785_dir / "pf_rescue_negative_controls.csv").exists() else []
     physical_rows = physical_review(controls, case_rows, run_dir / "live_source.mp4", index, out)
-    root_and_confirmed(v785_dir, out)
+    root_and_confirmed(v785_dir, run_dir, out)
+    confirmed_blockers = Counter(r.get("blocker_category", "UNKNOWN") for r in read_csv(out / "confirmed18_first_blocker.csv"))
     ab_summary = {"semantic_assignment_parity": semantic["semantic_assignment_parity"], "raw_recorded_rows": raw["recorded_assigned_rows"], "raw_replay_rows": raw["replay_assignment_rows"], "recorded_unique_edges": semantic["recorded_unique_edges"], "replay_unique_edges": semantic["replay_unique_edges"], "replay_extra_edges": semantic["extra_edges"], "replay_missing_edges": semantic["missing_edges"], "uid_lifecycle_parity": lifecycle_parity["lifecycle_parity"], "case_rescue_transitions": len([r for r in b["shadow_rows"] if any(str(r.get("track_id")) == tid and str(r.get("frame")) == frame for _, tid, frame in TARGETS)]), "stable_incremental_recoveries": sum(r.get("B_status") == "stable_reacquired" for r in case_rows), "unstable_recoveries": sum(r.get("B_status") == "unstable_recovery" for r in case_rows), "manual_identity_confirmed": 0, "negative_controls_manual_confirmed": 0, "game_accuracy": "UNKNOWN", "active_enabled": False, "decision": "SHADOW_ONLY_NEEDS_REVIEW"}
     (out / "pf_tracker_ab.json").write_text(json.dumps(ab_summary, indent=2), encoding="utf-8")
     decision = {"status": "SHADOW_ONLY_NEEDS_REVIEW", "semantic_replay_parity": semantic["semantic_assignment_parity"], "uid_lifecycle_parity": lifecycle_parity["lifecycle_parity"], "stable_incremental_recoveries": ab_summary["stable_incremental_recoveries"], "manual_success_cases_confirmed": 0, "manual_negative_controls_confirmed": 0, "active_enabled": False, "reason": "Parity is not PASS and all physical identity reviews remain UNREVIEWED/UNKNOWN."}
     (out / "decision_gate.json").write_text(json.dumps(decision, indent=2), encoding="utf-8")
     tests = subprocess.run([sys.executable, "-m", "pytest", "-q"], cwd=ROOT, text=True, capture_output=True)
     (out / "pytest_v786.txt").write_text(tests.stdout + tests.stderr, encoding="utf-8")
-    report = ["# V7.8.6 Replay Parity and Identity Validation", "", f"Run: `{run_dir}`", "", "## Parity", "", f"- Raw live/replay assignment rows: **{raw['recorded_assigned_rows']} / {raw['replay_assignment_rows']}**", f"- Semantic unique edges: **{semantic['recorded_unique_edges']} / {semantic['replay_unique_edges']}**", f"- Semantic parity: **{semantic['semantic_assignment_parity']}**; extra={semantic['extra_edges']}, missing={semantic['missing_edges']}", f"- UID lifecycle parity: **{lifecycle_parity['lifecycle_parity']}**", "- Exact duplicate live rows are retained in raw counts and removed only for semantic comparison.", "", "## Target cases", "", "- simple:5 frame 399, simple:12 frame 525, simple:5 frame 408 were replayed again.", f"- Stable software-continuity cases: **{ab_summary['stable_incremental_recoveries']}**; unstable: **{ab_summary['unstable_recoveries']}**.", "- These are Shadow simulation results, not game hits.", "", "## Identity review", "", f"- Review rows: **{len(physical_rows)}**; all initially `UNREVIEWED/UNKNOWN`.", "- 25 negative controls have adjacent-frame crops; no automatic physical identity verdict was assigned.", "", "## Decision", "", "**SHADOW_ONLY / NEEDS_REVIEW. Active remains OFF.** Semantic parity is not PASS and no physical identity case has been manually confirmed.", "", "## Verification", "", f"- pytest exit code: **{tests.returncode}**; see `pytest_v786.txt`.", "- All replay alignment uses capture timestamp and source frame; no fixed-FPS substitution.", ""]
+    report = ["# V7.8.6 Replay Parity and Identity Validation", "", f"Run: `{run_dir}`", "", "## Parity", "", f"- Raw live/replay assignment rows: **{raw['recorded_assigned_rows']} / {raw['replay_assignment_rows']}**", f"- Semantic unique edges: **{semantic['recorded_unique_edges']} / {semantic['replay_unique_edges']}**", f"- Semantic parity: **{semantic['semantic_assignment_parity']}**; extra={semantic['extra_edges']}, missing={semantic['missing_edges']}", f"- UID lifecycle parity: **{lifecycle_parity['lifecycle_parity']}**", "- Exact duplicate live rows are retained in raw counts and removed only for semantic comparison.", "", "## Target cases", "", "- simple:5 frame 399, simple:12 frame 525, simple:5 frame 408 were replayed again.", f"- Stable software-continuity cases: **{ab_summary['stable_incremental_recoveries']}**; unstable: **{ab_summary['unstable_recoveries']}**.", "- These are Shadow simulation results, not game hits.", "", "## Confirmed-not-fired", "", f"- First blocker categories for 18 UIDs: `{dict(confirmed_blockers)}`.", "- `track_not_current_confirmed` and `assist_disarmed` are not treated as proven final root causes; they remain UNKNOWN without state proof.", "", "## Identity review", "", f"- Review rows: **{len(physical_rows)}**; all initially `UNREVIEWED/UNKNOWN`.", "- 25 negative controls have adjacent-frame crops; no automatic physical identity verdict was assigned.", "", "## Decision", "", "**SHADOW_ONLY / NEEDS_REVIEW. Active remains OFF.** Semantic parity is not PASS and no physical identity case has been manually confirmed.", "", "## Verification", "", f"- pytest exit code: **{tests.returncode}**; see `pytest_v786.txt`.", "- All replay alignment uses capture timestamp and source frame; no fixed-FPS substitution.", ""]
     (out / "V7_8_6_REPORT.md").write_text("\n".join(report), encoding="utf-8")
     print(json.dumps({"output_dir": str(out), "summary": ab_summary, "pytest_exit": tests.returncode}, indent=2))
     return tests.returncode
