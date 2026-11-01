@@ -1,1 +1,0 @@
-case_id,source_frame,old_uid,candidate_id,appearance,old_lane,new_lane,prior_observation_frames,subsequent_real_observations,competing_track_ids,same_physical_note_verdict,visual_confidence,reviewer_status,reviewer_notes,game_judgment,software_verdict,evidence_paths

@@ -1,3 +1,0 @@
-source_frame,capture_timestamp,replay_track,candidate_id,candidate_final_rows,live_assignment_attempt_rows,earliest_divergence,root_cause,confidence,parity_status,evidence
-385,29152.4751039,1000003,385:candidate:0,1,0,candidate_final_present_without_live_assignment_trace,TRACE_SEMANTICS,HIGH,PARTIAL_SOURCE_INSUFFICIENT,live_candidate_trace.csv + live_association_attempts.csv + baseline_parity_semantic.json
-546,29154.9874954,1000014,546:candidate:11,1,0,candidate_final_present_without_live_assignment_trace,TRACE_SEMANTICS,HIGH,PARTIAL_SOURCE_INSUFFICIENT,live_candidate_trace.csv + live_association_attempts.csv + baseline_parity_semantic.json

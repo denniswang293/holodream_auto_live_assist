@@ -1,96 +1,65 @@
 # HoloDream Live Assist
 
-> **警告：**目前工具仍處於測試階段，測試結果尚不穩定，基本上還不能放心用於實戰。
+> **警告：目前工具仍處於測試階段，測試結果仍可能不穩定，基本上還不能視為完全可靠的防守使用。**
 
-Simple Tracker + Particle Filter。Hold 控制、即時擷取、幾何、人工啟用與輸入安全機制仍保留。執行指標不代表遊戲命中率。
+HoloDream 是 Windows 上的離線安全優先 Live Assist：使用六鍵軌道偵測、Particle Filter Tap 追蹤與 ETA 預測，並以視覺 Hold 控制輔助遊戲操作。實際輸入一律由 Legacy Assist 路徑處理，PF-assisted reassociation 僅保留 Shadow/offline 診斷模式。
 
-## 安裝與啟動
+## 安裝
 
-需要 Windows 與 Python 3.10 或更新版本：
+需要 Windows 與 Python 3.10+：
 
 ```powershell
 python -m pip install -r requirements.txt
 python -m pip install -r requirements-live.txt
+```
+
+## 啟動
+
+```powershell
 .\tools\launch_assist.cmd
 ```
 
-啟動後等待遊戲進入 PLAYING，並確認遊戲視窗在前景。Assist 初始為停用狀態；按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次可停用。`Esc` 或 `F12` 停止程式並釋放按住的鍵。失焦、暫停或影格過期時會解除輸入。
+Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次停用；`Esc` 或 `F12` 會停止程式並釋放按住的鍵。失焦、ROI 不合法、影格過期或安全條件失效時，輸入會自動停止。
 
-程式使用 720×404 座標、`S D F J K L` 六鍵及 `config/geometry_live_assist.json`。Tap 目標使用 y=295.5（判定線上移 30 px）；Hold 依可見尾端放鍵。
+預設使用完整遊戲顯示區、720×404 內部座標、六鍵 `S D F J K L`，視窗標題為 `hololive-Dreams`。Tap 使用 Particle Filter 追蹤與 ETA 預測；Hold 使用視覺尾端離開判定區控制放鍵。
 
-V7.1 flags 位於 `config/live_assist.json`：pending Tap deadline amendment 使用 30 ms freeze window 與 bounded revisions；judgment calibration 在有足夠遊戲判定標註前維持 shadow-only；Hold v2 使用短時間 head/body continuity，並保留既有的 bounded release 與失焦安全規則。
+## 診斷設定
 
-Tap pipeline simplification 目前只輸出 `motion_reliable`、`timing_reliable` 及 Linear ETA shadow 診斷；`simplified_tap_planner.enabled` 預設關閉，尚未用未標註資料宣稱命中率改善。
+`config.json` 保留安全預設：
 
-### V7.5.7 Live identity telemetry（預設關閉）
+- `pf_assisted_reassociation.enabled=false`：PF-assisted 只做 Shadow/offline 診斷，不可送鍵。
+- `diagnostics.trace_snapshot.enabled=true`：以有限佇列寫入逐影格追蹤摘要，僅供事後分析，不參與決策。
+- `control.dry_run`、人工啟用、失焦／stale／ESC／F12 停止保護保持不變。
 
-`config.json` 的 `diagnostics.live_identity_trace.enabled` 預設為 `false`。只有在離線 dry-run 或明確的診斷實機測試時才開啟；它不會改變 Legacy Tap 輸入路徑，也不會啟用 Simplified Planner、放寬 association/PF gate 或新增鍵盤操作。
+Snapshot 會寫入每次 `output/assist/run_*` 的 `live_trace_snapshots.csv`。它不會建立 synthetic observation、改變 Planner/Scheduler、取得 Hold 所有權或呼叫 Actuator。
 
-啟用後，每次 `output/assist/run_*` 會非同步、有限佇列地寫入：
+## 輸出
 
-- `live_candidate_trace.csv`：raw/merged/final candidate、bbox、normalized lane、appearance、gate reason。
-- `live_association_attempts.csv`：pair、assignment，以及 `zero_candidate`、`no_compatible_candidate`、`dedup_suppressed` 等 sentinel。
-- `live_track_identity.csv`：track/candidate/note UID、matched/coasting/status、intent state。
-- `live_identity_trace_health.json`：佇列容量、寫入/丟棄列數與 frame coverage。
+每次執行會在 `output/assist/run_*` 建立紀錄。主要檔案包括：
 
-診斷佇列滿時只丟 telemetry row，不丟影格、不停止送鍵；`dropped_diagnostic_rows` 必須在 health 檔中檢查。`source_video_frame` 在錄影索引尚未完成時可能為空，應以 `source_frame + capture_timestamp` 事後 join，不能以 frame/60 代替原始時間。
+- `live_events.csv`：事件與排程狀態。
+- `live_key_actions.csv`：軟體送鍵動作紀錄；不等於遊戲命中。
+- `live_trace_snapshots.csv`：可選診斷 snapshot。
+- `live_overlay.mp4`、`live_source.mp4`：只有啟用錄影時才會產生。
 
-### V7.8.1 PF-assisted continuity（預設關閉）
-
-`config.json` 的 `pf_assisted_reassociation.enabled` 預設為 `false`、`mode` 為
-`shadow`。開啟時只對實際 Detector candidate 產生 PF 配對提案，保留 appearance、lane、
-時間與不確定性 hard gate；不建立虛擬 observation、不改 Legacy assignment、不由 coasting
-直接送鍵。啟用 identity telemetry 時，提案會寫入
-`pf_reassociation_proposals.csv`。回退方式是將該 flag 設回 `false`。
-
-### V7.8.4 targeted PF reacquisition（僅離線 Shadow）
-
-V7.8.4 只在 Legacy assignment 完成後，檢查仍在 coast 的 confirmed Track
-與當幀未被 Legacy 使用的真實 `candidate_final`。它不改寫 assignment、Planner、
-Scheduler、Hold 或 Actuator；`config.json` 的
-`pf_assisted_reassociation.enabled` 預設為 `false`。離線 A/B 可用：
-
-```powershell
-py tools\run_v781_pf_analysis.py --run-dir output\run_20261101T034646_232725Z `
-  --output-dir output\v784_targeted_pf_reacquisition
-```
-
-只有維持至少兩個後續真實觀測的原 UID 連續性才可計為穩定恢復；本次沒有遊戲判定真值，
-因此命中率維持 `UNKNOWN`。
-
-### V7.8.5 PF state replay（僅離線）
-
-V7.8.5 以同一份 `candidate_final` stream 和實際 `capture_timestamp` 建立隔離的
-Legacy A 與 Shadow B tracker。B 可以在自己的副本中測試原 UID 回接，但不會呼叫
-Planner、Scheduler 或 Actuator；沒有兩個後續真實觀測的案例不計為穩定恢復。
-
-```powershell
-py tools\run_v785_pf_replay.py `
-  --run-dir output\run_20261101T034646_232725Z `
-  --out-dir output\v785_pf_state_replay
-```
-
-## 輸出與資料
-
-每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。
+沒有遊戲判定來源時，遊戲命中率一律視為 `UNKNOWN`；`FIRED`、`key_down` 或 UID 持續都不能直接解讀為 Perfect、Good 或 Miss。
 
 ## 核心測試
 
-安裝測試依賴後執行：
-
 ```powershell
 python -m pip install -r requirements-test.txt
-python -m pytest
+python -m pytest -q
 ```
 
-測試只能驗證程式行為，不能證明實機命中率。
+測試驗證程式安全與演算法行為，不代表實機命中率。
 
-## 核心檔案
+## 核心結構
 
-- `src/simple_tracker.py`、`src/particle_predictor.py`：C 模式 Tap 位置追蹤與 Hit ETA 預測。
-- `src/tap_planner.py`、`src/tap_intent.py`：Tap 排程與意圖。
-- `src/live_input.py`、`src/live_engine.py`：人工啟用、安全限制、排程及 Hold 控制。
-- `src/live_capture.py`、`src/geometry.py`、`src/detector.py`：即時擷取、幾何與音符偵測。
-- `tools/launch_assist.cmd`：Assist 啟動器。
-
-更多操作資訊見[操作手冊](docs/OPERATOR_GUIDE.md)、[架構說明](docs/ARCHITECTURE.md)與[資料及校正說明](docs/DATA_AND_CALIBRATION.md)。
+- `src/live.py`、`src/live_engine.py`：Assist 執行、安全停止與流程整合。
+- `src/simple_tracker.py`、`src/particle_predictor.py`：Tap 追蹤與 ETA 預測。
+- `src/tap_planner.py`、`src/tap_intent.py`：Tap 意圖與排程。
+- `src/hold_tracker.py`、`src/hold_visual.py`：Hold 視覺追蹤與放鍵。
+- `src/detector.py`、`src/geometry.py`：色塊偵測與六鍵幾何。
+- `src/live_input.py`、`src/windows_runtime.py`：人工啟用與 Windows 輸入安全。
+- `tools/launch_assist.cmd`：正式 Assist 啟動器。
+- `docs/`：操作、架構與校正說明。

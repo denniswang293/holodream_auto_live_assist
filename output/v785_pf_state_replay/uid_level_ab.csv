@@ -1,4 +1,0 @@
-﻿track_id,uid,rescue_frame,rescue_candidate_id,baseline_status,experimental_status,real_observation_support,stable_incremental_reacquisition,duplicate_uid,identity_switch,wrong_lane_key,simulated_tap_schedule_delta_ms,game_judgment
-5,simple:5,399,399:candidate:5,coasting_or_new_track,stable_reacquired,4,True,False,False,False,UNKNOWN,UNKNOWN
-5,simple:5,408,408:candidate:0,coasting_or_new_track,unstable_recovery,0,False,False,False,False,UNKNOWN,UNKNOWN
-12,simple:12,525,525:candidate:4,coasting_or_new_track,stable_reacquired,6,True,False,False,False,UNKNOWN,UNKNOWN

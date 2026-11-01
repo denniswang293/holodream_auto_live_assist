@@ -1,7 +1,0 @@
-{
-  "status": "PARTIAL",
-  "track_count": 37,
-  "pass_tracks": 35,
-  "partial_tracks": 2,
-  "reason": "Original live trace has no serialized Tracker/PF state snapshot; two replay-extra edges remain audit-visible."
-}
