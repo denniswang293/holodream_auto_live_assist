@@ -304,6 +304,26 @@ def test_simple_core_emits_per_frame_eta_and_shadow_rows():
     scheduler.close()
 
 
+def test_pf_width_shadow_evidence_is_bounded_and_never_schedules():
+    _, actuator, _, scheduler = armed_scheduler()
+    core = SimpleAssistCore(session_id="session", tracker_cfg={},
+        particle_cfg={"max_uncertainty_s": .04}, hit_y=310.5,
+        event_cfg={"max_eta_s": .45}, min_y=190, known_keys={"F"},
+        timing_cfg={"simplified_tap_planner": {"enabled": False, "mode": "shadow"},
+                    "linear_timing": {"enabled": True}})
+    track = add_particle_evidence(make_ready_track())
+    track.history.insert(0, (9.8, 220, .4))
+    track.prediction = replace(track.prediction, eta_p10=.10, eta_p90=.16)
+    core.plan_tracks([track], 10.0, 10.0, scheduler, enabled=True, source_frame=42)
+    rows = core.drain_pf_gate_shadow_rows()
+    assert len(rows) == 1
+    assert rows[0]["source_frame"] == 42
+    assert rows[0]["b_gate_result"] == "eligible_if_only_width_removed"
+    assert rows[0]["b_input_sent"] is False
+    assert scheduler.pending == {} and actuator.calls == []
+    scheduler.close()
+
+
 def test_simple_core_reads_nested_tap_deadline_amend_config():
     core = SimpleAssistCore(session_id="session", tracker_cfg={},
         particle_cfg={"max_uncertainty_s": .04}, hit_y=310.5,

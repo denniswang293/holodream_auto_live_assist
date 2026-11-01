@@ -1558,7 +1558,7 @@ class LiveEngine:
             safe_context = (state == "PLAYING" and focused and roi_valid and not stale)
             proposals, accepted = self.simple_core.plan_tracks(
                 self.simple_tracks, frame.captured_at, finished, self.scheduler,
-                enabled=safe_context)
+                enabled=safe_context, source_frame=frame.sequence)
             for tr in self.simple_tracks:
                 uid = self.simple_core.note_uid(tr.track_id)
                 intent = self.simple_core.intents.intents.get(uid)

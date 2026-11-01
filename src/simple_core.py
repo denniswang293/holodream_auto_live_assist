@@ -55,6 +55,9 @@ class SimpleAssistCore:
         self.decision_rows = []
         self.shadow_rows = []
         self.eta_rows = []
+        # Event-triggered, bounded evidence for the single PF-width gate
+        # experiment.  This is diagnostic-only and never enters scheduling.
+        self.pf_gate_shadow_rows = []
         self.shadow_decisions = {}
         self._last_decision_fingerprints = {}
 
@@ -68,7 +71,7 @@ class SimpleAssistCore:
                                         enabled=playing)
 
     def plan_tracks(self, tracks, captured_at: float, processed_at: float,
-                    scheduler, *, enabled: bool):
+                    scheduler, *, enabled: bool, source_frame=None):
         note_uids = {}
         for track in tracks if enabled else ():
             uid = self.note_uid(track.track_id)
@@ -116,7 +119,7 @@ class SimpleAssistCore:
             trace.linear_quality = linear.quality
         self._append_diagnostics(tracks, captured_at, processed_at, proposals,
                                  reasons, rejected, traces, shadow, scheduler,
-                                 linear_estimates)
+                                 linear_estimates, source_frame)
         for track in tracks:
             uid = self.note_uid(track.track_id)
             trace = traces.get(track.track_id)
@@ -168,7 +171,7 @@ class SimpleAssistCore:
 
     def _append_diagnostics(self, tracks, captured_at, processed_at, proposals,
                             reasons, rejected, traces, shadow, scheduler,
-                            linear_estimates):
+                            linear_estimates, source_frame=None):
         """Append one ETA/shadow row per current track, every frame.
 
         These rows intentionally do not use the lifecycle fingerprint.  A
@@ -241,6 +244,55 @@ class SimpleAssistCore:
                 "legacy_hit_at": proposals[track.track_id].hit_at if track.track_id in proposals else "",
                 "input_sent": False,
             })
+            # Record only the narrow case required by V7.11 work order 0E:
+            # Legacy was blocked solely by posterior width according to the
+            # recorded gate trace, while every other recorded gate passed.
+            # Do not call any planner, intent manager, or scheduler method
+            # here; this row is a passive observation only.
+            if planner_reason == "particle_posterior_too_wide" and trace is not None:
+                other_gates = {name: value for name, value in trace.gates.items()
+                               if name != "particle_posterior_width"}
+                if all(other_gates.values()):
+                    width_s = None
+                    if prediction.eta_p10 is not None and prediction.eta_p90 is not None:
+                        width_s = prediction.eta_p90 - prediction.eta_p10
+                    candidate_keys = list(track.candidate.candidate_keys)
+                    uid = self.note_uid(track.track_id)
+                    pending = [
+                        {"event_id": event_id, "key": intent.keys[0],
+                         "hit_at": intent.hit_at}
+                        for event_id, intent in list(scheduler.pending.items())[:8]
+                    ]
+                    held = [
+                        {"key": key, "release_at": release_at,
+                         "event_id": intent.event_id}
+                        for key, (release_at, intent) in list(scheduler.held.items())[:8]
+                    ]
+                    recent = [{"key": key, "hit_at": hit}
+                              for key, hit in list(scheduler.recent)[-8:]]
+                    competition = [
+                        row for row in pending + recent
+                        if row.get("key") in candidate_keys
+                    ]
+                    self.pf_gate_shadow_rows.append({
+                        "capture_timestamp": captured_at,
+                        "processing_timestamp": processed_at,
+                        "source_frame": source_frame if source_frame is not None else "",
+                        "track_id": track.track_id,
+                        "note_uid": uid,
+                        "posterior_width_ms": width_s * 1000 if width_s is not None else "",
+                        "hit_at": prediction.hit_time if prediction.hit_time is not None else "",
+                        "last_safe_time": trace.last_safe_schedule_at or "",
+                        "valid_keys": "|".join(candidate_keys),
+                        "legacy_result": "rejected",
+                        "legacy_reason": planner_reason,
+                        "b_gate_result": "eligible_if_only_width_removed",
+                        "b_input_sent": False,
+                        "pending_summary": json.dumps(pending, sort_keys=True),
+                        "held_summary": json.dumps(held, sort_keys=True),
+                        "recent_summary": json.dumps(recent, sort_keys=True),
+                        "competition_summary": json.dumps(competition, sort_keys=True),
+                    })
 
     def drain_transitions(self):
         rows, self.transitions = self.transitions, []
@@ -256,6 +308,10 @@ class SimpleAssistCore:
 
     def drain_eta_rows(self):
         rows, self.eta_rows = self.eta_rows, []
+        return rows
+
+    def drain_pf_gate_shadow_rows(self):
+        rows, self.pf_gate_shadow_rows = self.pf_gate_shadow_rows, []
         return rows
 
     def record_scheduler_action(self, action: dict):

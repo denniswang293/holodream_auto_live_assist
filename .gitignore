@@ -10,4 +10,5 @@ dist/
 *.egg-info/
 /holodream.mp4
 /output/assist
+/output/run_*/*.mp4
 !/output/README.md

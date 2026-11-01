@@ -59,6 +59,11 @@ ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "track_id
               "linear_reason", "stale_observation", "legacy_planner_result", "legacy_planner_reason",
               "shadow_planner_result", "shadow_planner_reason", "scheduler_result",
               "scheduler_reason", "appearance"]
+PF_GATE_SHADOW_FIELDS = ["capture_timestamp", "processing_timestamp", "source_frame",
+                         "track_id", "note_uid", "posterior_width_ms", "hit_at",
+                         "last_safe_time", "valid_keys", "legacy_result", "legacy_reason",
+                         "b_gate_result", "b_input_sent", "pending_summary", "held_summary",
+                         "recent_summary", "competition_summary"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:
@@ -167,9 +172,11 @@ def run(args):
         decision_log = CsvLog(out/"tap_decisions.csv", DECISION_FIELDS)
         shadow_log = CsvLog(out/"tap_planner_shadow.csv", SHADOW_FIELDS)
         eta_log = CsvLog(out/"tap_eta_comparison.csv", ETA_FIELDS)
+        pf_gate_shadow_log = CsvLog(out/"pf_gate_shadow.csv", PF_GATE_SHADOW_FIELDS)
         intent_log = CsvLog(out/"tap_intents.csv", INTENT_FIELDS)
         input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
-        for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log, intent_log, input_log):
+        for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log,
+                    pf_gate_shadow_log, intent_log, input_log):
             stack.callback(log.close)
         if identity_trace is not None:
             stack.callback(identity_trace.close)
@@ -274,6 +281,8 @@ def run(args):
                     shadow_log.write(row)
                 for row in engine.simple_core.drain_eta_rows():
                     eta_log.write(row)
+                for row in engine.simple_core.drain_pf_gate_shadow_rows():
+                    pf_gate_shadow_log.write(row)
                 image = draw_live_overlay(work, tracks, info, engine, dropped)
                 info["dropped_total"] = dropped
                 info["video_frame"] = ""
