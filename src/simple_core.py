@@ -120,15 +120,11 @@ class SimpleAssistCore:
         self.global_decisions = global_decisions
         global_active = enabled and self.global_timing.active_enabled
         if global_active:
-            # Preserve PF/legacy fallback only where it already passed.  A
-            # global rejection never creates a new input proposal.
+            # Global timing may amend only a proposal that already passed the
+            # complete Legacy/PF quality path.  It can never turn a PF-gated
+            # track into a new input proposal.
             proposals = {track_id: global_proposals.get(track_id, proposal)
-                         for track_id, proposal in proposals.items()
-                         if track_id not in global_decisions or
-                            global_decisions[track_id].status != "schedule"}
-            proposals.update(global_proposals)
-            reasons = {track_id: decision.reason for track_id, decision in global_decisions.items()
-                       if decision.status != "schedule" and track_id not in proposals}
+                         for track_id, proposal in proposals.items()}
         accepted, rejected = self.intents.schedule(proposals, scheduler, processed_at)
         self.last_reasons = {**reasons, **{
             track.track_id: rejected[uid]
@@ -292,6 +288,7 @@ class SimpleAssistCore:
                 "sample_count": global_model.sample_count if global_model else 0,
                 "velocity_px_s": global_model.velocity_px_s if global_model and global_model.velocity_px_s is not None else "",
                 "velocity_mad_px_s": global_model.velocity_mad_px_s if global_model and global_model.velocity_mad_px_s is not None else "",
+                "velocity_sigma_px_s": global_model.velocity_sigma_px_s if global_model and global_model.velocity_sigma_px_s is not None else "",
                 "model_quality": global_model.quality if global_model else 0.0,
                 "eta_status": global_eta.status if global_eta else "NOT_READY",
                 "eta_reason": global_eta.reason if global_eta else "prediction_unavailable",

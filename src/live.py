@@ -67,7 +67,7 @@ PF_GATE_SHADOW_FIELDS = ["capture_timestamp", "processing_timestamp", "source_fr
 GLOBAL_ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "track_id",
                      "model_status", "model_reason", "model_version",
                      "independent_tracks", "sample_count", "velocity_px_s",
-                     "velocity_mad_px_s", "model_quality", "eta_status", "eta_reason",
+                     "velocity_mad_px_s", "velocity_sigma_px_s", "model_quality", "eta_status", "eta_reason",
                      "eta_s", "hit_at", "uncertainty_s", "observed_y", "observed_at",
                      "planner_status", "planner_reason", "planner_key", "active_enabled",
                      "input_sent"]

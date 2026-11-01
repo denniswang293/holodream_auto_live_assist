@@ -92,6 +92,42 @@ def test_large_jump_and_nonlinear_speed_do_not_create_precise_eta():
     assert model.reason == "speed_variation_too_high"
 
 
+def test_uncertainty_is_not_capped_and_blocks_global_eta():
+    first = track(1, [(1.0, 80), (1.1, 90), (1.2, 100)])
+    second = track(2, [(1.0, 80), (1.1, 92), (1.2, 104)])
+    modeler = estimator(measurement_noise_px=4.0, max_uncertainty_s=.04)
+    model = modeler.update([first, second], trigger_y=135,
+                           capture_timestamp=1.21, now=1.21)
+    assert model.ready is True
+    result = modeler.estimate(first, trigger_y=135, now=1.21)
+    assert result.uncertainty_s is not None
+    assert result.uncertainty_s > .04
+    assert result.status == "REJECTED"
+    assert result.reason == "eta_uncertainty_too_high"
+
+
+def test_time_uncertainty_grows_with_distance_and_stable_case_remains_available():
+    near = track(1, [(1.0, 100), (1.1, 110), (1.2, 120)])
+    far = track(2, [(1.0, 80), (1.1, 92), (1.2, 104)])
+    modeler = estimator(max_uncertainty_s=.2)
+    model = modeler.update([near, far], trigger_y=130,
+                           capture_timestamp=1.21, now=1.21)
+    assert model.ready is True
+    near_eta = modeler.estimate(near, trigger_y=130, now=1.21)
+    far_eta = modeler.estimate(far, trigger_y=130, now=1.21)
+    assert near_eta.status == far_eta.status == "AVAILABLE"
+    assert far_eta.uncertainty_s > near_eta.uncertainty_s
+
+
+def test_zero_speed_and_nonfinite_history_never_create_model():
+    zero = track(1, [(1.0, 100), (1.1, 100), (1.2, 100)])
+    invalid = track(2, [(1.0, float("nan")), (1.1, float("inf")), (1.2, 120)])
+    model = estimator().update([zero, invalid], trigger_y=150,
+                               capture_timestamp=1.21, now=1.21)
+    assert model.ready is False
+    assert model.reason == "insufficient_independent_tracks"
+
+
 def test_disabled_not_playing_and_active_require_dual_switch():
     disabled = GlobalTapTimingEstimator({"enabled": False})
     assert disabled.update([], trigger_y=150, capture_timestamp=1, now=1).reason == "DISABLED"

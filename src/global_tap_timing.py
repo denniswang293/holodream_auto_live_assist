@@ -15,6 +15,7 @@ class GlobalTapModel:
     ready: bool = False
     velocity_px_s: float | None = None
     velocity_mad_px_s: float | None = None
+    velocity_sigma_px_s: float | None = None
     quality: float = 0.0
     independent_tracks: int = 0
     sample_count: int = 0
@@ -161,6 +162,8 @@ class GlobalTapTimingEstimator:
             self.model = GlobalTapModel(model_version=self._version,
                                         velocity_px_s=velocity,
                                         velocity_mad_px_s=mad,
+                                        velocity_sigma_px_s=math.sqrt(
+                                            mad * mad + within_track_spread * within_track_spread),
                                         quality=0.0,
                                         independent_tracks=len(candidates),
                                         sample_count=sum(row[4] for row in candidates),
@@ -171,6 +174,7 @@ class GlobalTapTimingEstimator:
         if within_track_spread / max(velocity, self.min_velocity) > self.max_speed_dispersion:
             self.model = GlobalTapModel(
                 velocity_px_s=velocity, velocity_mad_px_s=mad,
+                velocity_sigma_px_s=math.sqrt(mad * mad + within_track_spread * within_track_spread),
                 independent_tracks=len(candidates),
                 sample_count=sum(row[4] for row in candidates),
                 reason="speed_variation_too_high", model_version=self._version)
@@ -179,6 +183,7 @@ class GlobalTapTimingEstimator:
             ready=quality > 0 and math.isfinite(velocity),
             velocity_px_s=velocity,
             velocity_mad_px_s=mad,
+            velocity_sigma_px_s=math.sqrt(mad * mad + within_track_spread * within_track_spread),
             quality=quality,
             independent_tracks=len(candidates),
             sample_count=sum(row[4] for row in candidates),
@@ -212,12 +217,25 @@ class GlobalTapTimingEstimator:
         distance = trigger_y - observed_y
         eta = distance / model.velocity_px_s
         hit_at = observed_at + eta
-        uncertainty = max(.001, min(self.max_uncertainty_s,
-            math.sqrt((self.measurement_noise_px / model.velocity_px_s) ** 2 +
-                      (model.velocity_mad_px_s or 0.0) ** 2 /
-                      max(model.velocity_px_s, self.min_velocity) ** 2 +
-                      max(0.0, age) ** 2 * .04)))
-        if not math.isfinite(eta) or not math.isfinite(hit_at) or eta <= 0 or hit_at <= now:
+        velocity = model.velocity_px_s
+        sigma_v = model.velocity_sigma_px_s
+        sigma_y = self.measurement_noise_px
+        if (not math.isfinite(velocity) or velocity <= 0 or sigma_v is None or
+                not math.isfinite(sigma_v) or sigma_v < 0 or
+                not math.isfinite(sigma_y) or sigma_y < 0):
+            return GlobalTapEta(track.track_id, "NOT_READY", "invalid_uncertainty_inputs",
+                                eta, hit_at, None, model.quality, velocity,
+                                observed_y, observed_at, model.model_version)
+        # First-order propagation for t = (target_y - observed_y) / v.
+        # Both terms are seconds: position noise / speed and the distance
+        # multiplied by speed uncertainty / speed squared.  Do not cap this
+        # value before applying the safety gate; Shadow CSV must show the
+        # actual uncertainty that caused a rejection.
+        sigma_t_y = sigma_y / velocity
+        sigma_t_v = abs(distance) * sigma_v / (velocity * velocity)
+        uncertainty = max(.001, math.sqrt(sigma_t_y ** 2 + sigma_t_v ** 2))
+        if (not math.isfinite(eta) or not math.isfinite(hit_at) or
+                not math.isfinite(uncertainty) or eta <= 0 or hit_at <= now):
             reason = "hit_time_not_future"
             status = "REJECTED"
         elif eta > self.max_eta_s:

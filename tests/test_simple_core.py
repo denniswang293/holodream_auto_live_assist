@@ -327,6 +327,27 @@ def test_global_timing_shadow_records_independent_eta_without_changing_legacy_in
     scheduler.close()
 
 
+def test_global_active_dual_switch_cannot_bypass_particle_quality_gate():
+    _, actuator, _, scheduler = armed_scheduler()
+    core = SimpleAssistCore(session_id="session", tracker_cfg={},
+        particle_cfg={"max_uncertainty_s": .04}, hit_y=310.5,
+        event_cfg={"max_eta_s": .45}, min_y=190, known_keys={"F", "D"},
+        timing_cfg={"simplified_tap_planner": {"enabled": False, "mode": "shadow"},
+                    "linear_timing": {"enabled": True},
+                    "global_tap_timing": {"enabled": True, "mode": "active",
+                                           "allow_active": True}})
+    first = make_ready_track(track_id=1, key="F", hit_at=10.2)
+    second = make_ready_track(track_id=2, key="D", hit_at=10.3)
+    first.history = [(9.8, 220, .4), (9.9, 250, .4), (10.0, 280, .4)]
+    second.history = [(9.8, 210, .6), (9.9, 240, .6), (10.0, 270, .6)]
+    proposals, _ = core.plan_tracks([first, second], 10.0, 10.0,
+                                    scheduler, enabled=True)
+    assert proposals == {}
+    assert scheduler.pending == {}
+    assert actuator.calls == []
+    scheduler.close()
+
+
 def test_global_planner_respects_existing_hold_reservation():
     _, _, _, scheduler = armed_scheduler()
     planner = TapPlanner({"max_eta_s": .45}, min_y=190)
@@ -341,6 +362,23 @@ def test_global_planner_respects_existing_hold_reservation():
                                                 {"F"}, scheduler)
     assert proposals == {}
     assert decisions[1].reason == "tap_key_conflict"
+    scheduler.close()
+
+
+def test_global_planner_does_not_propose_rejected_uncertainty():
+    _, actuator, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    track = add_particle_evidence(make_ready_track(key="F", hit_at=10.20))
+    track.history.insert(0, (9.8, 220, .4))
+    from src.global_tap_timing import GlobalTapEta
+    eta = GlobalTapEta(1, "REJECTED", "eta_uncertainty_too_high", eta_s=.20,
+                       hit_at=10.20, uncertainty_s=.08, quality=.2,
+                       observed_y=280, observed_at=10.0)
+    decisions, proposals = planner.global_plan([track], {1: eta}, 10.0,
+                                                {"F"}, scheduler)
+    assert proposals == {}
+    assert decisions[1].reason == "eta_uncertainty_too_high"
+    assert actuator.calls == []
     scheduler.close()
 
 
