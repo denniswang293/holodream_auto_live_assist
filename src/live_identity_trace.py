@@ -56,6 +56,19 @@ PF_REASSOCIATION_FIELDS = [
     "gate_result", "decision", "reason", "legacy_unmatched", "real_candidate", "input_sent", "trace_status",
 ]
 
+TRACE_SNAPSHOT_FIELDS = [
+    "run_id", "capture_sequence", "source_frame", "capture_timestamp",
+    "processing_timestamp", "trace_schema_version", "track_id", "track_uid",
+    "note_uid", "candidate_id", "appearance", "candidate_keys", "bbox",
+    "confirmed_now", "matched_this_frame", "coasting_this_frame", "missed_frames",
+    "track_status", "last_real_observation_timestamp", "coast_duration_ms",
+    "prediction_reason", "particle_measurement_status", "particle_initialized",
+    "particle_eta_s", "particle_hit_at", "particle_uncertainty_s",
+    "particle_ess", "particle_valid_crossing_mass", "planner_lifecycle",
+    "planner_reason", "planner_hit_at", "planner_key", "scheduler_result",
+    "scheduler_reason", "input_sent",
+]
+
 
 class LiveIdentityTraceWriter:
     """Write bounded telemetry rows without blocking the capture loop."""
@@ -85,6 +98,12 @@ class LiveIdentityTraceWriter:
                 fh = (self.directory / name).open("w", newline="", encoding="utf-8-sig")
                 self._files[name] = fh
                 self._writers[name] = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+                self._writers[name].writeheader()
+            if bool(self.config.get("snapshot_enabled", False)):
+                name = "live_trace_snapshots.csv"
+                fh = (self.directory / name).open("w", newline="", encoding="utf-8-sig")
+                self._files[name] = fh
+                self._writers[name] = csv.DictWriter(fh, fieldnames=TRACE_SNAPSHOT_FIELDS, extrasaction="ignore")
                 self._writers[name].writeheader()
         self._thread = threading.Thread(target=self._run, name="holodream-identity-trace", daemon=True)
         self._thread.start()
@@ -144,7 +163,7 @@ class LiveIdentityTraceWriter:
 
     def submit_frame(self, frame, processing_timestamp, detector_rows,
                      pair_rows, attempt_rows, assignment_rows, track_rows,
-                     state: str, pf_rows=None):
+                     state: str, pf_rows=None, snapshot_rows=None):
         if not self.enabled or self._closed:
             return
         meta = self._metadata(frame, processing_timestamp)
@@ -182,6 +201,10 @@ class LiveIdentityTraceWriter:
             row = {**meta, **{k: self._text(v) for k, v in source.items()}}
             row["trace_status"] = "pf_reassociation_trace"
             self._submit("pf_reassociation_proposals.csv", row, frame)
+        if self.config.get("snapshot_enabled", False):
+            for source in (snapshot_rows or ()):
+                row = {**meta, "trace_schema_version": "v791.1", **{k: self._text(v) for k, v in source.items()}}
+                self._submit("live_trace_snapshots.csv", row, frame)
 
     def health_snapshot(self) -> dict:
         with self._lock:

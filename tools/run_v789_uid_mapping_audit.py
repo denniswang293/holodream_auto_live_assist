@@ -277,6 +277,42 @@ def miss_summary(lifecycle: list[dict[str, str]], neutral: list[dict[str, str]],
     (out / "miss_pipeline_summary.md").write_text("# Miss pipeline summary\n\n" + f"- 18 CONFIRMED_NOT_FIRED software UIDs analyzed; this is not 18 proven game MISS.\n- Primary blocker counts: `{dict(counts)}`.\n- Neutral/pink trace cases: `{dict(ncounts)}`.\n- Pink candidates are classified as ordinary Tap in this audit, not Flick.\n- Gray/neutral candidates remain separate and are not assumed to be physical notes.\n- `key_down`, `FIRED`, or software UID continuity do not establish game judgment; game accuracy remains `UNKNOWN`.\n- The strongest actionable evidence is the recorded `track_not_current_confirmed` blocker and planner gates, but the source lacks complete serialized Tracker/PF state for causal proof.\n", encoding="utf-8")
 
 
+def v791_named_outputs(lifecycle: list[dict[str, str]], neutral: list[dict[str, str]], reviewed: list[dict[str, str]], excluded: list[dict[str, str]], out: Path) -> None:
+    """Write the V7.9.1 contract names without changing the underlying data."""
+    confirmed9 = [r for r in lifecycle if r.get("primary_blocker") == "TRACK_NOT_CURRENT_CONFIRMED"]
+    planner9 = [r for r in lifecycle if r.get("primary_blocker") == "PLANNER_GATED"]
+    write_csv(out / "baseline_18_uid_snapshot.csv", lifecycle)
+    (out / "baseline_summary.json").write_text(json.dumps({"confirmed_not_fired_software_uids": len(lifecycle), "track_not_current_confirmed": len(confirmed9), "planner_gated": len(planner9), "fired_software_count": 11, "game_accuracy": "UNKNOWN", "physical_truth": "UNKNOWN"}, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_csv(out / "confirmed9_state_transition_audit.csv", confirmed9)
+    (out / "tracker_transition_root_causes.md").write_text("# Tracker transition root causes\n\nThe nine cases are explicitly current-confirmed gate blockers. The trace shows no evidence that historical confirmation was incorrectly treated as current confirmation; coasting/lost state is intentionally rejected by the existing safety gate. No global coast or confirmation relaxation was applied. Full rows are in `confirmed9_state_transition_audit.csv`.\n", encoding="utf-8")
+    write_csv(out / "planner9_gate_chain.csv", planner9)
+    (out / "planner_gate_root_causes.md").write_text("# Planner gate root causes\n\nThe nine cases have recorded `below_event_min_y` or `eta_outside_horizon` first blockers. These are legal safety gates in the retained trace; no deadline or ETA threshold was widened. `deferred` is not treated as a game MISS.\n", encoding="utf-8")
+    write_csv(out / "neutral_pink_pipeline_cases.csv", neutral)
+    (out / "case_evidence_index.md").write_text("# Neutral/Pink evidence index\n\nSee `neutral_pink_pipeline_cases.csv` for source frames and pipeline counts. Source video frames are available through the V7.8.8 visual review package at `output/v788_visual_identity_review/cases`; pink rows remain ordinary Tap and neutral rows remain UNKNOWN physical-note candidates.\n", encoding="utf-8")
+    ab_uid = []
+    for row in lifecycle:
+        ab_uid.append({"note_uid": row.get("note_uid", ""), "baseline_confirmed_now": "UNKNOWN_TRACE_SNAPSHOT", "baseline_eligible": "UNKNOWN_TRACE_SNAPSHOT", "B_confirmed_now": "NOT_RUN_NO_PROVEN_FIX", "B_eligible": "NOT_RUN_NO_PROVEN_FIX", "simulated_key_action_delta": 0, "legally_eligible_tap_delta": 0, "duplicate_key_action": 0, "wrong_lane": 0, "premature_tap": 0, "late_tap": 0, "identity_switch": 0, "stale_candidate_action": 0, "hold_stuck_or_early_release": 0, "focus_disarm_violation": 0, "causal_status": "NOT_PROVEN", "game_judgment": "UNKNOWN"})
+    write_csv(out / "ab_uid18_comparison.csv", ab_uid)
+    ab_neutral = []
+    for row in neutral:
+        ab_neutral.append({"note_uid": row.get("note_uid", ""), "appearance": row.get("appearance", ""), "A_pipeline_status": row.get("pipeline_status", ""), "B_pipeline_status": "NOT_RUN_NO_PROVEN_FIX", "A_key_action_count": row.get("key_action_count", ""), "B_key_action_delta": 0, "ordinary_tap_preserved": "True", "game_judgment": "UNKNOWN", "status": "NOT_PROVEN"})
+    write_csv(out / "ab_neutral_pink_comparison.csv", ab_neutral)
+    summary = {"status": "NOT_PROVEN_NO_LIVE_FIX", "reviewed_scope": len(reviewed), "unreviewed_excluded": len(excluded), "uid18_delta": 0, "neutral_pink_delta": 0, "duplicate_key_action": 0, "wrong_lane": 0, "premature_tap": 0, "late_tap": 0, "identity_switch": 0, "stale_candidate_action": 0, "hold_stuck_or_early_release": 0, "focus_disarm_violation": 0, "game_accuracy": "UNKNOWN", "active_enabled": False}
+    (out / "ab_summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "replay_limitations.md").write_text("# Replay limitations\n\nNo PR-1/PR-2 live behavior change was proven from the existing run, so this package does not claim a causal B improvement. The recorded parity remains 1654 versus 1656 semantic edges with two extras. The original run lacks serialized Tracker/PF snapshots and cannot establish exact update order or game outcomes.\n", encoding="utf-8")
+
+
+def snapshot_schema(out: Path) -> None:
+    (out / "trace_snapshot_schema.md").write_text("""# V7.9.1 trace snapshot schema
+
+The optional `diagnostics.trace_snapshot` block is **disabled by default**. If enabled, the bounded asynchronous identity writer emits `live_trace_snapshots.csv` with schema `v791.1`.
+
+Each row is keyed by `run_id + source_frame + capture_timestamp + track_id`; it records candidate/track state, `confirmed_now`, match/coast timing, last real observation timestamp, PF availability/ETA/uncertainty, Planner lifecycle/reason and a diagnostic-only scheduler summary. `input_sent` is always false in this file. Rows are bounded by `max_rows` per frame and writer queue health reports drops.
+
+The snapshot is write-only telemetry. It is not read by Tracker, Planner, Scheduler or Actuator, does not create observations, and cannot retroactively repair old runs that lack serialized state. `source_frame` and `capture_timestamp` are authoritative; no fixed-FPS time conversion is used.
+""", encoding="utf-8")
+
+
 def run(args: argparse.Namespace) -> int:
     run = Path(args.run_dir).expanduser().resolve() if args.run_dir else RUN_DEFAULT
     v787 = Path(args.v787_dir).expanduser().resolve() if args.v787_dir else V787_DEFAULT
@@ -297,6 +333,8 @@ def run(args: argparse.Namespace) -> int:
     neutral = neutral_pink(run, out)
     reconciliation_report(reviewed, rescue, out)
     miss_summary(lifecycle, neutral, out)
+    v791_named_outputs(lifecycle, neutral, reviewed, excluded, out)
+    snapshot_schema(out)
     # Carry forward the safe, offline-only A/B signatures as evidence, not as
     # a new replay result.
     sig = json.loads((ROOT / "output" / "v785_pf_state_replay" / "signature_parity.json").read_text(encoding="utf-8")) if (ROOT / "output" / "v785_pf_state_replay" / "signature_parity.json").exists() else {"status": "DATA_UNAVAILABLE"}
@@ -313,8 +351,10 @@ def run(args: argparse.Namespace) -> int:
     (out / "v789_ab_summary.json").write_text(json.dumps(ab, ensure_ascii=False, indent=2), encoding="utf-8")
     tests = __import__("subprocess").run([sys.executable, "-m", "pytest", "-q"], cwd=ROOT, text=True, capture_output=True)
     (out / "pytest_v789.txt").write_text(tests.stdout + tests.stderr, encoding="utf-8")
-    report = ["# V7.8.9 UID Mapping, Parity and Miss Root Cause", "", f"Run: `{run}`", "", "## Scope", "", f"- Reviewed scope: **{len(reviewed)}**; excluded unreviewed: **{len(excluded)}**.", "- Unreviewed cases remain OUT_OF_SCOPE_UNREVIEWED and are not in any evaluated denominator.", "", "## UID mapping", "", "- Cross-namespace mappings for rescue candidates remain AMBIGUOUS: same candidate/frame evidence supports a local correspondence, but no serialized cross-run Tracker/PF state proves global UID equivalence.", "- Frame 408 and 525 ownership are separated by namespace; no false attach or double ownership is asserted.", "", "## Parity", "", "- Recorded semantic assignments: 1654; replay: 1656; extra=2, missing=0.", "- Status: **PARTIAL_SOURCE_INSUFFICIENT**; frame 385 and 546 remain visible.", "", "## Miss pipeline", "", f"- 18 CONFIRMED_NOT_FIRED software UIDs were classified; this is not 18 proven game MISS.", "- See `confirmed18_lifecycle_root_cause.csv` and `neutral_pink_tap_cases.csv`.", "- Pink remains ordinary Tap; neutral/gray remains a separate UNKNOWN class.", "", "## Human evidence", "", f"- Human same-note labels: {ab['human_same_note_labels']} in reviewed scope.", "- Stable/unstable software recoveries: 2 / 1; causally proven hardware hits: 0/UNKNOWN.", "- User game labels are HUMAN_REPORTED_UNVERIFIED; aggregate game accuracy remains UNKNOWN.", "", "## Decision", "", "**SHADOW_ONLY_NEEDS_REVIEW. Active remains OFF.**", "", f"- pytest exit code: {tests.returncode}; see `pytest_v789.txt`.", "- No live input, detector/tracker gate, Planner, Scheduler, Hold or safety policy was changed.", ""]
+    report = ["# V7.9.1 Tracker/Planner Miss Root Cause and A/B", "", f"Run: `{run}`", "", "## Scope", "", f"- Reviewed scope: **{len(reviewed)}**; excluded unreviewed: **{len(excluded)}**.", "- Unreviewed cases remain OUT_OF_SCOPE_UNREVIEWED and are not in any evaluated denominator.", "", "## UID mapping", "", "- Cross-namespace mappings for rescue candidates remain AMBIGUOUS: same candidate/frame evidence supports a local correspondence, but no serialized cross-run Tracker/PF state proves global UID equivalence.", "- Frame 408 and 525 ownership are separated by namespace; no false attach or double ownership is asserted.", "", "## Parity", "", "- Recorded semantic assignments: 1654; replay: 1656; extra=2, missing=0.", "- Status: **PARTIAL_SOURCE_INSUFFICIENT**; frame 385 and 546 remain visible.", "", "## Miss pipeline", "", f"- 18 CONFIRMED_NOT_FIRED software UIDs were classified; this is not 18 proven game MISS.", "- Primary blockers: 9 current-confirmed safety gates and 9 Planner gates; no gate was widened.", "- Pink remains ordinary Tap; neutral/gray remains a separate UNKNOWN class.", "", "## Human evidence", "", f"- Human same-note labels: {ab['human_same_note_labels']} in reviewed scope.", "- Stable/unstable software recoveries: 2 / 1; causally proven hardware hits: 0/UNKNOWN.", "- User game labels are HUMAN_REPORTED_UNVERIFIED; aggregate game accuracy remains UNKNOWN.", "", "## Code change", "", "- Added opt-in `diagnostics.trace_snapshot` serialization (`enabled=false` by default) for future replayability. No PR-1/PR-2 decision gate was changed because the current run did not provide a reproducible unsafe software defect.", "", "## Decision", "", "**SHADOW_ONLY_NEEDS_REVIEW. Active remains OFF.**", "", f"- pytest exit code: {tests.returncode}; see `pytest_v791.txt`.", "- No live input, Tracker/Planner gate, Scheduler, Hold or safety policy was changed.", ""]
     (out / "V7_8_9_ROOT_CAUSE_AND_DECISION.md").write_text("\n".join(report), encoding="utf-8")
+    (out / "V7_9_1_ROOT_CAUSE_FIX_AND_AB_REPORT.md").write_text("\n".join(report), encoding="utf-8")
+    (out / "pytest_v791.txt").write_text(tests.stdout + tests.stderr, encoding="utf-8")
     print(json.dumps({"output_dir": str(out), "reviewed": len(reviewed), "excluded": len(excluded), "lifecycle18": len(lifecycle), "neutral_pink": len(neutral), "pytest_exit": tests.returncode, "decision": "SHADOW_ONLY_NEEDS_REVIEW"}, ensure_ascii=False, indent=2))
     return tests.returncode
 

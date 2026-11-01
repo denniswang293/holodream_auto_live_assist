@@ -56,3 +56,18 @@ def test_identity_trace_queue_overflow_is_recorded_and_nonblocking(tmp_path):
     assert health["submitted_rows"] >= 0
     assert health["written_rows"] >= 0
     assert health["dropped_diagnostic_rows"] >= 0
+
+
+def test_trace_snapshot_is_opt_in_and_diagnostic_only(tmp_path):
+    writer = LiveIdentityTraceWriter(tmp_path, "run-snapshot", {"enabled": True, "snapshot_enabled": True})
+    writer.submit_frame(
+        _frame(), 11.0, [], [], [], [], [], "PLAYING",
+        snapshot_rows=[{"track_id": 7, "track_uid": "simple:7", "note_uid": "run:simple:7",
+                         "confirmed_now": True, "coasting_this_frame": False,
+                         "input_sent": False}],
+    )
+    writer.close()
+    rows = list(csv.DictReader((tmp_path / "live_trace_snapshots.csv").open(encoding="utf-8-sig")))
+    assert rows[0]["trace_schema_version"] == "v791.1"
+    assert rows[0]["confirmed_now"] == "True"
+    assert rows[0]["input_sent"] == "False"

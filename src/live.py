@@ -149,6 +149,11 @@ def run(args):
     focus_check, modifier_check = target.focused, modifiers_down
     out = new_run_directory(args.out)
     identity_cfg = dict(config.get("diagnostics", {}).get("live_identity_trace", {}) or {})
+    snapshot_cfg = dict(config.get("diagnostics", {}).get("trace_snapshot", {}) or {})
+    # Snapshot serialization is diagnostic-only and explicitly opt-in.  It is
+    # passed to the bounded trace writer without changing the decision path.
+    identity_cfg["snapshot_enabled"] = bool(snapshot_cfg.get("enabled", False))
+    identity_cfg["snapshot_max_rows"] = int(snapshot_cfg.get("max_rows", 512))
     identity_trace = (LiveIdentityTraceWriter(out, out.name, identity_cfg)
                       if identity_cfg.get("enabled", False) else None)
     print(f"Assist | geometry {geometry.status} | predictor {config['predictor']['mode']} | output: {out}", flush=True)

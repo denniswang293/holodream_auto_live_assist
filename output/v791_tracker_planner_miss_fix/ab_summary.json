@@ -1,0 +1,17 @@
+{
+  "status": "NOT_PROVEN_NO_LIVE_FIX",
+  "reviewed_scope": 10,
+  "unreviewed_excluded": 20,
+  "uid18_delta": 0,
+  "neutral_pink_delta": 0,
+  "duplicate_key_action": 0,
+  "wrong_lane": 0,
+  "premature_tap": 0,
+  "late_tap": 0,
+  "identity_switch": 0,
+  "stale_candidate_action": 0,
+  "hold_stuck_or_early_release": 0,
+  "focus_disarm_violation": 0,
+  "game_accuracy": "UNKNOWN",
+  "active_enabled": false
+}

@@ -162,6 +162,8 @@ class LiveEngine:
         self.identity_trace = identity_trace
         self.identity_trace_config = dict(
             config.get("diagnostics", {}).get("live_identity_trace", {}) or {})
+        self.trace_snapshot_config = dict(
+            config.get("diagnostics", {}).get("trace_snapshot", {}) or {})
         self.identity_trace_enabled = bool(
             self.identity_trace_config.get("enabled", False) and identity_trace is not None)
         self.geometry_hash = geometry_hash(geometry.document)
@@ -717,12 +719,58 @@ class LiveEngine:
                         "intent_state": (intent.state if intent else ""),
                         "intent_key": (intent.key if intent else "")})
             track_rows.append(row)
+        snapshot_rows = []
+        if bool(self.trace_snapshot_config.get("enabled", False)):
+            # Build a bounded, read-only summary from the already-computed
+            # frame.  No snapshot value is read by Planner/Scheduler/Actuator.
+            decision_by_track = {str(row.get("track_id")): row
+                                 for row in self.simple_core.decision_rows}
+            track_by_id = {str(track.track_id): track
+                           for track in self.simple_core.tracker.tracks}
+            max_rows = max(1, int(self.trace_snapshot_config.get("max_rows", 512)))
+            for source in track_rows[:max_rows]:
+                track = track_by_id.get(str(source.get("track_id", "")))
+                decision = decision_by_track.get(str(source.get("track_id", "")), {})
+                prediction = getattr(track, "prediction", None)
+                snapshot_rows.append({
+                    "track_id": source.get("track_id", ""),
+                    "track_uid": source.get("track_uid", ""),
+                    "note_uid": source.get("note_uid", ""),
+                    "candidate_id": source.get("candidate_id", ""),
+                    "appearance": source.get("appearance", ""),
+                    "candidate_keys": source.get("stable_keys", ""),
+                    "bbox": source.get("bbox", ""),
+                    "confirmed_now": (str(source.get("track_status", "")) == "confirmed" and
+                                      str(source.get("coasting_this_frame", "")).lower() not in {"true", "1", "yes"}),
+                    "matched_this_frame": source.get("matched_this_frame", False),
+                    "coasting_this_frame": source.get("coasting_this_frame", False),
+                    "missed_frames": source.get("missed_frames", ""),
+                    "track_status": source.get("track_status", ""),
+                    "last_real_observation_timestamp": source.get("last_real_observation_timestamp", ""),
+                    "coast_duration_ms": source.get("time_since_last_real_observation_ms", ""),
+                    "prediction_reason": source.get("prediction_reason", ""),
+                    "particle_measurement_status": getattr(prediction, "measurement_status", "") if prediction else "",
+                    "particle_initialized": bool(getattr(track, "particle_filter", None) and
+                                                   getattr(track.particle_filter, "initialized", False)) if track else False,
+                    "particle_eta_s": getattr(prediction, "eta", "") if prediction else "",
+                    "particle_hit_at": getattr(prediction, "hit_time", "") if prediction else "",
+                    "particle_uncertainty_s": getattr(prediction, "uncertainty", "") if prediction else "",
+                    "particle_ess": getattr(prediction, "ess", "") if prediction else "",
+                    "particle_valid_crossing_mass": getattr(prediction, "valid_crossing_mass", "") if prediction else "",
+                    "planner_lifecycle": decision.get("lifecycle_state", ""),
+                    "planner_reason": decision.get("reason", ""),
+                    "planner_hit_at": decision.get("hit_at", ""),
+                    "planner_key": decision.get("key", ""),
+                    "scheduler_result": "PENDING" if decision.get("lifecycle_state") == "SCHEDULED" else "NONE",
+                    "scheduler_reason": decision.get("reason", ""),
+                    "input_sent": False,
+                })
         self.identity_trace.submit_frame(
             frame, processing_timestamp,
             self.last_detector_diagnostics.get("candidate_trace", ()),
             trace.get("pair_rows", ()), attempts,
             trace.get("assignment_rows", ()), track_rows, state,
-            trace.get("pf_reassociation_rows", ()))
+            trace.get("pf_reassociation_rows", ()), snapshot_rows=snapshot_rows)
 
     def _emit_tap_decision(self, tr, event_id, frame, now, stage, result,
                            reason="", retryable=False, *, scheduled=None,
