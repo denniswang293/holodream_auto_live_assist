@@ -43,6 +43,21 @@ Tap pipeline simplification 目前只輸出 `motion_reliable`、`timing_reliable
 直接送鍵。啟用 identity telemetry 時，提案會寫入
 `pf_reassociation_proposals.csv`。回退方式是將該 flag 設回 `false`。
 
+### V7.8.4 targeted PF reacquisition（僅離線 Shadow）
+
+V7.8.4 只在 Legacy assignment 完成後，檢查仍在 coast 的 confirmed Track
+與當幀未被 Legacy 使用的真實 `candidate_final`。它不改寫 assignment、Planner、
+Scheduler、Hold 或 Actuator；`config.json` 的
+`pf_assisted_reassociation.enabled` 預設為 `false`。離線 A/B 可用：
+
+```powershell
+py tools\run_v781_pf_analysis.py --run-dir output\run_20261101T034646_232725Z `
+  --output-dir output\v784_targeted_pf_reacquisition
+```
+
+只有維持至少兩個後續真實觀測的原 UID 連續性才可計為穩定恢復；本次沒有遊戲判定真值，
+因此命中率維持 `UNKNOWN`。
+
 ## 輸出與資料
 
 每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。

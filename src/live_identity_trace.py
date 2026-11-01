@@ -50,9 +50,10 @@ PF_REASSOCIATION_FIELDS = [
     "run_id", "capture_sequence", "source_frame", "source_video_frame",
     "capture_timestamp", "processing_timestamp", "frame_uid", "old_uid", "track_id",
     "candidate_id", "candidate_appearance", "candidate_note_type", "candidate_keys",
+    "candidate_bbox", "innovation_y", "innovation_u", "observed_y", "span_overlap", "span_width_ratio",
     "pf_predicted_y", "pf_predicted_u", "pf_sigma_y", "pf_sigma_u",
     "pf_association_score", "score_margin", "coast_ms", "competitor_track_ids",
-    "gate_result", "decision", "reason", "real_candidate", "input_sent", "trace_status",
+    "gate_result", "decision", "reason", "legacy_unmatched", "real_candidate", "input_sent", "trace_status",
 ]
 
 

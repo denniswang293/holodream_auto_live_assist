@@ -23,7 +23,7 @@
     }
   },
   "pf_assisted_reassociation": {
-    "enabled": true,
+    "enabled": false,
     "mode": "shadow",
     "offline_only": true,
     "require_real_candidate": true,

@@ -332,30 +332,6 @@ class SimpleTracker:
             target.append(row)
         previous = list(self.tracks)
         raw_candidate_count = len(candidates)
-        if trace is not None and self.pf_reassociation.enabled:
-            for row in self.pf_reassociation.propose(previous, candidates, timestamp):
-                trace_append("pf_reassociation_rows", {
-                    "frame": frame_index, "timestamp": timestamp,
-                    "old_uid": row.get("old_uid", ""),
-                    "track_id": row.get("track_id", ""),
-                    "candidate_id": row.get("candidate_id", ""),
-                    "candidate_appearance": row.get("candidate_appearance", ""),
-                    "candidate_note_type": row.get("candidate_note_type", ""),
-                    "candidate_keys": row.get("candidate_keys", ""),
-                    "pf_predicted_y": row.get("pf_predicted_y", ""),
-                    "pf_predicted_u": row.get("pf_predicted_u", ""),
-                    "pf_sigma_y": row.get("pf_sigma_y", ""),
-                    "pf_sigma_u": row.get("pf_sigma_u", ""),
-                    "pf_association_score": row.get("pf_association_score", ""),
-                    "score_margin": row.get("score_margin", ""),
-                    "coast_ms": row.get("coast_ms", ""),
-                    "competitor_track_ids": row.get("competitor_track_ids", ""),
-                    "gate_result": row.get("gate_result", ""),
-                    "decision": row.get("decision", ""),
-                    "reason": row.get("reason", ""),
-                    "real_candidate": row.get("real_candidate", False),
-                    "input_sent": False,
-                })
         if trace is not None and raw_candidate_count == 0:
             if previous:
                 for track in previous:
@@ -411,6 +387,41 @@ class SimpleTracker:
                     "skip_reason": "no_active_track",
                 })
         selected_by_candidate = {j: i for i, j in pairs if j < len(candidates) and costs[i][j] < unmatched_cost}
+        legacy_matched_indices = set(selected_by_candidate.values())
+        legacy_assigned_candidate_ids = {
+            getattr(candidates[j], "diagnostic_id", "") for j in selected_by_candidate
+        }
+        # V7.8.4 rescue is evaluated only after Legacy has finished its
+        # assignment.  It receives an isolated read-only view of unmatched
+        # tracks and real, unassigned candidates; it never changes `pairs`.
+        if trace is not None and self.pf_reassociation.enabled:
+            rescue_tracks = [track for i, track in enumerate(previous)
+                             if i not in legacy_matched_indices]
+            rescue_rows = self.pf_reassociation.propose_targeted(
+                rescue_tracks, candidates, timestamp,
+                assigned_candidate_ids=legacy_assigned_candidate_ids)
+            for row in rescue_rows:
+                trace_append("pf_reassociation_rows", {
+                    "frame": frame_index, "timestamp": timestamp,
+                    "old_uid": row.get("old_uid", ""), "track_id": row.get("track_id", ""),
+                    "candidate_id": row.get("candidate_id", ""),
+                    "candidate_appearance": row.get("candidate_appearance", ""),
+                    "candidate_note_type": row.get("candidate_note_type", ""),
+                    "candidate_keys": row.get("candidate_keys", ""),
+                    "candidate_bbox": row.get("candidate_bbox", ""),
+                    "pf_predicted_y": row.get("pf_predicted_y", ""),
+                    "pf_predicted_u": row.get("pf_predicted_u", ""),
+                    "pf_sigma_y": row.get("pf_sigma_y", ""), "pf_sigma_u": row.get("pf_sigma_u", ""),
+                    "innovation_y": row.get("innovation_y", ""), "innovation_u": row.get("innovation_u", ""),
+                    "observed_y": row.get("observed_y", ""), "span_overlap": row.get("span_overlap", ""),
+                    "span_width_ratio": row.get("span_width_ratio", ""),
+                    "pf_association_score": row.get("pf_association_score", ""),
+                    "score_margin": row.get("score_margin", ""), "coast_ms": row.get("coast_ms", ""),
+                    "competitor_track_ids": row.get("competitor_track_ids", ""),
+                    "gate_result": row.get("gate_result", ""), "decision": row.get("decision", ""),
+                    "reason": row.get("reason", ""), "legacy_unmatched": row.get("legacy_unmatched", False),
+                    "real_candidate": row.get("real_candidate", False), "input_sent": False,
+                })
         for row in (trace.get("pair_rows", []) if trace is not None else []):
             if row.get("frame") != frame_index or row.get("timestamp") != timestamp:
                 continue

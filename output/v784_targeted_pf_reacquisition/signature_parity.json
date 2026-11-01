@@ -1,0 +1,12 @@
+{
+  "legacy_assignment_signature_a": "5a634b11b64b3acb52f66e0c0ebc2b7eb822845ea0d42ac71e58785935ace2cd",
+  "legacy_assignment_signature_b": "5a634b11b64b3acb52f66e0c0ebc2b7eb822845ea0d42ac71e58785935ace2cd",
+  "legacy_assignment_equal": true,
+  "input_action_signature_a": "fa29d38e025d2d00e4732b2f5b4a0019175a1d1470d91f04cdef7e6eff8bedda",
+  "input_action_signature_b": "fa29d38e025d2d00e4732b2f5b4a0019175a1d1470d91f04cdef7e6eff8bedda",
+  "input_action_equal": true,
+  "shadow_mutates_legacy": false,
+  "method": "same-source trace plus read-only Shadow isolation; no fabricated second capture",
+  "limitation": "not a second live capture",
+  "physical_truth": "UNKNOWN"
+}

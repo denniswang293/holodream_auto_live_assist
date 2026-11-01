@@ -1,0 +1,28 @@
+{
+  "run_dir": "C:\\Users\\USER\\Desktop\\holodream\\output\\run_20261101T034646_232725Z",
+  "coast_episode_count": 119,
+  "eligible_episode_count": 73,
+  "episode_with_real_candidate": 117,
+  "recovery_buckets": {
+    "baseline_recovered_same_uid": 44,
+    "UNKNOWN": 5,
+    "no_valid_pf_state": 39,
+    "all_gates_reject": 27,
+    "legacy_candidate_assigned_elsewhere": 2,
+    "ambiguous_multi_track": 2
+  },
+  "incremental_proposals": 0,
+  "stable_shadow_reacquisitions": 0,
+  "false_attach_candidates": 25,
+  "duplicate_uid": 0,
+  "identity_switch": 0,
+  "key_lane_mismatch": 0,
+  "confirmed_not_fired": 18,
+  "lifecycle_detected": 50,
+  "lifecycle_confirmed": 29,
+  "lifecycle_fired": 11,
+  "game_accuracy": "UNKNOWN",
+  "negative_controls_status": "PASS_DATA_UNREVIEWED",
+  "active_promotion": false,
+  "tests_exit_code": 0
+}
