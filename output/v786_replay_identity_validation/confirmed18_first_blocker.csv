@@ -1,0 +1,19 @@
+﻿note_uid,confirmed,fired,first_blocker,blocker_timestamp,lifecycle_state,game_judgment,blocker_category,evidence
+6c14d7a24997:simple:1000002,True,False,track_not_current_confirmed,29149.928607,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000017,True,False,track_not_current_confirmed,29153.6404817,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000019,True,False,track_not_current_confirmed,29153.7961815,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000022,True,False,track_not_current_confirmed,29153.9868623,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000023,True,False,track_not_current_confirmed,29154.259116,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000025,True,False,track_not_current_confirmed,29154.4292632,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000028,True,False,track_not_current_confirmed,29154.5897958,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000030,True,False,track_not_current_confirmed,29155.1178123,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000032,True,False,track_not_current_confirmed,29155.3060524,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000033,True,False,track_not_current_confirmed,29155.5008432,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000037,True,False,track_not_current_confirmed,29155.7638695,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000038,True,False,track_not_current_confirmed,29155.8505894,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000043,True,False,track_not_current_confirmed,29156.029576,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000044,True,False,track_not_current_confirmed,29156.2457904,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000045,True,False,track_not_current_confirmed,29156.476915,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000046,True,False,track_not_current_confirmed,29156.5228734,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000047,True,False,track_not_current_confirmed,29156.7569287,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv
+6c14d7a24997:simple:1000048,True,False,track_not_current_confirmed,29156.958818,TRACKING,UNKNOWN,TRACKER,tap_decisions.csv + live_key_actions.csv

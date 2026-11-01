@@ -1,0 +1,3 @@
+﻿source_frame,capture_timestamp,baseline_edge,replay_edge,root_cause,first_divergence_frame,confidence,evidence
+385,,,385|29152.4751039|1000003|385:candidate:0|assignment,live_trace_missing_candidate_assignment_row,385,HIGH,baseline_parity_semantic.json + live_association_attempts.csv
+546,,,546|29154.9874954|1000014|546:candidate:11|assignment,live_trace_missing_candidate_assignment_row,385,HIGH,baseline_parity_semantic.json + live_association_attempts.csv

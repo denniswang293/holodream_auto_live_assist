@@ -1,0 +1,18 @@
+{
+  "semantic_assignment_parity": "PARTIAL",
+  "raw_recorded_rows": 3308,
+  "raw_replay_rows": 1656,
+  "recorded_unique_edges": 1654,
+  "replay_unique_edges": 1656,
+  "replay_extra_edges": 2,
+  "replay_missing_edges": 0,
+  "uid_lifecycle_parity": "PARTIAL",
+  "case_rescue_transitions": 3,
+  "stable_incremental_recoveries": 2,
+  "unstable_recoveries": 1,
+  "manual_identity_confirmed": 0,
+  "negative_controls_manual_confirmed": 0,
+  "game_accuracy": "UNKNOWN",
+  "active_enabled": false,
+  "decision": "SHADOW_ONLY_NEEDS_REVIEW"
+}
