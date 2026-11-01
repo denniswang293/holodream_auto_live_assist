@@ -1,0 +1,9 @@
+{
+  "status": "INSUFFICIENT_GROUND_TRUTH",
+  "baseline": "Legacy tracker + Particle Filter active path",
+  "shadow": "PF-assisted real-candidate proposal layer, default OFF",
+  "source_replay": "DATA_UNAVAILABLE",
+  "physical_note_denominator": "UNKNOWN",
+  "active_enabled": false,
+  "reason": "The V7.8 source run, trace CSVs and video were deleted during cleanup; no A/B or physical identity claim is made."
+}

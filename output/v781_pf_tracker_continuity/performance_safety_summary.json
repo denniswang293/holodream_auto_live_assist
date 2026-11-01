@@ -1,0 +1,6 @@
+{
+  "status": "NOT_MEASURED_SOURCE_UNAVAILABLE",
+  "no_frame_drop_policy_change": true,
+  "no_detector_scope_change": true,
+  "pf_shadow_diagnostic_only": true
+}

@@ -1,0 +1,24 @@
+{
+  "plan": "V7.8.1_PF_ASSISTED_TRACK_CONTINUITY",
+  "baseline_commit": "b748b5b29f6dc04c84b0934cb73b30e10ce3a03f",
+  "run": "C:\\Users\\USER\\Desktop\\holodream\\output\\run_20261031T201055_348946Z",
+  "available_files": {
+    "live_source.mp4": false,
+    "live_video_index.csv": false,
+    "live_candidate_trace.csv": false,
+    "live_association_attempts.csv": false,
+    "live_track_identity.csv": false,
+    "live_identity_trace_health.json": false,
+    "live_events.csv": false,
+    "tap_intents.csv": false,
+    "tap_decisions.csv": false,
+    "live_key_actions.csv": false
+  },
+  "sha256": {},
+  "status": "DATA_UNAVAILABLE",
+  "source_video": "C:\\Users\\USER\\Desktop\\holodream\\output\\run_20261031T201055_348946Z\\live_source.mp4",
+  "overlay_video": "C:\\Users\\USER\\Desktop\\holodream\\output\\assist\\run_20261031T201055_348946Z\\live_overlay.mp4",
+  "timestamp_policy": "capture_timestamp + source_frame via live_video_index; no frame/60 substitution",
+  "physical_truth": "UNKNOWN",
+  "note": "Previous cleanup removed the source run and recordings from the working tree; no raw replay was fabricated."
+}
