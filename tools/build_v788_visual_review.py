@@ -329,12 +329,12 @@ function review(c){{return c.inference.review}}
 function render(){{let c=currentCase(); let r=review(c); refreshSelect();refreshList(); $('title').textContent=c.case_id+' — '+c.evidence_status; $('identity').value=r.same_physical_note_verdict||'UNKNOWN'; $('confidence').value=r.visual_confidence||'UNKNOWN'; $('reviewerStatus').value=r.reviewer_status||'UNREVIEWED'; $('gameJudgment').value=r.game_judgment||'UNKNOWN'; $('notes').value=r.reviewer_notes||''; $('sourceRecord').textContent=JSON.stringify(c.source_record,null,2); $('inference').textContent=JSON.stringify(c.inference,null,2); let media=c.media.frames||[]; if(media.length){{frame=Math.max(0,Math.min(frame,media.length-1));let m=media[frame];$('frame').src=m.path;$('caption').textContent='source_frame '+m.source_frame+' · capture_timestamp '+m.capture_timestamp+' · video frame '+m.video_frame+' · '+(frame+1)+'/'+media.length}}else{{$('frame').removeAttribute('src');$('caption').textContent='NO_VIDEO_EVIDENCE'}} $('meta').innerHTML='<div><b>frame</b><br>'+esc(c.source_record.source_frame)+'</div><div><b>capture timestamp</b><br>'+esc(c.source_record.capture_timestamp)+'</div><div><b>candidate</b><br>'+esc(r.candidate_id)+'</div><div><b>track / UID</b><br>'+esc(r.old_uid)+'</div><div><b>software</b><br>'+esc(r.software_verdict||'UNKNOWN')+'</div><div><b>game judgment</b><br><span class="unknown">'+esc(r.game_judgment||'UNKNOWN')+'</span></div>'; }}
 function esc(v){{let d=document.createElement('div');d.textContent=v??'';return d.innerHTML}}
 function save(){{let r=review(currentCase());r.same_physical_note_verdict=$('identity').value;r.visual_confidence=$('confidence').value;r.reviewer_status=$('reviewerStatus').value;r.game_judgment=$('gameJudgment').value;r.reviewer_notes=$('notes').value;$('saveState').textContent='saved in this browser only';render()}}
-function csvEscape(v){{v=String(v??'');return /[",\n\r]/.test(v)?'"'+v.replaceAll('"','""')+'"':v}}
-function exportCsv(){{let lines=[FIELDS.join(',')];state.forEach(c=>{{let r=review(c);lines.push(FIELDS.map(f=>csvEscape(r[f]??'')).join(','))}});let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{{type:'text/csv;charset=utf-8'}}));a.download='physical_identity_review_completed.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
-function parseCsv(text){{let rows=[],row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){{let ch=text[i],next=text[i+1];if(quoted&&ch==='"'&&next==='"'){{cell+='"';i++;continue}}if(ch==='"'){{quoted=!quoted;continue}}if(ch===','&&!quoted){{row.push(cell);cell='';continue}}if((ch==='\n'||ch==='\r')&&!quoted){{if(ch==='\r'&&next==='\n')i++;row.push(cell);cell='';if(row.some(x=>x!==''))rows.push(row);row=[];continue}}cell+=ch}}row.push(cell);if(row.some(x=>x!==''))rows.push(row);let head=rows.shift()||[];return rows.map(vals=>Object.fromEntries(head.map((h,i)=>[h,vals[i]??''])))}}
+function csvEscape(v){{v=String(v??'');let needs=v.includes(',')||v.includes('"')||v.includes(String.fromCharCode(10))||v.includes(String.fromCharCode(13));return needs?'"'+v.replaceAll('"','""')+'"':v}}
+function exportCsv(){{let lines=[FIELDS.join(',')];state.forEach(c=>{{let r=review(c);lines.push(FIELDS.map(f=>csvEscape(r[f]??'')).join(','))}});let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join(String.fromCharCode(10))],{{type:'text/csv;charset=utf-8'}}));a.download='physical_identity_review_completed.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
+function parseCsv(text){{let rows=[],row=[],cell='',quoted=false,lf=String.fromCharCode(10),cr=String.fromCharCode(13);for(let i=0;i<text.length;i++){{let ch=text[i],next=text[i+1];if(quoted&&ch==='"'&&next==='"'){{cell+='"';i++;continue}}if(ch==='"'){{quoted=!quoted;continue}}if(ch===','&&!quoted){{row.push(cell);cell='';continue}}if((ch===lf||ch===cr)&&!quoted){{if(ch===cr&&next===lf)i++;row.push(cell);cell='';if(row.some(x=>x!==''))rows.push(row);row=[];continue}}cell+=ch}}row.push(cell);if(row.some(x=>x!==''))rows.push(row);let head=rows.shift()||[];return rows.map(vals=>Object.fromEntries(head.map((h,i)=>[h,vals[i]??''])))}}
 function importCsv(text){{let rows=parseCsv(text),byId=new Map(state.map(c=>[c.case_id,c])),seen=new Set(),rejected=0;let ids=new Set(['SAME_PHYSICAL_NOTE','DIFFERENT_PHYSICAL_NOTE','NOT_A_REAL_NOTE','AMBIGUOUS','UNREVIEWED','UNKNOWN']),conf=new Set(['HIGH','MEDIUM','LOW','UNKNOWN']),status=new Set(['REVIEWED','UNREVIEWED']),game=new Set(['PERFECT','GOOD','MISS','UNKNOWN']);rows.forEach(r=>{{let ok=byId.has(r.case_id)&&!seen.has(r.case_id)&&ids.has(r.same_physical_note_verdict)&&conf.has(r.visual_confidence)&&status.has(r.reviewer_status)&&game.has(r.game_judgment);if(!ok){{rejected++;return}}seen.add(r.case_id);Object.assign(review(byId.get(r.case_id)),r)}});render();$('saveState').textContent='imported '+seen.size+' rows; rejected '+rejected+' invalid/unknown IDs or schema rows'}}
 function nextFrame(delta){{let n=(currentCase().media.frames||[]).length;if(!n)return;frame=(frame+delta+n)%n;render()}}
-$('caseSelect').onchange=e=>{{current=Number(e.target.value);frame=0;render()}};$('prevBtn').onclick=()=>nextFrame(-1);$('nextBtn').onclick=()=>nextFrame(1);$('playBtn').onclick=()=>{{if(timer){{clearInterval(timer);timer=null;$('playBtn').textContent='▶ play'}}else{{timer=setInterval(()=>nextFrame(1),700/Number($('speed').value));$('playBtn').textContent='⏸ pause'}}}};$('saveBtn').onclick=save;$('exportBtn').onclick=exportCsv;$('importBtn').onclick=()=>$('importFile').click();$('importFile').onchange=e=>{{let f=e.target.files[0];if(f)f.text().then(importCsv)}};render();
+$('caseSelect').onchange=e=>{{current=Number(e.target.value);frame=0;render()}};$('prevBtn').onclick=()=>nextFrame(-1);$('nextBtn').onclick=()=>nextFrame(1);$('playBtn').onclick=()=>{{if(timer){{clearInterval(timer);timer=null;$('playBtn').textContent='▶ play'}}else{{timer=setInterval(()=>nextFrame(1),700/Number($('speed').value));$('playBtn').textContent='⏸ pause'}}}};$('saveBtn').onclick=save;$('exportBtn').onclick=exportCsv;$('importBtn').onclick=()=>$('importFile').click();$('importFile').onchange=e=>{{let f=e.target.files[0];if(f)f.text().then(importCsv)}};let requested=new URLSearchParams(location.search).get('case');let requestedIndex=state.findIndex(c=>c.case_id===requested);if(requestedIndex>=0)current=requestedIndex;render();
 </script></body></html>'''
 
 
@@ -347,6 +347,17 @@ def parity_report(divergence: list[dict[str, str]], out: Path) -> None:
     (out / "parity_385_546_analysis.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def cases_index(cases: list[dict[str, Any]], out: Path) -> None:
+    rows = []
+    for case in cases:
+        cid = html.escape(str(case.get("case_id", "")), quote=True)
+        status = html.escape(str(case.get("evidence_status", "")), quote=True)
+        frame = html.escape(str(case.get("source_record", {}).get("source_frame", "")), quote=True)
+        rows.append(f'<tr><td><a href="../index.html?case={cid}">{cid}</a></td><td>{frame}</td><td>{status}</td><td><a href="{cid}/case.json">case.json</a></td></tr>')
+    page = """<!doctype html><meta charset="utf-8"><title>V7.8.8 cases</title><style>body{font-family:system-ui;background:#10131a;color:#e8edf5;padding:20px}a{color:#7dcfff}table{border-collapse:collapse}td,th{border:1px solid #39465c;padding:7px}</style><h1>V7.8.8 visual review cases</h1><p>Open a case in the parent offline review page. Each case folder contains <code>case.json</code> and paired source/annotation frames.</p><table><thead><tr><th>case</th><th>source frame</th><th>evidence</th><th>data</th></tr></thead><tbody>""" + "\n".join(rows) + "</tbody></table>"
+    (out / "cases" / "index.html").write_text(page, encoding="utf-8")
+
+
 def build(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir).expanduser().resolve() if args.run_dir else ROOT / "output" / "run_20261101T034646_232725Z"
     source_results = Path(args.source_results).expanduser().resolve() if args.source_results else ROOT / "output" / "v787_parity_identity"
@@ -354,7 +365,10 @@ def build(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     required = ["live_source.mp4", "live_video_index.csv", "live_candidate_trace.csv", "live_association_attempts.csv", "live_track_identity.csv", "pf_reassociation_proposals.csv", "tap_intents.csv", "live_key_actions.csv"]
     missing = [name for name in required if not (run_dir / name).exists()]
-    review_rows = choose_review_rows(source_results)
+    # If a user has already exported/imported a completed review, use it to
+    # populate the page. Otherwise seed from the V7.8.7 review package.
+    review_root = out if (out / "physical_identity_review_completed.csv").exists() else source_results
+    review_rows = choose_review_rows(review_root)
     index = read_csv(run_dir / "live_video_index.csv")
     candidates = read_csv(run_dir / "live_candidate_trace.csv")
     attempts = read_csv(run_dir / "live_association_attempts.csv")
@@ -371,7 +385,10 @@ def build(args: argparse.Namespace) -> int:
         case_dir.mkdir(parents=True, exist_ok=True)
         (case_dir / "case.json").write_text(json.dumps(case, ensure_ascii=False, indent=2), encoding="utf-8")
         cases.append(case)
-    write_csv(out / "physical_identity_review_template.csv", review_rows, REVIEW_FIELDS)
+    cases_index(cases, out)
+    template_path = out / "physical_identity_review_template.csv"
+    if not template_path.exists():
+        write_csv(template_path, review_rows, REVIEW_FIELDS)
     # Never replace a manually exported file.  It is accepted as input on a
     # later build and remains a separate artifact from the template.
     completed = out / "physical_identity_review_completed.csv"

@@ -1,6 +1,6 @@
 # V7.8.8 Decision Report
 
-Review source: `C:\Users\USER\Desktop\holodream\output\v788_visual_identity_review\physical_identity_review_template.csv`
+Review source: `C:\Users\USER\Desktop\holodream\output\v788_visual_identity_review\physical_identity_review_completed.csv`
 
 ## Human review
 

@@ -7,6 +7,7 @@ from tools.build_v788_visual_review import (
     normalize_review_rows,
     sample_index,
 )
+from tools.import_v788_review import merge
 
 
 def _review(case_id="x"):
@@ -56,9 +57,23 @@ def test_html_escapes_trace_text_and_is_offline():
     assert "<script>alert(1)</script>" not in page
     assert "fetch(" not in page
     assert "physical_identity_review_completed.csv" in page
+    assert "String.fromCharCode(10)" in page
+    assert "function csvEscape(v){" in page
 
 
 def test_review_schema_preserves_unknown_and_ambiguous():
     rows = normalize_review_rows([_review("unknown"), {**_review("amb"), "same_physical_note_verdict": "AMBIGUOUS"}])
     assert rows[0]["same_physical_note_verdict"] == "UNKNOWN"
     assert rows[1]["same_physical_note_verdict"] == "AMBIGUOUS"
+
+
+def test_partial_review_merge_preserves_unsubmitted_cases(tmp_path):
+    base = [_review("a"), _review("b")]
+    incoming = [{**_review("a"), "same_physical_note_verdict": "SAME_PHYSICAL_NOTE", "visual_confidence": "HIGH", "reviewer_status": "REVIEWED"}]
+    from tools.build_v788_visual_review import write_csv
+    write_csv(tmp_path / "physical_identity_review_template.csv", base, REVIEW_FIELDS)
+    write_csv(tmp_path / "incoming.csv", incoming, REVIEW_FIELDS)
+    assert merge(tmp_path, tmp_path / "incoming.csv") == 0
+    merged = normalize_review_rows(__import__('csv').DictReader((tmp_path / "physical_identity_review_completed.csv").open(encoding='utf-8')))
+    assert merged[0]["reviewer_status"] == "REVIEWED"
+    assert merged[1]["reviewer_status"] == "UNREVIEWED"

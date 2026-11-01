@@ -36,8 +36,8 @@
       "same_physical_note_verdict": "UNKNOWN",
       "visual_confidence": "UNKNOWN",
       "reviewer_status": "UNREVIEWED",
-      "reviewer_notes": "Review ±5 frames; software verdict is not identity truth.",
-      "game_judgment": "UNKNOWN",
+      "reviewer_notes": "Review 簣5 frames; software verdict is not identity truth.",
+      "game_judgment": "GOOD",
       "software_verdict": "REJECTED_SAFE",
       "evidence_paths": "case_crops\\nc-001\\-5.jpg|case_crops\\nc-001\\-4.jpg|case_crops\\nc-001\\-3.jpg|case_crops\\nc-001\\-2.jpg|case_crops\\nc-001\\-1.jpg|case_crops\\nc-001\\+0.jpg|case_crops\\nc-001\\+1.jpg|case_crops\\nc-001\\+2.jpg|case_crops\\nc-001\\+3.jpg|case_crops\\nc-001\\+4.jpg|case_crops\\nc-001\\+5.jpg"
     },

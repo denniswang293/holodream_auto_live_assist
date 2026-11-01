@@ -1,5 +1,5 @@
 {
-  "source_csv": "C:\\Users\\USER\\Desktop\\holodream\\output\\v788_visual_identity_review\\physical_identity_review_template.csv",
+  "source_csv": "C:\\Users\\USER\\Desktop\\holodream\\output\\v788_visual_identity_review\\physical_identity_review_completed.csv",
   "case_count": 30,
   "manual_review_complete": false,
   "row_counts": {
@@ -7,8 +7,8 @@
     "rescue": 3,
     "negative_controls": 25,
     "parity": 2,
-    "reviewed": 0,
-    "unreviewed_or_unknown": 30
+    "reviewed": 7,
+    "unreviewed_or_unknown": 23
   },
   "original_legacy_recovered": {
     "count": 0,
@@ -28,7 +28,7 @@
   "physically_verified_incremental_recovery": 0,
   "false_attach_verified": 0,
   "negative_controls_verified": 0,
-  "unknown_identity_cases": 30,
+  "unknown_identity_cases": 23,
   "parity_status": "PARTIAL",
   "game_accuracy": "UNKNOWN",
   "active_enabled": false,
