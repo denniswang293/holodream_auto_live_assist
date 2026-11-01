@@ -1,0 +1,5 @@
+terminal_state,terminal_reason,key_down_count,interpretation
+TRACKING,track_not_current_confirmed,51,Program tracking gate ended the trace; physical note and game judgment UNKNOWN
+SCHEDULED,deadline_updated,1,Intent remained scheduled in available lifecycle rows; physical note and game judgment UNKNOWN
+EXPIRED,late_or_key_already_held,1,Program expiry/held-key safety outcome; not a game MISS
+TRACK_CONFIRMED,particle_posterior_too_wide,1,PF width gate remained the final recorded blocker; not evidence to widen gate
