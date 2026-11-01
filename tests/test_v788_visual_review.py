@@ -88,3 +88,17 @@ def test_headerless_legacy_review_csv_is_supported(tmp_path):
     path.write_text(",".join(row[field] for field in REVIEW_FIELDS) + "\n", encoding="utf-8")
     loaded = read_incoming(path)
     assert loaded[0]["case_id"] == "rescue_399_simple5"
+
+
+def test_conflicting_duplicate_review_ids_are_rejected(tmp_path):
+    base = [_review("a")]
+    incoming = [
+        {**_review("a"), "same_physical_note_verdict": "SAME_PHYSICAL_NOTE", "visual_confidence": "HIGH", "reviewer_status": "REVIEWED"},
+        {**_review("a"), "same_physical_note_verdict": "DIFFERENT_PHYSICAL_NOTE", "visual_confidence": "HIGH", "reviewer_status": "REVIEWED"},
+    ]
+    from tools.build_v788_visual_review import write_csv
+    import pytest
+    write_csv(tmp_path / "physical_identity_review_template.csv", base, REVIEW_FIELDS)
+    write_csv(tmp_path / "incoming.csv", incoming, REVIEW_FIELDS)
+    with pytest.raises(ValueError, match="conflicting duplicate"):
+        merge(tmp_path, tmp_path / "incoming.csv")

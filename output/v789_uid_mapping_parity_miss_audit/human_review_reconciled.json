@@ -1,0 +1,13 @@
+{
+  "reviewed_case_count": 10,
+  "human_same_note_labels": 10,
+  "human_labeled_stable_shadow_recoveries": 2,
+  "human_labeled_unstable_shadow_recoveries": 1,
+  "causally_proven_incremental_hardware_hits": 0,
+  "causally_proven_incremental_hardware_hits_status": "UNKNOWN_NO_GAME_OR_ACTUATOR_CAUSAL_SOURCE",
+  "human_reported_game_judgments": 4,
+  "game_judgment_evidence": "HUMAN_REPORTED_UNVERIFIED",
+  "unreviewed_excluded": 20,
+  "active_enabled": false,
+  "game_accuracy": "UNKNOWN"
+}

@@ -36,6 +36,15 @@ def merge(review_dir: Path, incoming_path: Path) -> int:
     base_path = completed_path if completed_path.exists() else template_path
     base = normalize_review_rows(read_csv(base_path))
     incoming = normalize_review_rows(read_incoming(incoming_path))
+    seen_incoming: dict[str, dict[str, str]] = {}
+    for row in incoming:
+        prior = seen_incoming.get(row["case_id"])
+        if prior is not None:
+            compare = ("same_physical_note_verdict", "visual_confidence", "reviewer_status", "game_judgment", "reviewer_notes")
+            if any(prior.get(field, "") != row.get(field, "") for field in compare):
+                raise ValueError(f"conflicting duplicate case_id in incoming CSV: {row['case_id']}")
+        seen_incoming[row["case_id"]] = row
+    incoming = list(seen_incoming.values())
     by_id = {row["case_id"]: row for row in base}
     accepted = 0
     rejected_ids = []

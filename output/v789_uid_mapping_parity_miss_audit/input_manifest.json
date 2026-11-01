@@ -1,0 +1,93 @@
+{
+  "status": "READY",
+  "run_dir": "C:\\Users\\USER\\Desktop\\holodream\\output\\run_20261101T034646_232725Z",
+  "v787_dir": "C:\\Users\\USER\\Desktop\\holodream\\output\\v787_parity_identity",
+  "v788_dir": "C:\\Users\\USER\\Desktop\\holodream\\output\\v788_visual_identity_review",
+  "missing": [],
+  "files": {
+    "live_source.mp4": {
+      "exists": true,
+      "bytes": 7421080,
+      "sha256": "7964386de004e95c277ecf5adfd558d92eb69dfccf7d796a95e573ce5562077b",
+      "rows": null
+    },
+    "live_video_index.csv": {
+      "exists": true,
+      "bytes": 60289,
+      "sha256": "dcd8206f6620decf03ecda6db3e94d26c5b5a50eb93fbe1a20b1c341565bd672",
+      "rows": 577
+    },
+    "live_candidate_trace.csv": {
+      "exists": true,
+      "bytes": 3913713,
+      "sha256": "f2d2703f59c7b04ce78224dcbb203f80f1be87d077da2d4d8f38e122ba3ca741",
+      "rows": 16469
+    },
+    "live_association_attempts.csv": {
+      "exists": true,
+      "bytes": 5184342,
+      "sha256": "9f50595b5444ff472f029cb2a1af5a8077e3c90626395901e9e40d77136a003c",
+      "rows": 16124
+    },
+    "live_track_identity.csv": {
+      "exists": true,
+      "bytes": 590219,
+      "sha256": "64352a7f1be00b9a94f9d63339be55417c21c1f49a4169a076cb9e315748780d",
+      "rows": 2012
+    },
+    "pf_reassociation_proposals.csv": {
+      "exists": true,
+      "bytes": 3757430,
+      "sha256": "2c581779cb9adc0ed7bdf79a48219bb762074f6eb987b3355cdbeb995df6fe9d",
+      "rows": 12689
+    },
+    "tap_intents.csv": {
+      "exists": true,
+      "bytes": 47403,
+      "sha256": "f355abdd65a5f36533bc7b49a284247ee75e6e859794cc9d6c85da148c6b74fe",
+      "rows": 365
+    },
+    "tap_decisions.csv": {
+      "exists": true,
+      "bytes": 299276,
+      "sha256": "29e82b17118f336ae2cd8dc9444eeebfe44aa234b5f1c62f9b19c47a5efa407c",
+      "rows": 344
+    },
+    "live_key_actions.csv": {
+      "exists": true,
+      "bytes": 10570,
+      "sha256": "a8fab1d58f19b8a5f4fbb18c7d3b43b4ab07ccaebe077efdda6cbc9e08e5918d",
+      "rows": 112
+    },
+    "live_events.csv": {
+      "exists": true,
+      "bytes": 183737,
+      "sha256": "1e4eccffda69d4b45b232a81c2832a5f46f92d191308120df9a29f0c56227d17",
+      "rows": 441
+    },
+    "tap_eta_comparison.csv": {
+      "exists": true,
+      "bytes": 560354,
+      "sha256": "832ef28ab5de97b4570242ccb70251d8d9682be567f7ed58ac2100eb29b84413",
+      "rows": 1974
+    },
+    "tap_planner_shadow.csv": {
+      "exists": true,
+      "bytes": 296633,
+      "sha256": "71f79d4ddc621d1af36f207500619ca0ab9008a3df1ffb6ebc51252cbaae4010",
+      "rows": 1974
+    }
+  },
+  "video_index": {
+    "rows": 577,
+    "capture_timestamp_min": 29146.4506251,
+    "capture_timestamp_max": 29158.6958451,
+    "timestamp_monotonic": true,
+    "source_frame_unique": true,
+    "source_video_frame_unique": true,
+    "source_to_video_mapping_valid": true,
+    "timestamp_policy": "capture_timestamp + source_frame + source_video_frame; no frame/60"
+  },
+  "physical_truth": "UNKNOWN",
+  "active_enabled": false
+}
