@@ -1,0 +1,417 @@
+{
+  "case_id": "nc-020",
+  "evidence_status": "READY",
+  "source_record": {
+    "source_frame": "211",
+    "capture_timestamp": "29149.7495019",
+    "source_video_frame": "209",
+    "video_frame": "209",
+    "gameplay_state": "PLAYING",
+    "candidate_ids": [
+      "211:candidate:0",
+      "211:candidate:1"
+    ]
+  },
+  "inference": {
+    "review": {
+      "case_id": "nc-020",
+      "source_frame": "211",
+      "old_uid": "simple:1000000",
+      "candidate_id": "211:candidate:0",
+      "appearance": "cyan_bar",
+      "old_lane": "UNKNOWN",
+      "new_lane": "UNKNOWN",
+      "prior_observation_frames": "UNKNOWN",
+      "subsequent_real_observations": "UNKNOWN",
+      "competing_track_ids": "",
+      "same_physical_note_verdict": "UNKNOWN",
+      "visual_confidence": "UNKNOWN",
+      "reviewer_status": "UNREVIEWED",
+      "reviewer_notes": "Review ±5 frames; software verdict is not identity truth.",
+      "game_judgment": "UNKNOWN",
+      "software_verdict": "INSUFFICIENT_VISUAL_EVIDENCE",
+      "evidence_paths": "case_crops\\nc-020\\-5.jpg|case_crops\\nc-020\\-4.jpg|case_crops\\nc-020\\-3.jpg|case_crops\\nc-020\\-2.jpg|case_crops\\nc-020\\-1.jpg|case_crops\\nc-020\\+0.jpg|case_crops\\nc-020\\+1.jpg|case_crops\\nc-020\\+2.jpg|case_crops\\nc-020\\+3.jpg|case_crops\\nc-020\\+4.jpg|case_crops\\nc-020\\+5.jpg"
+    },
+    "center_candidates": [
+      {
+        "candidate_id": "211:candidate:0",
+        "appearance": "cyan_bar",
+        "core_bbox": "[336,37,25,5]",
+        "raw_bbox": "[336,37,25,5]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.278822:0.520288",
+        "score": ""
+      },
+      {
+        "candidate_id": "211:candidate:1",
+        "appearance": "cyan_bar",
+        "core_bbox": "[370,45,28,6]",
+        "raw_bbox": "[370,45,28,6]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.593546:0.830145",
+        "score": ""
+      }
+    ],
+    "legacy_assignments": [
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "211:candidate:0",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "211:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.12690334606897163",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "211:candidate:0",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.1357549428551765",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "211:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "211:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "211:candidate:0",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000001"
+      }
+    ],
+    "track_state": [
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "note_uid": "6c14d7a24997:simple:1000000",
+        "candidate_id": "211:candidate:1",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29149.7495019",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "note_uid": "6c14d7a24997:simple:1000001",
+        "candidate_id": "211:candidate:0",
+        "track_status": "tentative",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29149.7495019",
+        "state_transition": "matched"
+      }
+    ],
+    "pf_proposals": [
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "211:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "16.003700002329424",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "211:candidate:1",
+        "decision": "SHADOW_REACQUIRE_PROPOSAL",
+        "reason": "pf_real_candidate_match",
+        "pf_association_score": "0.035843394612145245",
+        "score_margin": "",
+        "coast_ms": "16.003700002329424",
+        "pf_predicted_y": "47.662939438959256",
+        "pf_sigma_y": "8.2439152054436",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "",
+        "decision": "PF_STATE_UNAVAILABLE",
+        "reason": "pf_state_unavailable",
+        "pf_association_score": "",
+        "score_margin": "",
+        "coast_ms": "",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      }
+    ],
+    "parity_context": [],
+    "parity_detail": [],
+    "rescue": {},
+    "truth_policy": "Software traces are not game judgment; physical identity and game judgment remain UNKNOWN until human review."
+  },
+  "timeline": [
+    {
+      "source_frame": "147",
+      "capture_timestamp": "29148.7511386",
+      "video_frame": "145",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "156",
+      "capture_timestamp": "29148.8928655",
+      "video_frame": "154",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "165",
+      "capture_timestamp": "29149.0308578",
+      "video_frame": "163",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "174",
+      "capture_timestamp": "29149.1699416",
+      "video_frame": "172",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "183",
+      "capture_timestamp": "29149.3102191",
+      "video_frame": "181",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "192",
+      "capture_timestamp": "29149.4507941",
+      "video_frame": "190",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "201",
+      "capture_timestamp": "29149.5919749",
+      "video_frame": "199",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 1,
+      "track_count": 1,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "210",
+      "capture_timestamp": "29149.7334982",
+      "video_frame": "208",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 2,
+      "track_count": 2,
+      "pf_count": 2
+    },
+    {
+      "source_frame": "219",
+      "capture_timestamp": "29149.8725722",
+      "video_frame": "217",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 2,
+      "track_count": 2,
+      "pf_count": 2
+    },
+    {
+      "source_frame": "228",
+      "capture_timestamp": "29150.0128848",
+      "video_frame": "226",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 3,
+      "track_count": 3,
+      "pf_count": 6
+    },
+    {
+      "source_frame": "237",
+      "capture_timestamp": "29150.1518481",
+      "video_frame": "235",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 10
+    },
+    {
+      "source_frame": "246",
+      "capture_timestamp": "29150.2927361",
+      "video_frame": "244",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "255",
+      "capture_timestamp": "29150.430389",
+      "video_frame": "253",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "265",
+      "capture_timestamp": "29150.5882004",
+      "video_frame": "262",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 5,
+      "pf_count": 20
+    },
+    {
+      "source_frame": "275",
+      "capture_timestamp": "29150.7454896",
+      "video_frame": "271",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 5,
+      "pf_count": 25
+    }
+  ],
+  "media": {
+    "frames": [
+      {
+        "source_frame": "147",
+        "capture_timestamp": "29148.7511386",
+        "video_frame": "145",
+        "path": "cases/nc-020/frames/00.jpg"
+      },
+      {
+        "source_frame": "156",
+        "capture_timestamp": "29148.8928655",
+        "video_frame": "154",
+        "path": "cases/nc-020/frames/01.jpg"
+      },
+      {
+        "source_frame": "165",
+        "capture_timestamp": "29149.0308578",
+        "video_frame": "163",
+        "path": "cases/nc-020/frames/02.jpg"
+      },
+      {
+        "source_frame": "174",
+        "capture_timestamp": "29149.1699416",
+        "video_frame": "172",
+        "path": "cases/nc-020/frames/03.jpg"
+      },
+      {
+        "source_frame": "183",
+        "capture_timestamp": "29149.3102191",
+        "video_frame": "181",
+        "path": "cases/nc-020/frames/04.jpg"
+      },
+      {
+        "source_frame": "192",
+        "capture_timestamp": "29149.4507941",
+        "video_frame": "190",
+        "path": "cases/nc-020/frames/05.jpg"
+      },
+      {
+        "source_frame": "201",
+        "capture_timestamp": "29149.5919749",
+        "video_frame": "199",
+        "path": "cases/nc-020/frames/06.jpg"
+      },
+      {
+        "source_frame": "210",
+        "capture_timestamp": "29149.7334982",
+        "video_frame": "208",
+        "path": "cases/nc-020/frames/07.jpg"
+      },
+      {
+        "source_frame": "219",
+        "capture_timestamp": "29149.8725722",
+        "video_frame": "217",
+        "path": "cases/nc-020/frames/08.jpg"
+      },
+      {
+        "source_frame": "228",
+        "capture_timestamp": "29150.0128848",
+        "video_frame": "226",
+        "path": "cases/nc-020/frames/09.jpg"
+      },
+      {
+        "source_frame": "237",
+        "capture_timestamp": "29150.1518481",
+        "video_frame": "235",
+        "path": "cases/nc-020/frames/10.jpg"
+      },
+      {
+        "source_frame": "246",
+        "capture_timestamp": "29150.2927361",
+        "video_frame": "244",
+        "path": "cases/nc-020/frames/11.jpg"
+      },
+      {
+        "source_frame": "255",
+        "capture_timestamp": "29150.430389",
+        "video_frame": "253",
+        "path": "cases/nc-020/frames/12.jpg"
+      },
+      {
+        "source_frame": "265",
+        "capture_timestamp": "29150.5882004",
+        "video_frame": "262",
+        "path": "cases/nc-020/frames/13.jpg"
+      },
+      {
+        "source_frame": "275",
+        "capture_timestamp": "29150.7454896",
+        "video_frame": "271",
+        "path": "cases/nc-020/frames/14.jpg"
+      }
+    ],
+    "window_ms": 1000.0,
+    "legend": "Left: original source frame. Right: candidate/track annotation. Red target, orange other candidates. PF values are shown only when present in trace."
+  }
+}

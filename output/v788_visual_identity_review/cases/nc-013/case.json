@@ -1,0 +1,666 @@
+{
+  "case_id": "nc-013",
+  "evidence_status": "READY",
+  "source_record": {
+    "source_frame": "236",
+    "capture_timestamp": "29150.1361434",
+    "source_video_frame": "234",
+    "video_frame": "234",
+    "gameplay_state": "PLAYING",
+    "candidate_ids": [
+      "236:candidate:0",
+      "236:candidate:1",
+      "236:candidate:2",
+      "236:candidate:3"
+    ]
+  },
+  "inference": {
+    "review": {
+      "case_id": "nc-013",
+      "source_frame": "236",
+      "old_uid": "simple:1000000",
+      "candidate_id": "236:candidate:0",
+      "appearance": "cyan_bar",
+      "old_lane": "UNKNOWN",
+      "new_lane": "UNKNOWN",
+      "prior_observation_frames": "UNKNOWN",
+      "subsequent_real_observations": "UNKNOWN",
+      "competing_track_ids": "",
+      "same_physical_note_verdict": "UNKNOWN",
+      "visual_confidence": "UNKNOWN",
+      "reviewer_status": "UNREVIEWED",
+      "reviewer_notes": "Review ±5 frames; software verdict is not identity truth.",
+      "game_judgment": "UNKNOWN",
+      "software_verdict": "INSUFFICIENT_VISUAL_EVIDENCE",
+      "evidence_paths": "case_crops\\nc-013\\-5.jpg|case_crops\\nc-013\\-4.jpg|case_crops\\nc-013\\-3.jpg|case_crops\\nc-013\\-2.jpg|case_crops\\nc-013\\-1.jpg|case_crops\\nc-013\\+0.jpg|case_crops\\nc-013\\+1.jpg|case_crops\\nc-013\\+2.jpg|case_crops\\nc-013\\+3.jpg|case_crops\\nc-013\\+4.jpg|case_crops\\nc-013\\+5.jpg"
+    },
+    "center_candidates": [
+      {
+        "candidate_id": "236:candidate:0",
+        "appearance": "cyan_bar",
+        "core_bbox": "[326,37,26,5]",
+        "raw_bbox": "[326,37,26,5]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.182236:0.433360",
+        "score": ""
+      },
+      {
+        "candidate_id": "236:candidate:1",
+        "appearance": "cyan_bar",
+        "core_bbox": "[328,54,33,7]",
+        "raw_bbox": "[328,54,33,7]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.270468:0.515101",
+        "score": ""
+      },
+      {
+        "candidate_id": "236:candidate:2",
+        "appearance": "cyan_bar",
+        "core_bbox": "[361,45,27,6]",
+        "raw_bbox": "[361,45,27,6]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.517496:0.745645",
+        "score": ""
+      },
+      {
+        "candidate_id": "236:candidate:3",
+        "appearance": "cyan_bar",
+        "core_bbox": "[373,65,37,8]",
+        "raw_bbox": "[373,65,37,8]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.590340:0.829155",
+        "score": ""
+      }
+    ],
+    "legacy_assignments": [
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "236:candidate:0",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "236:candidate:2",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "236:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "236:candidate:3",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.10270734311224036",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "236:candidate:0",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "236:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "236:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.07032503743561125",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "236:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "236:candidate:0",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "236:candidate:2",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.09667357503586765",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "236:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "236:candidate:3",
+        "assigned": "False",
+        "reject_reason": "motion_residual",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "236:candidate:3",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "236:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "236:candidate:2",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000002"
+      }
+    ],
+    "track_state": [
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "note_uid": "6c14d7a24997:simple:1000000",
+        "candidate_id": "236:candidate:3",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29150.1361434",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "note_uid": "6c14d7a24997:simple:1000001",
+        "candidate_id": "236:candidate:1",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29150.1361434",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "note_uid": "6c14d7a24997:simple:1000002",
+        "candidate_id": "236:candidate:2",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29150.1361434",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "note_uid": "6c14d7a24997:simple:1000003",
+        "candidate_id": "236:candidate:0",
+        "track_status": "tentative",
+        "matched_this_frame": "False",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29150.1361434",
+        "state_transition": "new"
+      }
+    ],
+    "pf_proposals": [
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "236:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "236:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "PF_MATCHED_DEGRADED_UNKNOWN",
+        "pf_association_score": "3.249714211136783",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "67.38254392549771",
+        "pf_sigma_y": "8.304285421365595",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "236:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "236:candidate:3",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.19783587936607994",
+        "score_margin": "3.0518783317707032",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "67.38254392549771",
+        "pf_sigma_y": "8.351201895948538",
+        "competitor_track_ids": "1000001|1000002",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "236:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "PF_MATCHED_DEGRADED_UNKNOWN",
+        "pf_association_score": "3.255795731069071",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "55.17602543734959",
+        "pf_sigma_y": "8.165829145728644",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "236:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "236:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "236:candidate:1",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.48078194999296464",
+        "score_margin": "2.7750137810761064",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "55.17602543734959",
+        "pf_sigma_y": "8.201959948870899",
+        "competitor_track_ids": "1000000|1000002",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "236:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "236:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "236:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "3.631944440147583",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "45.555172505669",
+        "pf_sigma_y": "8.351201895948538",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "236:candidate:2",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.32567523202524695",
+        "score_margin": "",
+        "coast_ms": "15.546999999060063",
+        "pf_predicted_y": "45.555172505669",
+        "pf_sigma_y": "8.304285421365595",
+        "competitor_track_ids": "1000000|1000001",
+        "input_sent": "False"
+      }
+    ],
+    "parity_context": [],
+    "parity_detail": [],
+    "rescue": {},
+    "truth_policy": "Software traces are not game judgment; physical identity and game judgment remain UNKNOWN until human review."
+  },
+  "timeline": [
+    {
+      "source_frame": "172",
+      "capture_timestamp": "29149.1390254",
+      "video_frame": "170",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "180",
+      "capture_timestamp": "29149.2627711",
+      "video_frame": "178",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "189",
+      "capture_timestamp": "29149.4031417",
+      "video_frame": "187",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 0,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "198",
+      "capture_timestamp": "29149.5442676",
+      "video_frame": "196",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 1,
+      "track_count": 0,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "206",
+      "capture_timestamp": "29149.6694898",
+      "video_frame": "204",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 1,
+      "track_count": 1,
+      "pf_count": 1
+    },
+    {
+      "source_frame": "214",
+      "capture_timestamp": "29149.796062",
+      "video_frame": "212",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 2,
+      "track_count": 2,
+      "pf_count": 3
+    },
+    {
+      "source_frame": "223",
+      "capture_timestamp": "29149.9345522",
+      "video_frame": "221",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 3,
+      "track_count": 3,
+      "pf_count": 7
+    },
+    {
+      "source_frame": "232",
+      "capture_timestamp": "29150.0739138",
+      "video_frame": "230",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 3,
+      "pf_count": 9
+    },
+    {
+      "source_frame": "240",
+      "capture_timestamp": "29150.1982098",
+      "video_frame": "238",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 10
+    },
+    {
+      "source_frame": "248",
+      "capture_timestamp": "29150.3235383",
+      "video_frame": "246",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "257",
+      "capture_timestamp": "29150.4622172",
+      "video_frame": "255",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "267",
+      "capture_timestamp": "29150.6203014",
+      "video_frame": "264",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 5,
+      "pf_count": 25
+    },
+    {
+      "source_frame": "276",
+      "capture_timestamp": "29150.7613666",
+      "video_frame": "272",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 5,
+      "pf_count": 25
+    },
+    {
+      "source_frame": "286",
+      "capture_timestamp": "29150.9149447",
+      "video_frame": "280",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 6,
+      "track_count": 6,
+      "pf_count": 31
+    },
+    {
+      "source_frame": "299",
+      "capture_timestamp": "29151.1331092",
+      "video_frame": "289",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 6,
+      "track_count": 6,
+      "pf_count": 36
+    }
+  ],
+  "media": {
+    "frames": [
+      {
+        "source_frame": "172",
+        "capture_timestamp": "29149.1390254",
+        "video_frame": "170",
+        "path": "cases/nc-013/frames/00.jpg"
+      },
+      {
+        "source_frame": "180",
+        "capture_timestamp": "29149.2627711",
+        "video_frame": "178",
+        "path": "cases/nc-013/frames/01.jpg"
+      },
+      {
+        "source_frame": "189",
+        "capture_timestamp": "29149.4031417",
+        "video_frame": "187",
+        "path": "cases/nc-013/frames/02.jpg"
+      },
+      {
+        "source_frame": "198",
+        "capture_timestamp": "29149.5442676",
+        "video_frame": "196",
+        "path": "cases/nc-013/frames/03.jpg"
+      },
+      {
+        "source_frame": "206",
+        "capture_timestamp": "29149.6694898",
+        "video_frame": "204",
+        "path": "cases/nc-013/frames/04.jpg"
+      },
+      {
+        "source_frame": "214",
+        "capture_timestamp": "29149.796062",
+        "video_frame": "212",
+        "path": "cases/nc-013/frames/05.jpg"
+      },
+      {
+        "source_frame": "223",
+        "capture_timestamp": "29149.9345522",
+        "video_frame": "221",
+        "path": "cases/nc-013/frames/06.jpg"
+      },
+      {
+        "source_frame": "232",
+        "capture_timestamp": "29150.0739138",
+        "video_frame": "230",
+        "path": "cases/nc-013/frames/07.jpg"
+      },
+      {
+        "source_frame": "240",
+        "capture_timestamp": "29150.1982098",
+        "video_frame": "238",
+        "path": "cases/nc-013/frames/08.jpg"
+      },
+      {
+        "source_frame": "248",
+        "capture_timestamp": "29150.3235383",
+        "video_frame": "246",
+        "path": "cases/nc-013/frames/09.jpg"
+      },
+      {
+        "source_frame": "257",
+        "capture_timestamp": "29150.4622172",
+        "video_frame": "255",
+        "path": "cases/nc-013/frames/10.jpg"
+      },
+      {
+        "source_frame": "267",
+        "capture_timestamp": "29150.6203014",
+        "video_frame": "264",
+        "path": "cases/nc-013/frames/11.jpg"
+      },
+      {
+        "source_frame": "276",
+        "capture_timestamp": "29150.7613666",
+        "video_frame": "272",
+        "path": "cases/nc-013/frames/12.jpg"
+      },
+      {
+        "source_frame": "286",
+        "capture_timestamp": "29150.9149447",
+        "video_frame": "280",
+        "path": "cases/nc-013/frames/13.jpg"
+      },
+      {
+        "source_frame": "299",
+        "capture_timestamp": "29151.1331092",
+        "video_frame": "289",
+        "path": "cases/nc-013/frames/14.jpg"
+      }
+    ],
+    "window_ms": 1000.0,
+    "legend": "Left: original source frame. Right: candidate/track annotation. Red target, orange other candidates. PF values are shown only when present in trace."
+  }
+}

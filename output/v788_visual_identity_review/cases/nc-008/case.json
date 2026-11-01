@@ -1,0 +1,1446 @@
+{
+  "case_id": "nc-008",
+  "evidence_status": "READY",
+  "source_record": {
+    "source_frame": "306",
+    "capture_timestamp": "29151.2420324",
+    "source_video_frame": "295",
+    "video_frame": "295",
+    "gameplay_state": "PLAYING",
+    "candidate_ids": [
+      "306:candidate:0",
+      "306:candidate:1",
+      "306:candidate:2",
+      "306:candidate:3",
+      "306:candidate:4",
+      "306:candidate:5",
+      "306:candidate:6"
+    ]
+  },
+  "inference": {
+    "review": {
+      "case_id": "nc-008",
+      "source_frame": "306",
+      "old_uid": "simple:1000004",
+      "candidate_id": "306:candidate:0",
+      "appearance": "cyan_bar",
+      "old_lane": "UNKNOWN",
+      "new_lane": "UNKNOWN",
+      "prior_observation_frames": "UNKNOWN",
+      "subsequent_real_observations": "UNKNOWN",
+      "competing_track_ids": "",
+      "same_physical_note_verdict": "UNKNOWN",
+      "visual_confidence": "UNKNOWN",
+      "reviewer_status": "UNREVIEWED",
+      "reviewer_notes": "Review ±5 frames; software verdict is not identity truth.",
+      "game_judgment": "UNKNOWN",
+      "software_verdict": "INSUFFICIENT_VISUAL_EVIDENCE",
+      "evidence_paths": "case_crops\\nc-008\\-5.jpg|case_crops\\nc-008\\-4.jpg|case_crops\\nc-008\\-3.jpg|case_crops\\nc-008\\-2.jpg|case_crops\\nc-008\\-1.jpg|case_crops\\nc-008\\+0.jpg|case_crops\\nc-008\\+1.jpg|case_crops\\nc-008\\+2.jpg|case_crops\\nc-008\\+3.jpg|case_crops\\nc-008\\+4.jpg|case_crops\\nc-008\\+5.jpg"
+    },
+    "center_candidates": [
+      {
+        "candidate_id": "306:candidate:0",
+        "appearance": "cyan_bar",
+        "core_bbox": "[336,37,25,5]",
+        "raw_bbox": "[336,37,25,5]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.278822:0.520288",
+        "score": ""
+      },
+      {
+        "candidate_id": "306:candidate:1",
+        "appearance": "cyan_bar",
+        "core_bbox": "[285,108,55,11]",
+        "raw_bbox": "[285,108,55,11]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.180982:0.417578",
+        "score": ""
+      },
+      {
+        "candidate_id": "306:candidate:2",
+        "appearance": "cyan_bar",
+        "core_bbox": "[361,126,65,13]",
+        "raw_bbox": "[361,126,65,13]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.506676:0.751435",
+        "score": ""
+      },
+      {
+        "candidate_id": "306:candidate:3",
+        "appearance": "cyan_bar",
+        "core_bbox": "[391,172,84,17]",
+        "raw_bbox": "[391,172,84,17]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.590505:0.831056",
+        "score": ""
+      },
+      {
+        "candidate_id": "306:candidate:4",
+        "appearance": "pink_candidate",
+        "core_bbox": "[382,54,44,7]",
+        "raw_bbox": "[382,54,44,7]",
+        "candidate_keys": "K|L",
+        "lane_span": "0.670777:0.996956",
+        "score": ""
+      },
+      {
+        "candidate_id": "306:candidate:5",
+        "appearance": "cyan_bar",
+        "core_bbox": "[272,77,45,9]",
+        "raw_bbox": "[272,77,45,9]",
+        "candidate_keys": "S|D",
+        "lane_span": "0.007401:0.262055",
+        "score": ""
+      },
+      {
+        "candidate_id": "306:candidate:6",
+        "appearance": "cyan_bar",
+        "core_bbox": "[288,147,72,16]",
+        "raw_bbox": "[288,147,72,16]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.266032:0.502276",
+        "score": ""
+      }
+    ],
+    "legacy_assignments": [
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:0",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:4",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000005"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:5",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:2",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:6",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:3",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.09312046438215825",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:0",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:4",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000005"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:5",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:1",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:6",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.0738500129939456",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:0",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:4",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000005"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:5",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:2",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.06998290272534458",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:6",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:3",
+        "assigned": "False",
+        "reject_reason": "motion_residual",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:0",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:4",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000005"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:5",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.10866992921653118",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:6",
+        "assigned": "False",
+        "reject_reason": "motion_residual",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:0",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:4",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000005"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:5",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.05004113087470708",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:1",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:6",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:0",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": ""
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:4",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.0688972003309154",
+        "competition_track_ids": "1000005"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:5",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:1",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:2",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:6",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:3",
+        "assigned": "False",
+        "reject_reason": "appearance_family_mismatch",
+        "total_cost": "INF",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "candidate_id": "306:candidate:3",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000000"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "candidate_id": "306:candidate:6",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000001"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "candidate_id": "306:candidate:2",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000002"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "candidate_id": "306:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000003"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "candidate_id": "306:candidate:5",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000004"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "candidate_id": "306:candidate:4",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000005"
+      }
+    ],
+    "track_state": [
+      {
+        "track_id": "1000000",
+        "track_uid": "simple:1000000",
+        "note_uid": "6c14d7a24997:simple:1000000",
+        "candidate_id": "306:candidate:3",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000001",
+        "track_uid": "simple:1000001",
+        "note_uid": "6c14d7a24997:simple:1000001",
+        "candidate_id": "306:candidate:6",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000002",
+        "track_uid": "simple:1000002",
+        "note_uid": "6c14d7a24997:simple:1000002",
+        "candidate_id": "306:candidate:2",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000003",
+        "track_uid": "simple:1000003",
+        "note_uid": "6c14d7a24997:simple:1000003",
+        "candidate_id": "306:candidate:1",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000004",
+        "track_uid": "simple:1000004",
+        "note_uid": "6c14d7a24997:simple:1000004",
+        "candidate_id": "306:candidate:5",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000005",
+        "track_uid": "simple:1000005",
+        "note_uid": "6c14d7a24997:simple:1000005",
+        "candidate_id": "306:candidate:4",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000006",
+        "track_uid": "simple:1000006",
+        "note_uid": "6c14d7a24997:simple:1000006",
+        "candidate_id": "306:candidate:0",
+        "track_status": "tentative",
+        "matched_this_frame": "False",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29151.2420324",
+        "state_transition": "new"
+      }
+    ],
+    "pf_proposals": [
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "unknown_has_special_or_competing_visual_features",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "3.953214829779622",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "160.62113051199046",
+        "pf_sigma_y": "8.120315202767635",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:6",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000000",
+        "track_id": "1000000",
+        "candidate_id": "306:candidate:3",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "2.4768877190969993",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "160.62113051199046",
+        "pf_sigma_y": "8.121388598207378",
+        "competitor_track_ids": "1000001|1000002|1000003|1000004|1000005",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "11.221653475498968",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "129.29501416256105",
+        "pf_sigma_y": "8.064516129032258",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "unknown_has_special_or_competing_visual_features",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "4.677992297315171",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "129.29501416256105",
+        "pf_sigma_y": "8.099062918340028",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:6",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "3.549376174472557",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "129.29501416256105",
+        "pf_sigma_y": "8.510135334791087",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000001",
+        "track_id": "1000001",
+        "candidate_id": "306:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "unknown_has_special_or_competing_visual_features",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:6",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "6.3032025808423375",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "132.51611716703547",
+        "pf_sigma_y": "8.121388598207378",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000002",
+        "track_id": "1000002",
+        "candidate_id": "306:candidate:2",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.07543162269874663",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "132.51611716703547",
+        "pf_sigma_y": "8.120315202767635",
+        "competitor_track_ids": "1000000|1000001|1000003|1000004|1000005",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "8.366634858630755",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "102.81397530919861",
+        "pf_sigma_y": "8.064516129032258",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "unknown_has_special_or_competing_visual_features",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:6",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "6.629301783060967",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "102.81397530919861",
+        "pf_sigma_y": "8.510135334791087",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000003",
+        "track_id": "1000003",
+        "candidate_id": "306:candidate:1",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "1.3247678731661068",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "102.81397530919861",
+        "pf_sigma_y": "8.099062918340028",
+        "competitor_track_ids": "1000000|1000001|1000002|1000004|1000005",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "unknown_has_special_or_competing_visual_features",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:6",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000004",
+        "track_id": "1000004",
+        "candidate_id": "306:candidate:5",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.889706356268546",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "80.96867672780212",
+        "pf_sigma_y": "8.385093167701863",
+        "competitor_track_ids": "1000000|1000001|1000002|1000003|1000005",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:0",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "unknown_has_special_or_competing_visual_features",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "10.86952303456795",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "57.083185989671364",
+        "pf_sigma_y": "8.120315202767635",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:6",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000005",
+        "track_id": "1000005",
+        "candidate_id": "306:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "15.594198084288076",
+        "score_margin": "",
+        "coast_ms": "15.127200000279117",
+        "pf_predicted_y": "57.083185989671364",
+        "pf_sigma_y": "8.121388598207378",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      }
+    ],
+    "parity_context": [],
+    "parity_detail": [],
+    "rescue": {},
+    "truth_policy": "Software traces are not game judgment; physical identity and game judgment remain UNKNOWN until human review."
+  },
+  "timeline": [
+    {
+      "source_frame": "243",
+      "capture_timestamp": "29150.246137",
+      "video_frame": "241",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "249",
+      "capture_timestamp": "29150.3388295",
+      "video_frame": "247",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "256",
+      "capture_timestamp": "29150.4464871",
+      "video_frame": "254",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 4,
+      "track_count": 4,
+      "pf_count": 16
+    },
+    {
+      "source_frame": "262",
+      "capture_timestamp": "29150.5400144",
+      "video_frame": "260",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 5,
+      "pf_count": 21
+    },
+    {
+      "source_frame": "269",
+      "capture_timestamp": "29150.6509688",
+      "video_frame": "266",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 5,
+      "track_count": 5,
+      "pf_count": 25
+    },
+    {
+      "source_frame": "278",
+      "capture_timestamp": "29150.7915845",
+      "video_frame": "273",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 6,
+      "track_count": 5,
+      "pf_count": 25
+    },
+    {
+      "source_frame": "285",
+      "capture_timestamp": "29150.8995156",
+      "video_frame": "279",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 6,
+      "track_count": 6,
+      "pf_count": 26
+    },
+    {
+      "source_frame": "293",
+      "capture_timestamp": "29151.0243747",
+      "video_frame": "285",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 6,
+      "track_count": 6,
+      "pf_count": 36
+    },
+    {
+      "source_frame": "302",
+      "capture_timestamp": "29151.18028",
+      "video_frame": "292",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 7,
+      "track_count": 6,
+      "pf_count": 36
+    },
+    {
+      "source_frame": "311",
+      "capture_timestamp": "29151.3197871",
+      "video_frame": "298",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 7,
+      "track_count": 7,
+      "pf_count": 43
+    },
+    {
+      "source_frame": "322",
+      "capture_timestamp": "29151.491886",
+      "video_frame": "305",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 8,
+      "track_count": 8,
+      "pf_count": 56
+    },
+    {
+      "source_frame": "333",
+      "capture_timestamp": "29151.6633917",
+      "video_frame": "311",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 8,
+      "track_count": 8,
+      "pf_count": 64
+    },
+    {
+      "source_frame": "345",
+      "capture_timestamp": "29151.8510668",
+      "video_frame": "317",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 9,
+      "track_count": 8,
+      "pf_count": 64
+    },
+    {
+      "source_frame": "359",
+      "capture_timestamp": "29152.0693368",
+      "video_frame": "324",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 9,
+      "track_count": 8,
+      "pf_count": 48
+    },
+    {
+      "source_frame": "369",
+      "capture_timestamp": "29152.2243087",
+      "video_frame": "330",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 8,
+      "track_count": 9,
+      "pf_count": 51
+    }
+  ],
+  "media": {
+    "frames": [
+      {
+        "source_frame": "243",
+        "capture_timestamp": "29150.246137",
+        "video_frame": "241",
+        "path": "cases/nc-008/frames/00.jpg"
+      },
+      {
+        "source_frame": "249",
+        "capture_timestamp": "29150.3388295",
+        "video_frame": "247",
+        "path": "cases/nc-008/frames/01.jpg"
+      },
+      {
+        "source_frame": "256",
+        "capture_timestamp": "29150.4464871",
+        "video_frame": "254",
+        "path": "cases/nc-008/frames/02.jpg"
+      },
+      {
+        "source_frame": "262",
+        "capture_timestamp": "29150.5400144",
+        "video_frame": "260",
+        "path": "cases/nc-008/frames/03.jpg"
+      },
+      {
+        "source_frame": "269",
+        "capture_timestamp": "29150.6509688",
+        "video_frame": "266",
+        "path": "cases/nc-008/frames/04.jpg"
+      },
+      {
+        "source_frame": "278",
+        "capture_timestamp": "29150.7915845",
+        "video_frame": "273",
+        "path": "cases/nc-008/frames/05.jpg"
+      },
+      {
+        "source_frame": "285",
+        "capture_timestamp": "29150.8995156",
+        "video_frame": "279",
+        "path": "cases/nc-008/frames/06.jpg"
+      },
+      {
+        "source_frame": "293",
+        "capture_timestamp": "29151.0243747",
+        "video_frame": "285",
+        "path": "cases/nc-008/frames/07.jpg"
+      },
+      {
+        "source_frame": "302",
+        "capture_timestamp": "29151.18028",
+        "video_frame": "292",
+        "path": "cases/nc-008/frames/08.jpg"
+      },
+      {
+        "source_frame": "311",
+        "capture_timestamp": "29151.3197871",
+        "video_frame": "298",
+        "path": "cases/nc-008/frames/09.jpg"
+      },
+      {
+        "source_frame": "322",
+        "capture_timestamp": "29151.491886",
+        "video_frame": "305",
+        "path": "cases/nc-008/frames/10.jpg"
+      },
+      {
+        "source_frame": "333",
+        "capture_timestamp": "29151.6633917",
+        "video_frame": "311",
+        "path": "cases/nc-008/frames/11.jpg"
+      },
+      {
+        "source_frame": "345",
+        "capture_timestamp": "29151.8510668",
+        "video_frame": "317",
+        "path": "cases/nc-008/frames/12.jpg"
+      },
+      {
+        "source_frame": "359",
+        "capture_timestamp": "29152.0693368",
+        "video_frame": "324",
+        "path": "cases/nc-008/frames/13.jpg"
+      },
+      {
+        "source_frame": "369",
+        "capture_timestamp": "29152.2243087",
+        "video_frame": "330",
+        "path": "cases/nc-008/frames/14.jpg"
+      }
+    ],
+    "window_ms": 1000.0,
+    "legend": "Left: original source frame. Right: candidate/track annotation. Red target, orange other candidates. PF values are shown only when present in trace."
+  }
+}

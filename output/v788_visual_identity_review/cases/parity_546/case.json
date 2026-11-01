@@ -1,0 +1,1831 @@
+{
+  "case_id": "parity_546",
+  "evidence_status": "READY",
+  "source_record": {
+    "source_frame": "546",
+    "capture_timestamp": "29154.9874954",
+    "source_video_frame": "427",
+    "video_frame": "427",
+    "gameplay_state": "PLAYING",
+    "candidate_ids": [
+      "546:candidate:0",
+      "546:candidate:1",
+      "546:candidate:2",
+      "546:candidate:3",
+      "546:candidate:4",
+      "546:candidate:5",
+      "546:candidate:6",
+      "546:candidate:7",
+      "546:candidate:8",
+      "546:candidate:9",
+      "546:candidate:10",
+      "546:candidate:11",
+      "546:candidate:12"
+    ]
+  },
+  "inference": {
+    "review": {
+      "case_id": "parity_546",
+      "source_frame": "546",
+      "old_uid": "simple:1000014",
+      "candidate_id": "546:candidate:11",
+      "appearance": "neutral_candidate",
+      "old_lane": "UNKNOWN",
+      "new_lane": "J|K",
+      "prior_observation_frames": "UNKNOWN",
+      "subsequent_real_observations": "UNKNOWN",
+      "competing_track_ids": "UNKNOWN",
+      "same_physical_note_verdict": "UNKNOWN",
+      "visual_confidence": "UNKNOWN",
+      "reviewer_status": "UNREVIEWED",
+      "reviewer_notes": "Compare ±5 source frames; replay-extra is a trace-semantic difference, not an identity verdict.",
+      "game_judgment": "UNKNOWN",
+      "software_verdict": "TRACE_SEMANTICS_EXTRA",
+      "evidence_paths": ""
+    },
+    "center_candidates": [
+      {
+        "candidate_id": "546:candidate:0",
+        "appearance": "green_candidate",
+        "core_bbox": "[220,165,71,3]",
+        "raw_bbox": "[220,165,71,3]",
+        "candidate_keys": "S|D",
+        "lane_span": "0.070984:0.289576",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:1",
+        "appearance": "cyan_bar",
+        "core_bbox": "[360,71,40,8]",
+        "raw_bbox": "[360,71,40,8]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.505898:0.747757",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:2",
+        "appearance": "cyan_bar",
+        "core_bbox": "[283,84,46,9]",
+        "raw_bbox": "[283,84,46,9]",
+        "candidate_keys": "S|D",
+        "lane_span": "0.097303:0.340810",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:3",
+        "appearance": "cyan_bar",
+        "core_bbox": "[301,117,59,12]",
+        "raw_bbox": "[301,117,59,12]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.266306:0.503239",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:4",
+        "appearance": "cyan_bar",
+        "core_bbox": "[395,99,53,11]",
+        "raw_bbox": "[395,99,53,11]",
+        "candidate_keys": "K|L",
+        "lane_span": "0.665472:0.909956",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:5",
+        "appearance": "cyan_bar",
+        "core_bbox": "[408,136,69,15]",
+        "raw_bbox": "[408,136,69,15]",
+        "candidate_keys": "K|L",
+        "lane_span": "0.671158:0.913491",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:6",
+        "appearance": "green_candidate",
+        "core_bbox": "[239,185,90,19]",
+        "raw_bbox": "[239,185,90,19]",
+        "candidate_keys": "D|F",
+        "lane_span": "0.177600:0.418506",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:7",
+        "appearance": "cyan_bar",
+        "core_bbox": "[312,37,24,1]",
+        "raw_bbox": "[312,37,24,1]",
+        "candidate_keys": "S|D",
+        "lane_span": "0.031309:0.271189",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:8",
+        "appearance": "cyan_bar",
+        "core_bbox": "[302,59,34,8]",
+        "raw_bbox": "[302,59,34,8]",
+        "candidate_keys": "S|D",
+        "lane_span": "0.105600:0.340929",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:9",
+        "appearance": "green_candidate",
+        "core_bbox": "[219,136,72,17]",
+        "raw_bbox": "[219,136,72,17]",
+        "candidate_keys": "S|D",
+        "lane_span": "0.010361:0.261692",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:10",
+        "appearance": "green_candidate",
+        "core_bbox": "[371,48,31,8]",
+        "raw_bbox": "[371,48,31,8]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.596211:0.843592",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:11",
+        "appearance": "neutral_candidate",
+        "core_bbox": "[361,232,110,16]",
+        "raw_bbox": "[361,232,110,16]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.503079:0.745978",
+        "score": ""
+      },
+      {
+        "candidate_id": "546:candidate:12",
+        "appearance": "neutral_candidate",
+        "core_bbox": "[411,235,61,20]",
+        "raw_bbox": "[411,235,61,20]",
+        "candidate_keys": "J|K",
+        "lane_span": "0.611308:0.743464",
+        "score": ""
+      }
+    ],
+    "legacy_assignments": [
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "timestamp_gap_or_nonpositive",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "timestamp_gap_or_nonpositive",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "timestamp_gap_or_nonpositive",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "timestamp_gap_or_nonpositive",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "timestamp_gap_or_nonpositive",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "timestamp_gap_or_nonpositive",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:5",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.1730468315922288",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:3",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.16625543747161503",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:4",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.0766553087466425",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "motion_residual",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "backward_motion",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:2",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.06748600184664015",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:8",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.10784520898757043",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:8",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "0.07356797898454785",
+        "competition_track_ids": "1000028"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:1",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:2",
+        "assigned": "False",
+        "reject_reason": "motion_residual",
+        "total_cost": "INF",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:4",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:3",
+        "assigned": "False",
+        "reject_reason": "lane_step_exceeded",
+        "total_cost": "INF",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:5",
+        "assigned": "False",
+        "reject_reason": "candidate_key_no_intersection",
+        "total_cost": "INF",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "candidate_id": "546:candidate:5",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000017"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "candidate_id": "546:candidate:3",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000019"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "candidate_id": "546:candidate:4",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000022"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "candidate_id": "546:candidate:2",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000023"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "candidate_id": "546:candidate:1",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000025"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "candidate_id": "546:candidate:8",
+        "assigned": "True",
+        "reject_reason": "",
+        "total_cost": "",
+        "competition_track_ids": "1000028"
+      }
+    ],
+    "track_state": [
+      {
+        "track_id": "1000010",
+        "track_uid": "simple:1000010",
+        "note_uid": "6c14d7a24997:simple:1000010",
+        "candidate_id": "535:candidate:3",
+        "track_status": "lost",
+        "matched_this_frame": "False",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.8179252",
+        "state_transition": "terminated"
+      },
+      {
+        "track_id": "1000011",
+        "track_uid": "simple:1000011",
+        "note_uid": "6c14d7a24997:simple:1000011",
+        "candidate_id": "543:candidate:4",
+        "track_status": "lost",
+        "matched_this_frame": "False",
+        "coasting_this_frame": "True",
+        "last_real_observation_timestamp": "29154.9400092",
+        "state_transition": "coasting"
+      },
+      {
+        "track_id": "1000014",
+        "track_uid": "simple:1000014",
+        "note_uid": "6c14d7a24997:simple:1000014",
+        "candidate_id": "543:candidate:11",
+        "track_status": "lost",
+        "matched_this_frame": "False",
+        "coasting_this_frame": "True",
+        "last_real_observation_timestamp": "29154.9400092",
+        "state_transition": "coasting"
+      },
+      {
+        "track_id": "1000017",
+        "track_uid": "simple:1000017",
+        "note_uid": "6c14d7a24997:simple:1000017",
+        "candidate_id": "546:candidate:5",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.9874954",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000019",
+        "track_uid": "simple:1000019",
+        "note_uid": "6c14d7a24997:simple:1000019",
+        "candidate_id": "546:candidate:3",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.9874954",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000022",
+        "track_uid": "simple:1000022",
+        "note_uid": "6c14d7a24997:simple:1000022",
+        "candidate_id": "546:candidate:4",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.9874954",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000023",
+        "track_uid": "simple:1000023",
+        "note_uid": "6c14d7a24997:simple:1000023",
+        "candidate_id": "546:candidate:2",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.9874954",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000025",
+        "track_uid": "simple:1000025",
+        "note_uid": "6c14d7a24997:simple:1000025",
+        "candidate_id": "546:candidate:1",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.9874954",
+        "state_transition": "matched"
+      },
+      {
+        "track_id": "1000028",
+        "track_uid": "simple:1000028",
+        "note_uid": "6c14d7a24997:simple:1000028",
+        "candidate_id": "546:candidate:8",
+        "track_status": "confirmed",
+        "matched_this_frame": "True",
+        "coasting_this_frame": "False",
+        "last_real_observation_timestamp": "29154.9874954",
+        "state_transition": "matched"
+      }
+    ],
+    "pf_proposals": [
+      {
+        "old_uid": "simple:1000010",
+        "track_id": "1000010",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "identity_coast_expired",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "169.57019999972545",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000010",
+        "track_id": "1000010",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "identity_coast_expired",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "169.57019999972545",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000010",
+        "track_id": "1000010",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "identity_coast_expired",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "169.57019999972545",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000010",
+        "track_id": "1000010",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "identity_coast_expired",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "169.57019999972545",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000010",
+        "track_id": "1000010",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "identity_coast_expired",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "169.57019999972545",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000010",
+        "track_id": "1000010",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "identity_coast_expired",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "169.57019999972545",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000011",
+        "track_id": "1000011",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000011",
+        "track_id": "1000011",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000011",
+        "track_id": "1000011",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000011",
+        "track_id": "1000011",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "21.573300611826937",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "280.9032236815931",
+        "pf_sigma_y": "8.212964180394074",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000011",
+        "track_id": "1000011",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000011",
+        "track_id": "1000011",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "16.663311070758038",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "280.9032236815931",
+        "pf_sigma_y": "8.302583025830257",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000014",
+        "track_id": "1000014",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000014",
+        "track_id": "1000014",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "19.60199440847169",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "233.43571973941022",
+        "pf_sigma_y": "8.080808080808081",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000014",
+        "track_id": "1000014",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000014",
+        "track_id": "1000014",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000014",
+        "track_id": "1000014",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000014",
+        "track_id": "1000014",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000017",
+        "track_id": "1000017",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000017",
+        "track_id": "1000017",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000017",
+        "track_id": "1000017",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000017",
+        "track_id": "1000017",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "PF_MATCHED_DEGRADED_UNKNOWN",
+        "pf_association_score": "3.0440184468789564",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "129.75250786080713",
+        "pf_sigma_y": "8.212964180394074",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000017",
+        "track_id": "1000017",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000017",
+        "track_id": "1000017",
+        "candidate_id": "546:candidate:5",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "1.7120223025105787",
+        "score_margin": "1.3319961443683777",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "129.75250786080713",
+        "pf_sigma_y": "8.302583025830257",
+        "competitor_track_ids": "1000010|1000011|1000014|1000019|1000022|1000023|1000025|1000028",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000019",
+        "track_id": "1000019",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000019",
+        "track_id": "1000019",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000019",
+        "track_id": "1000019",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000019",
+        "track_id": "1000019",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000019",
+        "track_id": "1000019",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000019",
+        "track_id": "1000019",
+        "candidate_id": "546:candidate:3",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.9149516990384878",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "115.67733599099367",
+        "pf_sigma_y": "8.160568012417588",
+        "competitor_track_ids": "1000010|1000011|1000014|1000017|1000022|1000023|1000025|1000028",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000022",
+        "track_id": "1000022",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000022",
+        "track_id": "1000022",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000022",
+        "track_id": "1000022",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000022",
+        "track_id": "1000022",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000022",
+        "track_id": "1000022",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "innovation_outside_pf_gate",
+        "pf_association_score": "6.202197208263577",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "93.83736964631848",
+        "pf_sigma_y": "8.302583025830257",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000022",
+        "track_id": "1000022",
+        "candidate_id": "546:candidate:4",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "2.1380322655533366",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "93.83736964631848",
+        "pf_sigma_y": "8.212964180394074",
+        "competitor_track_ids": "1000010|1000011|1000014|1000017|1000019|1000023|1000025|1000028",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000023",
+        "track_id": "1000023",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "PF_MATCHED_DEGRADED_UNKNOWN",
+        "pf_association_score": "2.769393003329904",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "85.93382492476184",
+        "pf_sigma_y": "8.783260139498836",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000023",
+        "track_id": "1000023",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000023",
+        "track_id": "1000023",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000023",
+        "track_id": "1000023",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000023",
+        "track_id": "1000023",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000023",
+        "track_id": "1000023",
+        "candidate_id": "546:candidate:2",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.9877097286953486",
+        "score_margin": "1.7816832746345552",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "85.93382492476184",
+        "pf_sigma_y": "8.127846709596357",
+        "competitor_track_ids": "1000010|1000011|1000014|1000017|1000019|1000022|1000025|1000028",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000025",
+        "track_id": "1000025",
+        "candidate_id": "546:candidate:8",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000025",
+        "track_id": "1000025",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000025",
+        "track_id": "1000025",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000025",
+        "track_id": "1000025",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000025",
+        "track_id": "1000025",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000025",
+        "track_id": "1000025",
+        "candidate_id": "546:candidate:1",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.6509963363889544",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "70.28987520148442",
+        "pf_sigma_y": "8.080808080808081",
+        "competitor_track_ids": "1000010|1000011|1000014|1000017|1000019|1000022|1000023|1000028",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000028",
+        "track_id": "1000028",
+        "candidate_id": "546:candidate:1",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000028",
+        "track_id": "1000028",
+        "candidate_id": "546:candidate:2",
+        "decision": "PAIR_REJECTED",
+        "reason": "PF_MATCHED_DEGRADED_UNKNOWN",
+        "pf_association_score": "3.494352852537614",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "59.96807453910902",
+        "pf_sigma_y": "8.127846709596357",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000028",
+        "track_id": "1000028",
+        "candidate_id": "546:candidate:4",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000028",
+        "track_id": "1000028",
+        "candidate_id": "546:candidate:3",
+        "decision": "PAIR_REJECTED",
+        "reason": "horizontal_span_incompatible",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000028",
+        "track_id": "1000028",
+        "candidate_id": "546:candidate:5",
+        "decision": "PAIR_REJECTED",
+        "reason": "original_key_not_supported",
+        "pf_association_score": "inf",
+        "score_margin": "",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "",
+        "pf_sigma_y": "",
+        "competitor_track_ids": "",
+        "input_sent": "False"
+      },
+      {
+        "old_uid": "simple:1000028",
+        "track_id": "1000028",
+        "candidate_id": "546:candidate:8",
+        "decision": "REJECTED_COMPETITION",
+        "reason": "candidate_competition",
+        "pf_association_score": "0.39078425669321903",
+        "score_margin": "3.103568595844395",
+        "coast_ms": "47.48620000100345",
+        "pf_predicted_y": "59.96807453910902",
+        "pf_sigma_y": "8.783260139498836",
+        "competitor_track_ids": "1000010|1000011|1000014|1000017|1000019|1000022|1000023|1000025",
+        "input_sent": "False"
+      }
+    ],
+    "parity_context": [
+      {
+        "edge_case": "extra_546",
+        "source_frame": "546",
+        "target_candidate_id": "546:candidate:11",
+        "replay_track": "1000014",
+        "root_cause": "TRACE_SEMANTICS",
+        "confidence": "HIGH"
+      }
+    ],
+    "parity_detail": [
+      {
+        "edge_case": "extra_546",
+        "source_frame": "546",
+        "capture_timestamp": "29154.9874954",
+        "target_candidate_id": "546:candidate:11",
+        "replay_track": "1000014",
+        "candidate_count": "13",
+        "candidate_ids": "546:candidate:0|546:candidate:1|546:candidate:2|546:candidate:3|546:candidate:4|546:candidate:5|546:candidate:6|546:candidate:7|546:candidate:8|546:candidate:9|546:candidate:10|546:candidate:11|546:candidate:12",
+        "candidate_summary": "[{\"candidate_id\":\"546:candidate:0\",\"appearance\":\"green_candidate\",\"core_bbox\":\"[220,165,71,3]\",\"lane_span\":\"0.070984:0.289576\",\"candidate_keys\":\"S|D\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:1\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[360,71,40,8]\",\"lane_span\":\"0.505898:0.747757\",\"candidate_keys\":\"J|K\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:2\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[283,84,46,9]\",\"lane_span\":\"0.097303:0.340810\",\"candidate_keys\":\"S|D\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:3\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[301,117,59,12]\",\"lane_span\":\"0.266306:0.503239\",\"candidate_keys\":\"D|F\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:4\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[395,99,53,11]\",\"lane_span\":\"0.665472:0.909956\",\"candidate_keys\":\"K|L\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:5\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[408,136,69,15]\",\"lane_span\":\"0.671158:0.913491\",\"candidate_keys\":\"K|L\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:6\",\"appearance\":\"green_candidate\",\"core_bbox\":\"[239,185,90,19]\",\"lane_span\":\"0.177600:0.418506\",\"candidate_keys\":\"D|F\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:7\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[312,37,24,1]\",\"lane_span\":\"0.031309:0.271189\",\"candidate_keys\":\"S|D\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:8\",\"appearance\":\"cyan_bar\",\"core_bbox\":\"[302,59,34,8]\",\"lane_span\":\"0.105600:0.340929\",\"candidate_keys\":\"S|D\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:9\",\"appearance\":\"green_candidate\",\"core_bbox\":\"[219,136,72,17]\",\"lane_span\":\"0.010361:0.261692\",\"candidate_keys\":\"S|D\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:10\",\"appearance\":\"green_candidate\",\"core_bbox\":\"[371,48,31,8]\",\"lane_span\":\"0.596211:0.843592\",\"candidate_keys\":\"J|K\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:11\",\"appearance\":\"neutral_candidate\",\"core_bbox\":\"[361,232,110,16]\",\"lane_span\":\"0.503079:0.745978\",\"candidate_keys\":\"J|K\",\"score\":\"\"},{\"candidate_id\":\"546:candidate:12\",\"appearance\":\"neutral_candidate\",\"core_bbox\":\"[411,235,61,20]\",\"lane_span\":\"0.611308:0.743464\",\"candidate_keys\":\"J|K\",\"score\":\"\"}]",
+        "legacy_assigned_edges": "[{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:5\",\"assigned\":\"True\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:3\",\"assigned\":\"True\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:4\",\"assigned\":\"True\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:2\",\"assigned\":\"True\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:1\",\"assigned\":\"True\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:8\",\"assigned\":\"True\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:5\",\"assigned\":\"True\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:3\",\"assigned\":\"True\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:4\",\"assigned\":\"True\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:2\",\"assigned\":\"True\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:1\",\"assigned\":\"True\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:8\",\"assigned\":\"True\",\"competition_track_ids\":\"1000028\"}]",
+        "legacy_attempt_summary": "[{\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"timestamp_gap_or_nonpositive\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"timestamp_gap_or_nonpositive\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"timestamp_gap_or_nonpositive\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"timestamp_gap_or_nonpositive\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"timestamp_gap_or_nonpositive\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"timestamp_gap_or_nonpositive\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"backward_motion\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"backward_motion\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"backward_motion\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"backward_motion\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"\",\"total_cost\":\"0.1730468315922288\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"\",\"total_cost\":\"0.16625543747161503\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"\",\"total_cost\":\"0.0766553087466425\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"motion_residual\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"backward_motion\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"\",\"total_cost\":\"0.06748600184664015\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"\",\"total_cost\":\"0.10784520898757043\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"\",\"total_cost\":\"0.07356797898454785\",\"competition_track_ids\":\"1000028\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"motion_residual\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"lane_step_exceeded\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"candidate_key_no_intersection\",\"total_cost\":\"INF\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:5\",\"reject_reason\":\"\",\"total_cost\":\"\",\"competition_track_ids\":\"1000017\"},{\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:3\",\"reject_reason\":\"\",\"total_cost\":\"\",\"competition_track_ids\":\"1000019\"},{\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:4\",\"reject_reason\":\"\",\"total_cost\":\"\",\"competition_track_ids\":\"1000022\"},{\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:2\",\"reject_reason\":\"\",\"total_cost\":\"\",\"competition_track_ids\":\"1000023\"},{\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:1\",\"reject_reason\":\"\",\"total_cost\":\"\",\"competition_track_ids\":\"1000025\"},{\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:8\",\"reject_reason\":\"\",\"total_cost\":\"\",\"competition_track_ids\":\"1000028\"}]",
+        "track_state_summary": "[{\"track_id\":\"1000010\",\"track_uid\":\"simple:1000010\",\"candidate_id\":\"535:candidate:3\",\"matched_this_frame\":\"False\",\"coasting_this_frame\":\"False\",\"track_status\":\"lost\",\"last_real_observation_timestamp\":\"29154.8179252\",\"state_transition\":\"terminated\"},{\"track_id\":\"1000011\",\"track_uid\":\"simple:1000011\",\"candidate_id\":\"543:candidate:4\",\"matched_this_frame\":\"False\",\"coasting_this_frame\":\"True\",\"track_status\":\"lost\",\"last_real_observation_timestamp\":\"29154.9400092\",\"state_transition\":\"coasting\"},{\"track_id\":\"1000014\",\"track_uid\":\"simple:1000014\",\"candidate_id\":\"543:candidate:11\",\"matched_this_frame\":\"False\",\"coasting_this_frame\":\"True\",\"track_status\":\"lost\",\"last_real_observation_timestamp\":\"29154.9400092\",\"state_transition\":\"coasting\"},{\"track_id\":\"1000017\",\"track_uid\":\"simple:1000017\",\"candidate_id\":\"546:candidate:5\",\"matched_this_frame\":\"True\",\"coasting_this_frame\":\"False\",\"track_status\":\"confirmed\",\"last_real_observation_timestamp\":\"29154.9874954\",\"state_transition\":\"matched\"},{\"track_id\":\"1000019\",\"track_uid\":\"simple:1000019\",\"candidate_id\":\"546:candidate:3\",\"matched_this_frame\":\"True\",\"coasting_this_frame\":\"False\",\"track_status\":\"confirmed\",\"last_real_observation_timestamp\":\"29154.9874954\",\"state_transition\":\"matched\"},{\"track_id\":\"1000022\",\"track_uid\":\"simple:1000022\",\"candidate_id\":\"546:candidate:4\",\"matched_this_frame\":\"True\",\"coasting_this_frame\":\"False\",\"track_status\":\"confirmed\",\"last_real_observation_timestamp\":\"29154.9874954\",\"state_transition\":\"matched\"},{\"track_id\":\"1000023\",\"track_uid\":\"simple:1000023\",\"candidate_id\":\"546:candidate:2\",\"matched_this_frame\":\"True\",\"coasting_this_frame\":\"False\",\"track_status\":\"confirmed\",\"last_real_observation_timestamp\":\"29154.9874954\",\"state_transition\":\"matched\"},{\"track_id\":\"1000025\",\"track_uid\":\"simple:1000025\",\"candidate_id\":\"546:candidate:1\",\"matched_this_frame\":\"True\",\"coasting_this_frame\":\"False\",\"track_status\":\"confirmed\",\"last_real_observation_timestamp\":\"29154.9874954\",\"state_transition\":\"matched\"},{\"track_id\":\"1000028\",\"track_uid\":\"simple:1000028\",\"candidate_id\":\"546:candidate:8\",\"matched_this_frame\":\"True\",\"coasting_this_frame\":\"False\",\"track_status\":\"confirmed\",\"last_real_observation_timestamp\":\"29154.9874954\",\"state_transition\":\"matched\"}]",
+        "pf_summary": "[{\"old_uid\":\"simple:1000010\",\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"identity_coast_expired\",\"coast_ms\":\"169.57019999972545\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000010\",\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"identity_coast_expired\",\"coast_ms\":\"169.57019999972545\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000010\",\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"identity_coast_expired\",\"coast_ms\":\"169.57019999972545\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000010\",\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"identity_coast_expired\",\"coast_ms\":\"169.57019999972545\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000010\",\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"identity_coast_expired\",\"coast_ms\":\"169.57019999972545\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000010\",\"track_id\":\"1000010\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"identity_coast_expired\",\"coast_ms\":\"169.57019999972545\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000011\",\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000011\",\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000011\",\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000011\",\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"innovation_outside_pf_gate\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"280.9032236815931\",\"pf_sigma_y\":\"8.212964180394074\"},{\"old_uid\":\"simple:1000011\",\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000011\",\"track_id\":\"1000011\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"innovation_outside_pf_gate\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"280.9032236815931\",\"pf_sigma_y\":\"8.302583025830257\"},{\"old_uid\":\"simple:1000014\",\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000014\",\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"innovation_outside_pf_gate\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"233.43571973941022\",\"pf_sigma_y\":\"8.080808080808081\"},{\"old_uid\":\"simple:1000014\",\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000014\",\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000014\",\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000014\",\"track_id\":\"1000014\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000017\",\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000017\",\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000017\",\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000017\",\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"PF_MATCHED_DEGRADED_UNKNOWN\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"129.75250786080713\",\"pf_sigma_y\":\"8.212964180394074\"},{\"old_uid\":\"simple:1000017\",\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000017\",\"track_id\":\"1000017\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"REJECTED_COMPETITION\",\"reason\":\"candidate_competition\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"129.75250786080713\",\"pf_sigma_y\":\"8.302583025830257\"},{\"old_uid\":\"simple:1000019\",\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000019\",\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000019\",\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000019\",\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000019\",\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000019\",\"track_id\":\"1000019\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"REJECTED_COMPETITION\",\"reason\":\"candidate_competition\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"115.67733599099367\",\"pf_sigma_y\":\"8.160568012417588\"},{\"old_uid\":\"simple:1000022\",\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000022\",\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000022\",\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000022\",\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000022\",\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"innovation_outside_pf_gate\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"93.83736964631848\",\"pf_sigma_y\":\"8.302583025830257\"},{\"old_uid\":\"simple:1000022\",\"track_id\":\"1000022\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"REJECTED_COMPETITION\",\"reason\":\"candidate_competition\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"93.83736964631848\",\"pf_sigma_y\":\"8.212964180394074\"},{\"old_uid\":\"simple:1000023\",\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"PF_MATCHED_DEGRADED_UNKNOWN\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"85.93382492476184\",\"pf_sigma_y\":\"8.783260139498836\"},{\"old_uid\":\"simple:1000023\",\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000023\",\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000023\",\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000023\",\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000023\",\"track_id\":\"1000023\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"REJECTED_COMPETITION\",\"reason\":\"candidate_competition\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"85.93382492476184\",\"pf_sigma_y\":\"8.127846709596357\"},{\"old_uid\":\"simple:1000025\",\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000025\",\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000025\",\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000025\",\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000025\",\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000025\",\"track_id\":\"1000025\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"REJECTED_COMPETITION\",\"reason\":\"candidate_competition\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"70.28987520148442\",\"pf_sigma_y\":\"8.080808080808081\"},{\"old_uid\":\"simple:1000028\",\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:1\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000028\",\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:2\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"PF_MATCHED_DEGRADED_UNKNOWN\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"59.96807453910902\",\"pf_sigma_y\":\"8.127846709596357\"},{\"old_uid\":\"simple:1000028\",\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:4\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000028\",\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:3\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"horizontal_span_incompatible\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000028\",\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:5\",\"decision\":\"PAIR_REJECTED\",\"reason\":\"original_key_not_supported\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"\",\"pf_sigma_y\":\"\"},{\"old_uid\":\"simple:1000028\",\"track_id\":\"1000028\",\"candidate_id\":\"546:candidate:8\",\"decision\":\"REJECTED_COMPETITION\",\"reason\":\"candidate_competition\",\"coast_ms\":\"47.48620000100345\",\"pf_predicted_y\":\"59.96807453910902\",\"pf_sigma_y\":\"8.783260139498836\"}]",
+        "root_cause": "TRACE_SEMANTICS",
+        "confidence": "HIGH",
+        "evidence": "live_candidate_trace.csv + live_association_attempts.csv + live_track_identity.csv + pf_reassociation_proposals.csv"
+      }
+    ],
+    "rescue": {},
+    "truth_policy": "Software traces are not game judgment; physical identity and game judgment remain UNKNOWN until human review."
+  },
+  "timeline": [
+    {
+      "source_frame": "484",
+      "capture_timestamp": "29154.0180336",
+      "video_frame": "401",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 16,
+      "track_count": 10,
+      "pf_count": 52
+    },
+    {
+      "source_frame": "493",
+      "capture_timestamp": "29154.1571029",
+      "video_frame": "405",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 19,
+      "track_count": 7,
+      "pf_count": 49
+    },
+    {
+      "source_frame": "499",
+      "capture_timestamp": "29154.2514747",
+      "video_frame": "408",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 17,
+      "track_count": 8,
+      "pf_count": 50
+    },
+    {
+      "source_frame": "508",
+      "capture_timestamp": "29154.3937215",
+      "video_frame": "412",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 17,
+      "track_count": 10,
+      "pf_count": 73
+    },
+    {
+      "source_frame": "518",
+      "capture_timestamp": "29154.549907",
+      "video_frame": "416",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 14,
+      "track_count": 12,
+      "pf_count": 83
+    },
+    {
+      "source_frame": "525",
+      "capture_timestamp": "29154.6603421",
+      "video_frame": "419",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 12,
+      "track_count": 11,
+      "pf_count": 66
+    },
+    {
+      "source_frame": "535",
+      "capture_timestamp": "29154.8179252",
+      "video_frame": "423",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 14,
+      "track_count": 10,
+      "pf_count": 82
+    },
+    {
+      "source_frame": "546",
+      "capture_timestamp": "29154.9874954",
+      "video_frame": "427",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 13,
+      "track_count": 9,
+      "pf_count": 54
+    },
+    {
+      "source_frame": "552",
+      "capture_timestamp": "29155.0802986",
+      "video_frame": "430",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 16,
+      "track_count": 10,
+      "pf_count": 72
+    },
+    {
+      "source_frame": "561",
+      "capture_timestamp": "29155.2195207",
+      "video_frame": "434",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 18,
+      "track_count": 9,
+      "pf_count": 65
+    },
+    {
+      "source_frame": "569",
+      "capture_timestamp": "29155.3439627",
+      "video_frame": "437",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 12,
+      "track_count": 9,
+      "pf_count": 57
+    },
+    {
+      "source_frame": "579",
+      "capture_timestamp": "29155.5003636",
+      "video_frame": "441",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 19,
+      "track_count": 11,
+      "pf_count": 82
+    },
+    {
+      "source_frame": "590",
+      "capture_timestamp": "29155.6699762",
+      "video_frame": "445",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 16,
+      "track_count": 12,
+      "pf_count": 75
+    },
+    {
+      "source_frame": "599",
+      "capture_timestamp": "29155.8120596",
+      "video_frame": "448",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 16,
+      "track_count": 13,
+      "pf_count": 92
+    },
+    {
+      "source_frame": "610",
+      "capture_timestamp": "29155.9846429",
+      "video_frame": "452",
+      "gameplay_state": "PLAYING",
+      "candidate_count": 14,
+      "track_count": 16,
+      "pf_count": 105
+    }
+  ],
+  "media": {
+    "frames": [
+      {
+        "source_frame": "484",
+        "capture_timestamp": "29154.0180336",
+        "video_frame": "401",
+        "path": "cases/parity_546/frames/00.jpg"
+      },
+      {
+        "source_frame": "493",
+        "capture_timestamp": "29154.1571029",
+        "video_frame": "405",
+        "path": "cases/parity_546/frames/01.jpg"
+      },
+      {
+        "source_frame": "499",
+        "capture_timestamp": "29154.2514747",
+        "video_frame": "408",
+        "path": "cases/parity_546/frames/02.jpg"
+      },
+      {
+        "source_frame": "508",
+        "capture_timestamp": "29154.3937215",
+        "video_frame": "412",
+        "path": "cases/parity_546/frames/03.jpg"
+      },
+      {
+        "source_frame": "518",
+        "capture_timestamp": "29154.549907",
+        "video_frame": "416",
+        "path": "cases/parity_546/frames/04.jpg"
+      },
+      {
+        "source_frame": "525",
+        "capture_timestamp": "29154.6603421",
+        "video_frame": "419",
+        "path": "cases/parity_546/frames/05.jpg"
+      },
+      {
+        "source_frame": "535",
+        "capture_timestamp": "29154.8179252",
+        "video_frame": "423",
+        "path": "cases/parity_546/frames/06.jpg"
+      },
+      {
+        "source_frame": "546",
+        "capture_timestamp": "29154.9874954",
+        "video_frame": "427",
+        "path": "cases/parity_546/frames/07.jpg"
+      },
+      {
+        "source_frame": "552",
+        "capture_timestamp": "29155.0802986",
+        "video_frame": "430",
+        "path": "cases/parity_546/frames/08.jpg"
+      },
+      {
+        "source_frame": "561",
+        "capture_timestamp": "29155.2195207",
+        "video_frame": "434",
+        "path": "cases/parity_546/frames/09.jpg"
+      },
+      {
+        "source_frame": "569",
+        "capture_timestamp": "29155.3439627",
+        "video_frame": "437",
+        "path": "cases/parity_546/frames/10.jpg"
+      },
+      {
+        "source_frame": "579",
+        "capture_timestamp": "29155.5003636",
+        "video_frame": "441",
+        "path": "cases/parity_546/frames/11.jpg"
+      },
+      {
+        "source_frame": "590",
+        "capture_timestamp": "29155.6699762",
+        "video_frame": "445",
+        "path": "cases/parity_546/frames/12.jpg"
+      },
+      {
+        "source_frame": "599",
+        "capture_timestamp": "29155.8120596",
+        "video_frame": "448",
+        "path": "cases/parity_546/frames/13.jpg"
+      },
+      {
+        "source_frame": "610",
+        "capture_timestamp": "29155.9846429",
+        "video_frame": "452",
+        "path": "cases/parity_546/frames/14.jpg"
+      }
+    ],
+    "window_ms": 1000.0,
+    "legend": "Left: original source frame. Right: candidate/track annotation. Red target, orange other candidates. PF values are shown only when present in trace."
+  }
+}
