@@ -301,6 +301,35 @@ class TapScheduler:
             self._log("rekey_rejected", reason, intent, key)
         return OfferResult(bool(accepted), reason, event_id, timestamp)
 
+    def key_reserved_for_time(self, key, hit_at, *, owner_event_id=None):
+        """Return whether a key is occupied at a prospective Tap deadline.
+
+        A pending Hold occupies its key from its scheduled start until its
+        visible-tail release.  Before key-down we do not know that tail
+        exactly, so the safe planner rule treats the remainder of the bounded
+        Hold window as occupied.  Taps retain the existing narrow conflict
+        window.
+        """
+        with self.lock:
+            for held_key, (release_at, intent) in self.held.items():
+                if held_key == key and release_at > hit_at:
+                    return True
+            for event_id, intent in self.pending.items():
+                if event_id == owner_event_id or intent.keys[0] != key:
+                    continue
+                if intent.note_type == "hold" and hit_at >= intent.hit_at:
+                    return True
+                if intent.note_type != "hold" and abs(intent.hit_at - hit_at) < .035:
+                    return True
+            owner_reservation = (self.pending_reservations.get(owner_event_id)
+                                 if owner_event_id else None)
+            for recent_key, recent_hit in self.recent:
+                if owner_reservation == (recent_key, recent_hit):
+                    continue
+                if recent_key == key and abs(recent_hit - hit_at) < .035:
+                    return True
+            return False
+
     def rekey_pending(self, intent, *, expected_revision=0,
                       expected_arm_generation=None, old_key=None,
                       hold_until=None, min_lead_s=.03):

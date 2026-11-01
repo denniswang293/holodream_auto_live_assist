@@ -516,6 +516,33 @@ def test_planner_ignores_same_note_pending_reservation_but_keeps_other_conflict(
     scheduler.close()
 
 
+def test_planner_avoids_pending_hold_key_for_verified_tap_span():
+    _, _, _, scheduler = armed_scheduler()
+    hold = ActionIntent("session:hold", ("K",), 10.10, .01, "hold", .75)
+    assert scheduler.offer(hold).accepted
+    track = make_ready_track(track_id=17, hit_at=10.20, key="K")
+    track.candidate = candidate(280, u=.75, keys=("J", "K", "L"), width=.48)
+    track.stable_keys = ["J", "K", "L"]
+    add_particle_evidence(track)
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    proposals, reasons = planner.plan([track], 10., set("SDFJKL"), scheduler)
+    assert reasons[17] == ""
+    assert proposals[17].key in {"J", "L"}
+    scheduler.close()
+
+
+def test_planner_abstains_when_pending_hold_is_only_verified_key():
+    _, _, _, scheduler = armed_scheduler()
+    assert scheduler.offer(ActionIntent("session:hold-only", ("K",), 10.10, .01,
+                                        "hold", .75)).accepted
+    track = add_particle_evidence(make_ready_track(track_id=18, hit_at=10.20, key="K"))
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    proposals, reasons = planner.plan([track], 10., {"K"}, scheduler)
+    assert proposals == {}
+    assert reasons[18] == "tap_key_conflict"
+    scheduler.close()
+
+
 def test_intent_manager_freezes_key_and_deadline_after_acceptance():
     clock, _, rows, scheduler = armed_scheduler()
     transitions = []

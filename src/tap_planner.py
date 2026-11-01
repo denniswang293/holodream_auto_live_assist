@@ -272,6 +272,17 @@ class TapPlanner:
             pending = [(intent.keys[0], intent.hit_at, uid)
                        for uid, intent in scheduler.pending.items()]
             return recent + pending
+        reservations = reservations_for()
+        def key_conflict(key, hit, owner_uid=None):
+            if hasattr(scheduler, "key_reserved_for_time") and scheduler.key_reserved_for_time(
+                    key, hit, owner_event_id=owner_uid):
+                return True
+            own_reservation = (scheduler.pending_reservations.get(owner_uid)
+                               if owner_uid else None)
+            return any(other == key and owner != owner_uid and
+                       own_reservation != (other, t) and
+                       abs(t - hit) < self.conflict_window_s
+                       for other, t, owner in reservations)
         for track in tracks:
             reason = self._reason(track, now, known_keys)
             uid = note_uids.get(track.track_id, f"simple:{track.track_id}")
@@ -282,9 +293,7 @@ class TapPlanner:
             for key in KEYS:
                 if key not in overlaps:
                     conflicts[key] = "not_covered_or_unverified"
-                elif hit is not None and any(other == key and owner != uid and
-                                             abs(t-hit) < self.conflict_window_s for other, t, owner in
-                          reservations_for(uid)):
+                elif hit is not None and key_conflict(key, hit, uid):
                     conflicts[key] = "reserved_same_key_time"
                 else:
                     conflicts[key] = ""
@@ -308,7 +317,6 @@ class TapPlanner:
             else:
                 eligible.append((track, uid))
 
-        reservations = reservations_for()
         held = {key: release for key, (release, intent) in scheduler.held.items()
                 if intent.note_type == "hold"}
         eligible.sort(key=lambda item: (item[0].prediction.hit_time, item[0].track_id))
@@ -328,10 +336,7 @@ class TapPlanner:
                 trace = self.last_traces[track.track_id]
                 own_reservation = scheduler.pending_reservations.get(uid)
                 for key in KEYS:
-                    conflicts = any(other == key and owner != uid and
-                                    own_reservation != (other, t) and
-                                    abs(t - hit) < self.conflict_window_s
-                                    for other, t, owner in reservations)
+                    conflicts = key_conflict(key, hit, uid)
                     if fixed and key != fixed:
                         trace.key_conflicts[key] = "intent_key_frozen"
                         row.append(1e9)
