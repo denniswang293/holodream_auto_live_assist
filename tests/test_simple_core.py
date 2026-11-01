@@ -304,6 +304,46 @@ def test_simple_core_emits_per_frame_eta_and_shadow_rows():
     scheduler.close()
 
 
+def test_global_timing_shadow_records_independent_eta_without_changing_legacy_input():
+    _, actuator, _, scheduler = armed_scheduler()
+    core = SimpleAssistCore(session_id="session", tracker_cfg={},
+        particle_cfg={"max_uncertainty_s": .04}, hit_y=310.5,
+        event_cfg={"max_eta_s": .45}, min_y=190, known_keys={"F", "D"},
+        timing_cfg={"simplified_tap_planner": {"enabled": False, "mode": "shadow"},
+                    "linear_timing": {"enabled": True},
+                    "global_tap_timing": {"enabled": True, "mode": "shadow",
+                                           "allow_active": False}})
+    first = add_particle_evidence(make_ready_track(track_id=1, key="F", hit_at=10.2))
+    second = add_particle_evidence(make_ready_track(track_id=2, key="D", hit_at=10.3))
+    first.history = [(9.8, 220, .4), (9.9, 250, .4), (10.0, 280, .4)]
+    second.history = [(9.8, 210, .6), (9.9, 240, .6), (10.0, 270, .6)]
+    core.plan_tracks([first, second], 10.0, 10.0, scheduler, enabled=True)
+    rows = core.drain_global_rows()
+    assert len(rows) == 2
+    assert {row["track_id"] for row in rows} == {1, 2}
+    assert all(row["active_enabled"] is False for row in rows)
+    assert any(row["model_status"] == "ready" for row in rows)
+    assert actuator.calls == []
+    scheduler.close()
+
+
+def test_global_planner_respects_existing_hold_reservation():
+    _, _, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    track = add_particle_evidence(make_ready_track(key="F", hit_at=10.20))
+    track.history.insert(0, (9.8, 220, .4))
+    from src.global_tap_timing import GlobalTapEta
+    scheduler.held["F"] = (10.50, ActionIntent("hold", ("F",), 10.05, .01, "hold"))
+    eta = GlobalTapEta(1, "AVAILABLE", "ready", eta_s=.20, hit_at=10.20,
+                       uncertainty_s=.01, quality=1.0, observed_y=280,
+                       observed_at=10.0)
+    decisions, proposals = planner.global_plan([track], {1: eta}, 10.0,
+                                                {"F"}, scheduler)
+    assert proposals == {}
+    assert decisions[1].reason == "tap_key_conflict"
+    scheduler.close()
+
+
 def test_pf_width_shadow_evidence_is_bounded_and_never_schedules():
     _, actuator, _, scheduler = armed_scheduler()
     core = SimpleAssistCore(session_id="session", tracker_cfg={},

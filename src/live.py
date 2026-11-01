@@ -64,6 +64,13 @@ PF_GATE_SHADOW_FIELDS = ["capture_timestamp", "processing_timestamp", "source_fr
                          "last_safe_time", "valid_keys", "legacy_result", "legacy_reason",
                          "b_gate_result", "b_input_sent", "pending_summary", "held_summary",
                          "recent_summary", "competition_summary"]
+GLOBAL_ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "track_id",
+                     "model_status", "model_reason", "model_version",
+                     "independent_tracks", "sample_count", "velocity_px_s",
+                     "velocity_mad_px_s", "model_quality", "eta_status", "eta_reason",
+                     "eta_s", "hit_at", "uncertainty_s", "observed_y", "observed_at",
+                     "planner_status", "planner_reason", "planner_key", "active_enabled",
+                     "input_sent"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
 class CsvLog:
@@ -206,10 +213,12 @@ def run(args):
         decision_log = diagnostic_log("tap_decisions.csv", DECISION_FIELDS)
         shadow_log = diagnostic_log("tap_planner_shadow.csv", SHADOW_FIELDS)
         eta_log = diagnostic_log("tap_eta_comparison.csv", ETA_FIELDS)
+        global_eta_log = diagnostic_log("global_tap_timing_shadow.csv", GLOBAL_ETA_FIELDS)
         pf_gate_shadow_log = diagnostic_log("pf_gate_shadow.csv", PF_GATE_SHADOW_FIELDS)
         intent_log = diagnostic_log("tap_intents.csv", INTENT_FIELDS)
         input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
         for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log,
+                    global_eta_log,
                     pf_gate_shadow_log, intent_log, input_log):
             stack.callback(log.close)
         if identity_trace is not None:
@@ -315,6 +324,8 @@ def run(args):
                     shadow_log.write(row)
                 for row in engine.simple_core.drain_eta_rows():
                     eta_log.write(row)
+                for row in engine.simple_core.drain_global_rows():
+                    global_eta_log.write(row)
                 for row in engine.simple_core.drain_pf_gate_shadow_rows():
                     pf_gate_shadow_log.write(row)
                 info["dropped_total"] = dropped

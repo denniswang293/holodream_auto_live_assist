@@ -319,6 +319,7 @@ class LiveEngine:
                 "tap_deadline_amend": config.get("live", {}).get("tap_deadline_amend", {}),
                 "simplified_tap_planner": config.get("live", {}).get("simplified_tap_planner", {}),
                 "linear_timing": config.get("live", {}).get("linear_timing", {}),
+                "global_tap_timing": config.get("live", {}).get("global_tap_timing", {}),
             })
         self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}

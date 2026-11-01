@@ -28,6 +28,7 @@ Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shi
 `config.json` 保留安全預設：
 
 - `pf_assisted_reassociation.enabled=false`：PF-assisted 只做 Shadow/offline 診斷，不可送鍵。
+- `live.global_tap_timing`：多軌固定速度 ETA 目前固定為 `mode=shadow`、`allow_active=false`；只記錄比較資料，不會改變 Legacy/PF 實際送鍵。
 - `diagnostics.trace_snapshot.enabled=true`：以有限佇列寫入逐影格追蹤摘要，僅供事後分析，不參與決策。
 - `control.dry_run`、人工啟用、失焦／stale／ESC／F12 停止保護保持不變。
 
@@ -40,6 +41,7 @@ Snapshot 會寫入每次 `output/assist/run_*` 的 `live_trace_snapshots.csv`。
 - `live_events.csv`：事件與排程狀態。
 - `live_key_actions.csv`：軟體送鍵動作紀錄；不等於遊戲命中。
 - `live_trace_snapshots.csv`：可選診斷 snapshot。
+- `global_tap_timing_shadow.csv`：全域固定速度 ETA 的逐 track Shadow 診斷；不代表送鍵或遊戲命中。
 - `live_overlay.mp4`、`live_source.mp4`：只有啟用錄影時才會產生。
 
 沒有遊戲判定來源時，遊戲命中率一律視為 `UNKNOWN`；`FIRED`、`key_down` 或 UID 持續都不能直接解讀為 Perfect、Good 或 Miss。

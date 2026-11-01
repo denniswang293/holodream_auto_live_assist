@@ -7,6 +7,7 @@ from .simple_tracker import SimpleTracker
 from .tap_intent import TapIntentManager
 from .tap_planner import TapPlanner
 from .timing_estimator import LinearTimingEstimator
+from .global_tap_timing import GlobalTapTimingEstimator
 
 
 class SimpleAssistCore:
@@ -33,6 +34,8 @@ class SimpleAssistCore:
             min_velocity=linear_cfg.get("min_velocity", 20),
             max_observation_age_s=linear_cfg.get("max_observation_age_ms", 200) / 1000
         ) if linear_cfg.get("enabled", True) else None
+        self.global_timing = GlobalTapTimingEstimator(
+            timing_cfg.get("global_tap_timing", {}) or {})
         amend_cfg = dict(timing_cfg.get("tap_deadline_amend", {}) or {})
         # LiveEngine also supplies flattened values for compatibility, while
         # direct callers/tests commonly provide the nested config only.
@@ -58,7 +61,9 @@ class SimpleAssistCore:
         # Event-triggered, bounded evidence for the single PF-width gate
         # experiment.  This is diagnostic-only and never enters scheduling.
         self.pf_gate_shadow_rows = []
+        self.global_rows = []
         self.shadow_decisions = {}
+        self.global_decisions = {}
         self._last_decision_fingerprints = {}
 
     def note_uid(self, track_id: int):
@@ -98,6 +103,32 @@ class SimpleAssistCore:
             proposals = self.planner.simplified_proposals(tracks if enabled else [], shadow)
             reasons = {track_id: decision.reason for track_id, decision in shadow.items()
                        if decision.status != "schedule"}
+        # Global fixed-speed ETA is an independent comparator.  It is always
+        # evaluated when enabled, but only replaces the legacy/PF proposal
+        # behind the explicit active dual switch (mode=active + allow_active).
+        global_model = self.global_timing.update(
+            tracks if enabled else [], trigger_y=self.tracker.hit_y,
+            capture_timestamp=captured_at, now=processed_at, playing=enabled)
+        global_etas = {
+            track.track_id: self.global_timing.estimate(
+                track, trigger_y=self.tracker.hit_y, now=processed_at)
+            for track in tracks
+        }
+        global_decisions, global_proposals = self.planner.global_plan(
+            tracks if enabled else [], global_etas, processed_at, self.known_keys,
+            scheduler, note_uids=note_uids, fixed_keys=fixed)
+        self.global_decisions = global_decisions
+        global_active = enabled and self.global_timing.active_enabled
+        if global_active:
+            # Preserve PF/legacy fallback only where it already passed.  A
+            # global rejection never creates a new input proposal.
+            proposals = {track_id: global_proposals.get(track_id, proposal)
+                         for track_id, proposal in proposals.items()
+                         if track_id not in global_decisions or
+                            global_decisions[track_id].status != "schedule"}
+            proposals.update(global_proposals)
+            reasons = {track_id: decision.reason for track_id, decision in global_decisions.items()
+                       if decision.status != "schedule" and track_id not in proposals}
         accepted, rejected = self.intents.schedule(proposals, scheduler, processed_at)
         self.last_reasons = {**reasons, **{
             track.track_id: rejected[uid]
@@ -119,7 +150,8 @@ class SimpleAssistCore:
             trace.linear_quality = linear.quality
         self._append_diagnostics(tracks, captured_at, processed_at, proposals,
                                  reasons, rejected, traces, shadow, scheduler,
-                                 linear_estimates, source_frame)
+                                 linear_estimates, source_frame,
+                                 global_model, global_etas, global_decisions)
         for track in tracks:
             uid = self.note_uid(track.track_id)
             trace = traces.get(track.track_id)
@@ -171,7 +203,9 @@ class SimpleAssistCore:
 
     def _append_diagnostics(self, tracks, captured_at, processed_at, proposals,
                             reasons, rejected, traces, shadow, scheduler,
-                            linear_estimates, source_frame=None):
+                            linear_estimates, source_frame=None,
+                            global_model=None, global_etas=None,
+                            global_decisions=None):
         """Append one ETA/shadow row per current track, every frame.
 
         These rows intentionally do not use the lifecycle fingerprint.  A
@@ -244,6 +278,34 @@ class SimpleAssistCore:
                 "legacy_hit_at": proposals[track.track_id].hit_at if track.track_id in proposals else "",
                 "input_sent": False,
             })
+            global_eta = (global_etas or {}).get(track.track_id)
+            global_decision = (global_decisions or {}).get(track.track_id)
+            self.global_rows.append({
+                "capture_timestamp": captured_at,
+                "processing_timestamp": processed_at,
+                "note_uid": uid,
+                "track_id": track.track_id,
+                "model_status": "ready" if global_model and global_model.ready else "not_ready",
+                "model_reason": global_model.reason if global_model else "disabled",
+                "model_version": global_model.model_version if global_model else 0,
+                "independent_tracks": global_model.independent_tracks if global_model else 0,
+                "sample_count": global_model.sample_count if global_model else 0,
+                "velocity_px_s": global_model.velocity_px_s if global_model and global_model.velocity_px_s is not None else "",
+                "velocity_mad_px_s": global_model.velocity_mad_px_s if global_model and global_model.velocity_mad_px_s is not None else "",
+                "model_quality": global_model.quality if global_model else 0.0,
+                "eta_status": global_eta.status if global_eta else "NOT_READY",
+                "eta_reason": global_eta.reason if global_eta else "prediction_unavailable",
+                "eta_s": global_eta.eta_s if global_eta and global_eta.eta_s is not None else "",
+                "hit_at": global_eta.hit_at if global_eta and global_eta.hit_at is not None else "",
+                "uncertainty_s": global_eta.uncertainty_s if global_eta and global_eta.uncertainty_s is not None else "",
+                "observed_y": global_eta.observed_y if global_eta and global_eta.observed_y is not None else "",
+                "observed_at": global_eta.observed_at if global_eta and global_eta.observed_at is not None else "",
+                "planner_status": global_decision.status if global_decision else "disabled",
+                "planner_reason": global_decision.reason if global_decision else "",
+                "planner_key": global_decision.key if global_decision and global_decision.key else "",
+                "active_enabled": bool(self.global_timing.active_enabled),
+                "input_sent": False,
+            })
             # Record only the narrow case required by V7.11 work order 0E:
             # Legacy was blocked solely by posterior width according to the
             # recorded gate trace, while every other recorded gate passed.
@@ -312,6 +374,10 @@ class SimpleAssistCore:
 
     def drain_pf_gate_shadow_rows(self):
         rows, self.pf_gate_shadow_rows = self.pf_gate_shadow_rows, []
+        return rows
+
+    def drain_global_rows(self):
+        rows, self.global_rows = self.global_rows, []
         return rows
 
     def record_scheduler_action(self, action: dict):

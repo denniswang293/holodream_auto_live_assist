@@ -23,6 +23,23 @@
     "min_velocity": 20,
     "max_observation_age_ms": 200
   },
+  "global_tap_timing": {
+    "enabled": true,
+    "mode": "shadow",
+    "allow_active": false,
+    "min_tracks": 2,
+    "min_samples": 3,
+    "history_size": 8,
+    "max_tracks": 32,
+    "max_observation_age_ms": 180,
+    "min_velocity": 20,
+    "max_velocity": 1800,
+    "max_speed_dispersion": 0.25,
+    "max_jump_px": 80,
+    "max_eta_s": 0.45,
+    "measurement_noise_px": 3.0,
+    "max_uncertainty_s": 0.04
+  },
   "judgment_calibration_v2": {
     "enabled": true,
     "mode": "shadow",

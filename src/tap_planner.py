@@ -56,6 +56,24 @@ class ShadowDecision:
     timing_quality: float | None
 
 
+@dataclass(frozen=True)
+class GlobalTapDecision:
+    """Diagnostic result for the shared fixed-speed ETA path.
+
+    This is deliberately separate from :class:`ShadowDecision`: the global
+    model is compared with the PF/legacy path, but it is not allowed to alter
+    that path unless the explicit active dual switch is enabled.
+    """
+    note_uid: str
+    track_id: int
+    status: str
+    reason: str
+    key: str | None
+    hit_at: float | None
+    uncertainty_s: float | None = None
+    timing_quality: float | None = None
+
+
 class TapPlanner:
     """Turn confirmed motion evidence into at most one key and one ETA."""
 
@@ -255,6 +273,103 @@ class TapPlanner:
                           track, set(track.candidate.candidate_keys)
                           & set(track.stable_keys))))
         return proposals
+
+    def global_plan(self, tracks: list[SimpleTrack], etas: dict[int, object],
+                    now: float, known_keys: set[str], scheduler, *,
+                    note_uids: dict[int, str] | None = None,
+                    fixed_keys: dict[str, str] | None = None):
+        """Evaluate the shared global ETA without touching scheduler state.
+
+        The global path owns timing only.  It still applies the ordinary Tap
+        identity/lane/key/future/horizon gates and the scheduler's existing
+        Hold, focus and conflict reservations.  Returning proposals separately
+        makes Shadow mode observational and gives Active mode one controlled
+        replacement point with no second scheduling pass.
+        """
+        note_uids, fixed_keys = note_uids or {}, fixed_keys or {}
+        decisions: dict[int, GlobalTapDecision] = {}
+        proposals: dict[int, TapProposal] = {}
+        reserved: list[tuple[str, float, str]] = []
+
+        def conflict(key, hit, uid):
+            if hasattr(scheduler, "key_reserved_for_time") and scheduler.key_reserved_for_time(
+                    key, hit, owner_event_id=uid):
+                return True
+            return any(other == key and owner != uid and
+                       abs(other_hit - hit) < self.conflict_window_s
+                       for other, other_hit, owner in reserved)
+
+        ordered = sorted(tracks, key=lambda track: (
+            (getattr(etas.get(track.track_id), "hit_at", None) is None),
+            getattr(etas.get(track.track_id), "hit_at", float("inf")),
+            track.track_id))
+        for track in ordered:
+            uid = note_uids.get(track.track_id, f"simple:{track.track_id}")
+            eta = etas.get(track.track_id)
+            hit_at = getattr(eta, "hit_at", None)
+            uncertainty = getattr(eta, "uncertainty_s", None)
+            quality = getattr(eta, "quality", None)
+            if track.status != "confirmed" or track.missed:
+                decisions[track.track_id] = GlobalTapDecision(uid, track.track_id,
+                    "defer", "track_not_current_confirmed", None, hit_at,
+                    uncertainty, quality)
+                continue
+            if not is_simple_tap(track.candidate) or track.confirmed_note_type != "tap":
+                decisions[track.track_id] = GlobalTapDecision(uid, track.track_id,
+                    "reject", "not_confirmed_ordinary_tap", None, hit_at,
+                    uncertainty, quality)
+                continue
+            c = track.candidate
+            if not track.stable_keys:
+                reason = "key_not_stable"
+            elif not (math.isfinite(c.u_min) and math.isfinite(c.u_max) and
+                      0 <= c.u_min < c.u_max <= 1):
+                reason = "invalid_lane_span"
+            elif not track.history or track.history[-1][1] < self.min_y:
+                reason = "below_event_min_y"
+            elif eta is None or getattr(eta, "status", "") != "AVAILABLE":
+                reason = getattr(eta, "reason", "prediction_unavailable") if eta else "prediction_unavailable"
+            elif hit_at is None or uncertainty is None or getattr(eta, "eta_s", None) is None or not all(math.isfinite(value)
+                    for value in (hit_at, uncertainty, eta.eta_s)):
+                reason = "invalid_global_eta"
+            elif hit_at <= now or getattr(eta, "eta_s", 0) <= 0:
+                reason = "hit_time_not_future"
+            elif getattr(eta, "eta_s", float("inf")) > float(self.event_config.get("max_eta_s", .45)):
+                reason = "eta_outside_horizon"
+            elif uncertainty < 0 or uncertainty > self.max_uncertainty_s:
+                reason = "global_eta_uncertainty_too_high"
+            else:
+                legal = self._covered_keys(track, set(c.candidate_keys) &
+                                            set(track.stable_keys) & known_keys)
+                if not legal:
+                    reason = "no_stable_verified_covered_key"
+                else:
+                    fixed = fixed_keys.get(uid)
+                    if fixed is not None and fixed not in legal:
+                        reason = "fixed_key_not_legal"
+                    else:
+                        key = fixed or max(legal, key=legal.get)
+                        if conflict(key, hit_at, uid):
+                            reason = "tap_key_conflict"
+                        else:
+                            proposal = TapProposal(uid, track.track_id, key, hit_at,
+                                float(uncertainty),
+                                f"global_speed_eta;quality={float(quality or 0):.3f}",
+                                (c.u_min, c.u_max), c.appearance,
+                                track.history[-1][1] if track.history else None,
+                                tuple(legal))
+                            proposals[track.track_id] = proposal
+                            reserved.append((key, hit_at, uid))
+                            decisions[track.track_id] = GlobalTapDecision(uid, track.track_id,
+                                "schedule", "global_eligible", key, hit_at,
+                                uncertainty, quality)
+                            continue
+            decisions[track.track_id] = GlobalTapDecision(uid, track.track_id,
+                "reject" if reason in {"not_confirmed_ordinary_tap", "invalid_lane_span",
+                    "hit_time_not_future", "eta_outside_horizon", "global_eta_uncertainty_too_high",
+                    "no_stable_verified_covered_key", "fixed_key_not_legal", "tap_key_conflict"}
+                else "defer", reason, None, hit_at, uncertainty, quality)
+        return decisions, proposals
 
     def plan(self, tracks: list[SimpleTrack], now: float, known_keys: set[str], scheduler,
              *, note_uids: dict[int, str] | None = None,
