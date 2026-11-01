@@ -58,6 +58,18 @@ py tools\run_v781_pf_analysis.py --run-dir output\run_20261101T034646_232725Z `
 只有維持至少兩個後續真實觀測的原 UID 連續性才可計為穩定恢復；本次沒有遊戲判定真值，
 因此命中率維持 `UNKNOWN`。
 
+### V7.8.5 PF state replay（僅離線）
+
+V7.8.5 以同一份 `candidate_final` stream 和實際 `capture_timestamp` 建立隔離的
+Legacy A 與 Shadow B tracker。B 可以在自己的副本中測試原 UID 回接，但不會呼叫
+Planner、Scheduler 或 Actuator；沒有兩個後續真實觀測的案例不計為穩定恢復。
+
+```powershell
+py tools\run_v785_pf_replay.py `
+  --run-dir output\run_20261101T034646_232725Z `
+  --out-dir output\v785_pf_state_replay
+```
+
 ## 輸出與資料
 
 每次執行在 `output/assist/run_*` 建立新資料夾。檢查 `live_key_actions.csv` 的送鍵紀錄及 `live_events.csv` 的排程狀態。錄影是選用功能，會增加磁碟用量。`output/` 已排除於 Git 追蹤之外。

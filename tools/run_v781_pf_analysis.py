@@ -566,7 +566,7 @@ def v784_negative_controls(proposals: list[dict], attempts: list[dict], tracks: 
             cls = "hard_gate_rejection"
         else:
             continue
-        candidates.append({"source_frame": frame, "capture_timestamp": p.get("capture_timestamp", ""), "track_id": p.get("track_id", ""), "old_uid": p.get("old_uid", ""), "candidate_id": cid, "opponent_track_ids": p.get("competitor_track_ids", ""), "pf_score": p.get("pf_association_score", ""), "gate_reason": p.get("reason", ""), "decision": p.get("decision", ""), "negative_control_class": cls, "visual_review_status": "UNREVIEWED", "game_judgment": "UNKNOWN"})
+        candidates.append({"source_frame": frame, "capture_timestamp": p.get("capture_timestamp", ""), "track_id": p.get("track_id", ""), "old_uid": p.get("old_uid", ""), "candidate_id": cid, "appearance": p.get("candidate_appearance", ""), "opponent_track_ids": p.get("competitor_track_ids", ""), "pf_score": p.get("pf_association_score", ""), "gate_reason": p.get("reason", ""), "decision": p.get("decision", ""), "negative_control_class": cls, "visual_review_status": "UNREVIEWED", "game_judgment": "UNKNOWN"})
     # Keep cases independent by frame/candidate and guarantee a useful minimum
     # when the run contains enough trace rows.
     unique = []
@@ -594,7 +594,7 @@ def v784_negative_controls(proposals: list[dict], attempts: list[dict], tracks: 
             continue
         seen.add(key); case["case_id"] = f"nc-{len(unique)+1:03d}"; unique.append(case)
     _crop_cases(unique, source, index, out)
-    fields = ["case_id", "source_frame", "capture_timestamp", "track_id", "old_uid", "candidate_id", "opponent_track_ids", "pf_score", "gate_reason", "decision", "negative_control_class", "visual_review_status", "game_judgment", "crop_prefix"]
+    fields = ["case_id", "source_frame", "capture_timestamp", "track_id", "old_uid", "candidate_id", "appearance", "opponent_track_ids", "pf_score", "gate_reason", "decision", "negative_control_class", "visual_review_status", "game_judgment", "crop_prefix"]
     write_csv(out / "false_attach_negative_controls.csv", unique, fields)
     return unique
 

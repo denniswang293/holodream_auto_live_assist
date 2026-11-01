@@ -1,0 +1,4 @@
+﻿source_frame,capture_timestamp,track_id,track_uid,candidate_id,transition,state_source,input_sent,stable_recovery,evidence
+399,29152.6954668,5,simple:5,399:candidate:5,SHADOW_STATE_REACQUIRED,isolated_shadow_copy,False,False,real candidate observed in isolated B state
+408,29152.8370791,5,simple:5,408:candidate:0,SHADOW_STATE_REACQUIRED,isolated_shadow_copy,False,False,real candidate observed in isolated B state
+525,29154.6603421,12,simple:12,525:candidate:4,SHADOW_STATE_REACQUIRED,isolated_shadow_copy,False,False,real candidate observed in isolated B state

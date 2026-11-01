@@ -91,3 +91,24 @@ def test_targeted_rescue_rejects_competing_track_deterministically():
         [first, second], [rescue], first.last_time + .016)
     assert sum(row["decision"] == "INCREMENTAL_SHADOW_REACQUIRE_PROPOSAL" for row in rows) <= 1
     assert any(row["decision"] in {"REJECTED_AMBIGUOUS", "REJECTED_COMPETITION"} for row in rows)
+
+
+def test_shadow_replay_reuses_original_track_without_creating_duplicate_uid():
+    tracker, track = _confirmed_tracker()
+    rescue = candidate(184, u=.40, keys=("Z",))
+    rescue.diagnostic_id = "replay-candidate"
+    original_id = track.track_id
+
+    def proposal(_tracks, _candidates, timestamp, **_kwargs):
+        return [{"track_id": original_id, "old_uid": track.physical_note_uid,
+                 "candidate_id": "replay-candidate", "decision": "INCREMENTAL_SHADOW_REACQUIRE_PROPOSAL",
+                 "reason": "pf_real_candidate_match", "input_sent": False,
+                 "real_candidate": True, "legacy_unmatched": True}]
+
+    tracker.pf_reassociation.propose_targeted = proposal
+    trace = {"max_rows": 10000}
+    tracks = tracker.update([rescue], track.last_time + .016, trace=trace,
+                            frame_index=100, shadow_replay=True)
+    assert [item.track_id for item in tracks] == [original_id]
+    assert trace["shadow_replay_rows"][0]["decision"] == "SHADOW_STATE_REACQUIRED"
+    assert all(item.get("input_sent") is False for item in trace["shadow_replay_rows"])

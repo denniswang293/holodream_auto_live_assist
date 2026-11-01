@@ -302,7 +302,7 @@ class SimpleTracker:
 
     def update(self, candidates: list[Candidate], timestamp: float, playing: bool = True,
                trace: dict | None = None, frame_index: int | None = None,
-               capture_gap_ms: float | None = None):
+               capture_gap_ms: float | None = None, shadow_replay: bool = False):
         started = time.perf_counter()
         self.finished = []
         self.last_unknown_association_audit = []
@@ -319,6 +319,7 @@ class SimpleTracker:
             trace.setdefault("track_rows", [])
             trace.setdefault("assignment_rows", [])
             trace.setdefault("pf_reassociation_rows", [])
+            trace.setdefault("shadow_replay_rows", [])
             trace.setdefault("dropped_rows", 0)
         trace_limit = int(trace.get("max_rows", 10000)) if trace is not None else 0
         def trace_append(bucket, row):
@@ -326,7 +327,7 @@ class SimpleTracker:
                 return
             target = trace.setdefault(bucket, [])
             if sum(len(trace.get(k, [])) for k in
-                   ("pair_rows", "track_rows", "assignment_rows", "attempt_rows", "pf_reassociation_rows")) >= trace_limit:
+                   ("pair_rows", "track_rows", "assignment_rows", "attempt_rows", "pf_reassociation_rows", "shadow_replay_rows")) >= trace_limit:
                 trace["dropped_rows"] = trace.get("dropped_rows", 0) + 1
                 return
             target.append(row)
@@ -391,12 +392,35 @@ class SimpleTracker:
         legacy_assigned_candidate_ids = {
             getattr(candidates[j], "diagnostic_id", "") for j in selected_by_candidate
         }
-        # V7.8.4 rescue is evaluated only after Legacy has finished its
-        # assignment.  It receives an isolated read-only view of unmatched
-        # tracks and real, unassigned candidates; it never changes `pairs`.
+        for row in (trace.get("pair_rows", []) if trace is not None else []):
+            if row.get("frame") != frame_index or row.get("timestamp") != timestamp:
+                continue
+            candidate_id = row.get("candidate_id")
+            candidate_index = next((j for j,c in enumerate(candidates)
+                                    if getattr(c, "diagnostic_id", "") == candidate_id), None)
+            assigned_track = selected_by_candidate.get(candidate_index) if candidate_index is not None else None
+            row["assigned"] = assigned_track is not None and row.get("track_id") == previous[assigned_track].track_id
+            competitors = [previous[i].track_id for i in range(len(previous))
+                           if candidate_index is not None and costs[i][candidate_index] < unmatched_cost]
+            row["competition_track_ids"] = "|".join(str(t) for t in competitors)
+        matched_tracks, matched_candidates = set(), set()
+        for i, j in pairs:
+            if j < len(candidates) and costs[i][j] < unmatched_cost:
+                self._observe(previous[i], candidates[j], timestamp)
+                matched_tracks.add(i)
+                matched_candidates.add(j)
+                trace_append("assignment_rows", {"frame": frame_index, "timestamp": timestamp,
+                    "track_id": previous[i].track_id, "candidate_id": getattr(candidates[j], "diagnostic_id", ""),
+                    "assigned": True, "unmatched_cost": unmatched_cost, "competition_track_ids": "|".join(
+                        str(previous[k].track_id) for k in range(len(previous)) if costs[k][j] < unmatched_cost)})
+        active = []
+        # V7.8.4/V7.8.5 rescue is evaluated after Legacy assignment but before
+        # unmatched candidates create new tracks.  The default live path keeps
+        # this disabled; replay callers opt in explicitly and receive a
+        # separate state mutation only inside their isolated tracker instance.
         if trace is not None and self.pf_reassociation.enabled:
             rescue_tracks = [track for i, track in enumerate(previous)
-                             if i not in legacy_matched_indices]
+                             if i not in matched_tracks]
             rescue_rows = self.pf_reassociation.propose_targeted(
                 rescue_tracks, candidates, timestamp,
                 assigned_candidate_ids=legacy_assigned_candidate_ids)
@@ -422,28 +446,31 @@ class SimpleTracker:
                     "reason": row.get("reason", ""), "legacy_unmatched": row.get("legacy_unmatched", False),
                     "real_candidate": row.get("real_candidate", False), "input_sent": False,
                 })
-        for row in (trace.get("pair_rows", []) if trace is not None else []):
-            if row.get("frame") != frame_index or row.get("timestamp") != timestamp:
-                continue
-            candidate_id = row.get("candidate_id")
-            candidate_index = next((j for j,c in enumerate(candidates)
-                                    if getattr(c, "diagnostic_id", "") == candidate_id), None)
-            assigned_track = selected_by_candidate.get(candidate_index) if candidate_index is not None else None
-            row["assigned"] = assigned_track is not None and row.get("track_id") == previous[assigned_track].track_id
-            competitors = [previous[i].track_id for i in range(len(previous))
-                           if candidate_index is not None and costs[i][candidate_index] < unmatched_cost]
-            row["competition_track_ids"] = "|".join(str(t) for t in competitors)
-        matched_tracks, matched_candidates = set(), set()
-        for i, j in pairs:
-            if j < len(candidates) and costs[i][j] < unmatched_cost:
-                self._observe(previous[i], candidates[j], timestamp)
-                matched_tracks.add(i)
-                matched_candidates.add(j)
-                trace_append("assignment_rows", {"frame": frame_index, "timestamp": timestamp,
-                    "track_id": previous[i].track_id, "candidate_id": getattr(candidates[j], "diagnostic_id", ""),
-                    "assigned": True, "unmatched_cost": unmatched_cost, "competition_track_ids": "|".join(
-                        str(previous[k].track_id) for k in range(len(previous)) if costs[k][j] < unmatched_cost)})
-        active = []
+            if shadow_replay:
+                by_id = {getattr(candidate, "diagnostic_id", ""): (j, candidate)
+                         for j, candidate in enumerate(candidates)}
+                by_track = {track.track_id: (i, track) for i, track in enumerate(previous)}
+                for row in rescue_rows:
+                    if row.get("decision") != "INCREMENTAL_SHADOW_REACQUIRE_PROPOSAL":
+                        continue
+                    target = by_track.get(row.get("track_id"))
+                    source = by_id.get(row.get("candidate_id", ""))
+                    if target is None or source is None:
+                        continue
+                    i, track = target
+                    j, candidate = source
+                    if i in matched_tracks or j in matched_candidates:
+                        continue
+                    self._observe(track, candidate, timestamp)
+                    matched_tracks.add(i)
+                    matched_candidates.add(j)
+                    trace_append("shadow_replay_rows", {
+                        "frame": frame_index, "timestamp": timestamp,
+                        "track_id": track.track_id, "track_uid": track.physical_note_uid,
+                        "candidate_id": getattr(candidate, "diagnostic_id", ""),
+                        "decision": "SHADOW_STATE_REACQUIRED", "input_sent": False,
+                        "real_observation": True, "state_source": "isolated_shadow_copy",
+                    })
         for i, track in enumerate(previous):
             if i not in matched_tracks:
                 track.missed += 1
