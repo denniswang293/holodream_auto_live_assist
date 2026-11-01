@@ -7,7 +7,7 @@ from tools.build_v788_visual_review import (
     normalize_review_rows,
     sample_index,
 )
-from tools.import_v788_review import merge
+from tools.import_v788_review import merge, read_incoming
 
 
 def _review(case_id="x"):
@@ -77,3 +77,14 @@ def test_partial_review_merge_preserves_unsubmitted_cases(tmp_path):
     merged = normalize_review_rows(__import__('csv').DictReader((tmp_path / "physical_identity_review_completed.csv").open(encoding='utf-8')))
     assert merged[0]["reviewer_status"] == "REVIEWED"
     assert merged[1]["reviewer_status"] == "UNREVIEWED"
+
+
+def test_headerless_legacy_review_csv_is_supported(tmp_path):
+    row = _review("rescue_399_simple5")
+    row["same_physical_note_verdict"] = "SAME_PHYSICAL_NOTE"
+    row["visual_confidence"] = "HIGH"
+    row["reviewer_status"] = "REVIEWED"
+    path = tmp_path / "headerless.csv"
+    path.write_text(",".join(row[field] for field in REVIEW_FIELDS) + "\n", encoding="utf-8")
+    loaded = read_incoming(path)
+    assert loaded[0]["case_id"] == "rescue_399_simple5"

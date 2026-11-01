@@ -6,6 +6,7 @@ present in the supplied file retain their existing UNREVIEWED/UNKNOWN values.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
@@ -17,12 +18,24 @@ if str(ROOT) not in sys.path:
 from tools.build_v788_visual_review import REVIEW_FIELDS, normalize_review_rows, read_csv, write_csv
 
 
+def read_incoming(path: Path) -> list[dict[str, str]]:
+    """Read normal CSV and the legacy headerless V7.8.x export format."""
+    rows = read_csv(path)
+    if rows and "case_id" in rows[0]:
+        return rows
+    with path.open("r", encoding="utf-8-sig", newline="") as fh:
+        raw = list(csv.reader(fh))
+    if raw and raw[0] and raw[0][0] == "case_id":
+        raw = raw[1:]
+    return [dict(zip(REVIEW_FIELDS, row)) for row in raw if any(row)]
+
+
 def merge(review_dir: Path, incoming_path: Path) -> int:
     template_path = review_dir / "physical_identity_review_template.csv"
     completed_path = review_dir / "physical_identity_review_completed.csv"
     base_path = completed_path if completed_path.exists() else template_path
     base = normalize_review_rows(read_csv(base_path))
-    incoming = normalize_review_rows(read_csv(incoming_path))
+    incoming = normalize_review_rows(read_incoming(incoming_path))
     by_id = {row["case_id"]: row for row in base}
     accepted = 0
     rejected_ids = []

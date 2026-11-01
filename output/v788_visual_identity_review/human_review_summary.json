@@ -7,8 +7,8 @@
     "rescue": 3,
     "negative_controls": 25,
     "parity": 2,
-    "reviewed": 7,
-    "unreviewed_or_unknown": 23
+    "reviewed": 10,
+    "unreviewed_or_unknown": 20
   },
   "original_legacy_recovered": {
     "count": 0,
@@ -25,10 +25,10 @@
       "rescue_525_simple12"
     ]
   },
-  "physically_verified_incremental_recovery": 0,
+  "physically_verified_incremental_recovery": 3,
   "false_attach_verified": 0,
   "negative_controls_verified": 0,
-  "unknown_identity_cases": 23,
+  "unknown_identity_cases": 20,
   "parity_status": "PARTIAL",
   "game_accuracy": "UNKNOWN",
   "active_enabled": false,

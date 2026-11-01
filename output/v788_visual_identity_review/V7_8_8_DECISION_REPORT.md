@@ -6,7 +6,7 @@ Review source: `C:\Users\USER\Desktop\holodream\output\v788_visual_identity_revi
 
 - Cases: **30** (rescue=3, negative controls=25, parity=2).
 - `manual_review_complete`: **False**.
-- Physically verified incremental rescue: **0**.
+- Physically verified incremental rescue: **3**.
 - False attach verified: **0**.
 - Negative controls verified: **0**.
 - Unreviewed/unknown cases are not treated as successes or failures.
