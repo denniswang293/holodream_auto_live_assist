@@ -1,0 +1,11 @@
+unit,observable_count,first_observable_stage,classification,confidence,evidence,physical_truth_status
+capture_processed_frames,4561,capture,PROCESSED,high,live_frames.csv and live_video_index.csv have 4561 rows,UNKNOWN
+capture_overwrite_gap,497,capture,CAPTURE_NOT_PROCESSED_POSSIBLE,medium,acquired 5058 vs processed 4561; overwritten capture frames are not individually recoverable,UNKNOWN
+focus_loss,31,context,FOCUS_LOST,high,one contiguous run frames 0-30; ROI remained ASPECT_FIT_16_9,UNKNOWN
+candidate_trace_rows,189760,detector,OBSERVATION_ONLY,high,trace rows by stage and passed flag; no physical-note denominator,UNKNOWN
+candidate_rejected,19231,detector,DETECTOR_REJECTION_OBSERVABLE,high,edge_geometry=10289; edge_shape=3448; physical_roi=3090; nested_suppression=2115; shape=228; fill=58; duplicate_nms=3,UNKNOWN
+track_lost_rows,5550,tracker,TRACK_LOST_OBSERVABLE,high,live_track_identity.csv status=lost,UNKNOWN
+track_expired_max_gap,78,tracker,MAX_GAP_TIMEOUT_OBSERVABLE,high,termination_reason=track_expired_max_gap,UNKNOWN
+planner_not_scheduled,2446,planner,NOT_SCHEDULED_OBSERVABLE,high,run_metrics tap lifecycle; includes effects/duplicates and no physical mapping,UNKNOWN
+scheduled_actions,191,scheduler,SCHEDULED_OBSERVABLE,high,input_actions.csv action=scheduled,UNKNOWN
+key_down_actions,187,actuator,SENT_BUT_NO_VERIFIED_HIT,high,input_actions.csv key_down; no game judgment source,UNKNOWN

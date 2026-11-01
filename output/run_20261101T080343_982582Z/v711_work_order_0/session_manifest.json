@@ -1,0 +1,52 @@
+{
+  "schema_version": "v711.work_order_0",
+  "session_id": "run_20261101T080343_982582Z",
+  "created_at": "2026-11-01",
+  "purpose": "V7.11 work order 0: evidence-first miss attribution",
+  "source_run": "..",
+  "source_files": {
+    "source_video": "../live_source.mp4",
+    "video_index": "../live_video_index.csv",
+    "frames": "../live_frames.csv",
+    "candidate_trace": "../live_candidate_trace.csv",
+    "track_identity": "../live_track_identity.csv",
+    "events": "../live_events.csv",
+    "tap_decisions": "../tap_decisions.csv",
+    "tap_intents": "../tap_intents.csv",
+    "input_actions": "../input_actions.csv"
+  },
+  "capture": {
+    "acquired_frames": 5058,
+    "processed_frames": 4561,
+    "dropped_frames": 497,
+    "capture_fps": 63.558,
+    "processing_fps": 57.390,
+    "capture_timestamp_start": 44564.2052064,
+    "capture_timestamp_end": 44643.285856,
+    "duration_s": 79.08065,
+    "video_index_rows": 4561,
+    "source_video_note": "video index has processed frames; it does not prove coverage of overwritten capture frames"
+  },
+  "configuration": {
+    "geometry_status": "pending_calibration",
+    "input_advance_px": 30,
+    "predictor": "particle",
+    "active_input_path": "legacy Assist; manual arm required",
+    "pf_assisted_reassociation": "shadow/offline only"
+  },
+  "sha256": {
+    "config.json": "B77EC255FA9C887D0F2F7A78216442A47224F40C430326392FFE1C4F18A5C6AF",
+    "config/live_assist.json": "291DB6B2D71368DD021BBCDA82D1C808F0D762598B6DBD3D8E9DCAC37BF55CE1",
+    "config/geometry_live_assist.json": "7462E360C96E8AE5E4016699E42A0414DDBC9D4A2847F5249735F99B362DB35A",
+    "live_source.mp4": "A7321AC7029F69BA686F8888933841561940E6524EFB9C189D050FB85077D2C0",
+    "live_video_index.csv": "A0DFBB4665688894E3F69874CD4CDDA207FC6869FA4F6AC63B3FE3509C496EEA"
+  },
+  "ground_truth": {
+    "physical_notes_csv": "physical_notes.csv",
+    "note_links_csv": "note_links.csv",
+    "annotated_physical_notes": 0,
+    "verified_game_judgments": 0,
+    "status": "UNKNOWN",
+    "reason": "No independent frame-first human annotation was present; program UIDs and key_down are not physical-note truth"
+  }
+}
