@@ -66,7 +66,8 @@ PF_GATE_SHADOW_FIELDS = ["capture_timestamp", "processing_timestamp", "source_fr
                          "recent_summary", "competition_summary"]
 GLOBAL_ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "track_id",
                      "model_status", "model_reason", "model_version",
-                     "independent_tracks", "sample_count", "velocity_px_s",
+                     "model_source", "independent_tracks", "sample_count",
+                     "profile_segment_count", "profile_age_s", "velocity_px_s",
                      "velocity_mad_px_s", "velocity_sigma_px_s", "model_quality", "eta_status", "eta_reason",
                      "eta_s", "hit_at", "uncertainty_s", "observed_y", "observed_at",
                      "planner_status", "planner_reason", "planner_key", "active_enabled",
@@ -261,7 +262,7 @@ def run(args):
         engine = LiveEngine(config, geometry, scheduler, clock,
                             identity_trace=identity_trace)
         engine_holder["engine"]=engine
-        print(f"Global Fixed-Speed ETA Tap assist + PF tracking + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
+        print(f"Global y-profile ETA Tap assist + PF tracking + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
         from .windows_runtime import GlobalControls
         def emergency_stop():
             stopped.set()

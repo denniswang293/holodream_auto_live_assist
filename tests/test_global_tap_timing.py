@@ -76,18 +76,49 @@ def test_stale_coasting_and_nonnumeric_observations_are_rejected():
     assert modeler.estimate(malformed, trigger_y=150, now=1.21).status == "NOT_READY"
 
 
+def test_profile_survives_short_dropout_but_expires_from_capture_time():
+    first = track(1, [(1.00, 100), (1.05, 110), (1.10, 120)])
+    second = track(2, [(1.00, 80), (1.05, 90), (1.10, 100)])
+    modeler = estimator(profile_ttl_ms=200)
+    assert modeler.update([first, second], trigger_y=150,
+                          capture_timestamp=1.10, now=1.10).ready
+    cached = modeler.update([], trigger_y=150,
+                            capture_timestamp=1.25, now=1.25)
+    assert cached.ready is True
+    assert cached.profile_age_s == pytest.approx(.15)
+    expired = modeler.update([], trigger_y=150,
+                             capture_timestamp=1.31, now=1.31)
+    assert expired.ready is False
+    assert expired.reason == "insufficient_independent_tracks"
+
+
+def test_reset_discards_global_profile_after_safety_boundary():
+    first = track(1, [(1.00, 100), (1.05, 110), (1.10, 120)])
+    second = track(2, [(1.00, 80), (1.05, 90), (1.10, 100)])
+    modeler = estimator()
+    assert modeler.update([first, second], trigger_y=150,
+                          capture_timestamp=1.10, now=1.10).ready
+    modeler.reset()
+    assert modeler.model.ready is False
+    assert modeler.model.reason == "RESET"
+    assert modeler.update([], trigger_y=150,
+                          capture_timestamp=1.11, now=1.11).ready is False
+
+
 def test_large_jump_and_nonlinear_speed_do_not_create_precise_eta():
     jump = track(1, [(1.0, 100), (1.1, 110), (1.2, 210)])
     other = track(2, [(1.0, 90), (1.1, 100), (1.2, 110)])
     model = estimator().update([jump, other], trigger_y=250,
                                capture_timestamp=1.21, now=1.21)
     assert model.ready is True
-    nonlinear_a = track(1, [(1.0, 100), (1.1, 110), (1.2, 140)])
-    nonlinear_b = track(2, [(1.0, 80), (1.1, 90), (1.2, 120)])
+    # Use a fresh model with observations spanning two height segments; a
+    # changed trigger coordinate must not mix old segment IDs into the profile.
+    nonlinear_a = track(1, [(1.0, 50), (1.1, 100), (1.2, 150)])
+    nonlinear_b = track(2, [(1.0, 60), (1.1, 110), (1.2, 160)])
     model = estimator().update([nonlinear_a, nonlinear_b], trigger_y=180,
                                capture_timestamp=1.21, now=1.21)
-    assert model.ready is False
-    assert model.reason == "speed_variation_too_high"
+    assert model.ready is True
+    assert len([speed for speed in model.profile_speeds if speed == speed]) >= 2
 
 
 def test_uncertainty_is_not_capped_and_blocks_global_eta():

@@ -44,6 +44,8 @@ TRACK_FIELDS = [
     "track_status", "confirmed_note_type", "appearance", "bbox",
     "stable_keys", "prediction_reason", "termination_reason",
     "state_transition", "intent_state", "intent_key", "trace_status",
+    "first_observation_y", "first_confirmed_y", "first_confirmed_at",
+    "confirmation_mode", "first_confirmed_after_trigger",
 ]
 
 PF_REASSOCIATION_FIELDS = [

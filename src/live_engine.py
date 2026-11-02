@@ -340,6 +340,7 @@ class LiveEngine:
         self.tracker.update([], self.last_capture, playing=False)
         self.tracker.finished.clear()
         self.simple_core.tracker.update([], self.last_capture, playing=False)
+        self.simple_core.reset_global_timing()
         self.simple_tracks = []
         self.hold_pending_coast.clear()
         if self.hold_tracker_v2:

@@ -69,6 +69,7 @@ class SimpleAssistCore:
         self.global_status_counts = {}
         self.global_first_schedule_at = {}
         self._last_decision_fingerprints = {}
+        self._last_arm_generation = None
 
     def note_uid(self, track_id: int):
         return f"{self.session_id}:simple:{track_id}"
@@ -81,6 +82,12 @@ class SimpleAssistCore:
 
     def plan_tracks(self, tracks, captured_at: float, processed_at: float,
                     scheduler, *, enabled: bool, source_frame=None):
+        arm_generation = getattr(scheduler, "arm_generation", None)
+        if (self._last_arm_generation is None):
+            self._last_arm_generation = arm_generation
+        elif arm_generation != self._last_arm_generation:
+            self.reset_global_timing()
+            self._last_arm_generation = arm_generation
         note_uids = {}
         for track in tracks if enabled else ():
             uid = self.note_uid(track.track_id)
@@ -307,9 +314,13 @@ class SimpleAssistCore:
                 "track_id": track.track_id,
                 "model_status": "ready" if global_model and global_model.ready else "not_ready",
                 "model_reason": global_model.reason if global_model else "disabled",
+                "model_source": global_model.source if global_model else "none",
                 "model_version": global_model.model_version if global_model else 0,
                 "independent_tracks": global_model.independent_tracks if global_model else 0,
                 "sample_count": global_model.sample_count if global_model else 0,
+                "profile_segment_count": (sum(1 for value in global_model.profile_speeds
+                                               if value == value) if global_model else 0),
+                "profile_age_s": global_model.profile_age_s if global_model and global_model.profile_age_s is not None else "",
                 "velocity_px_s": global_model.velocity_px_s if global_model and global_model.velocity_px_s is not None else "",
                 "velocity_mad_px_s": global_model.velocity_mad_px_s if global_model and global_model.velocity_mad_px_s is not None else "",
                 "velocity_sigma_px_s": global_model.velocity_sigma_px_s if global_model and global_model.velocity_sigma_px_s is not None else "",
@@ -410,6 +421,17 @@ class SimpleAssistCore:
             "status_counts": dict(self.global_status_counts),
             "first_schedule_at": dict(self.global_first_schedule_at),
         }
+
+    def reset_global_timing(self):
+        """Forget shared timing evidence at a safety-context boundary.
+
+        The ordinary Tap model is intentionally bounded, but its cached
+        profile must not cross an arm/focus/stop boundary.  Tracker identity
+        and intent de-duplication remain owned by their existing managers.
+        """
+        self.global_timing.reset()
+        self.global_decisions = {}
+        self._last_arm_generation = None
 
     def record_scheduler_action(self, action: dict):
         self.intents.record_action(action)

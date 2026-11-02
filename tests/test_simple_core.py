@@ -37,6 +37,23 @@ def test_simple_tracker_keeps_track_id_across_short_detector_dropout():
     assert tracks[0].missed == 0
 
 
+def test_simple_tracker_early_confirms_late_entry_before_global_trigger():
+    tracker = SimpleTracker({"confirm_observations": 5,
+                             "early_confirm_observations": 3},
+        {"min_observations": 4, "min_duration_s": .02, "min_velocity": 20,
+         "min_displacement_px": 1}, hit_y=295.5)
+    sequence = (270, 273, 286, 299, 302)
+    states = []
+    for index, y in enumerate(sequence):
+        tracks = tracker.update([candidate(y)], 1.0 + index * .02)
+        states.append((tracks[0].status, tracks[0].first_confirmed_y,
+                       tracks[0].confirmation_mode))
+    assert states[2][0] == "confirmed"
+    assert states[2][1] == pytest.approx(286)
+    assert states[2][2] == "early_near_trigger"
+    assert states[2][1] < 295.5
+
+
 def test_neutral_to_neutral_tracks_across_frames():
     tracker = SimpleTracker({"confirm_observations": 3},
         {"min_observations": 3, "min_duration_s": .02}, hit_y=310.5)

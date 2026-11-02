@@ -38,7 +38,10 @@
     "max_jump_px": 80,
     "max_eta_s": 0.45,
     "measurement_noise_px": 3.0,
-    "max_uncertainty_s": 0.04
+    "max_uncertainty_s": 0.04,
+    "profile_segments": 4,
+    "profile_ttl_ms": 450,
+    "profile_min_samples": 1
   },
   "judgment_calibration_v2": {
     "enabled": true,

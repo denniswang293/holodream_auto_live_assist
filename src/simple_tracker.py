@@ -57,6 +57,11 @@ class SimpleTrack:
     # Motion used only for spatial association/confirmation.  Tap timing is
     # supplied by GlobalTapTimingEstimator, never by this value.
     tracking_velocity: float | None = None
+    first_observation_y: float | None = None
+    first_confirmed_y: float | None = None
+    first_confirmed_at: float | None = None
+    confirmation_mode: str = ""
+    first_confirmed_after_trigger: bool = False
 
     @property
     def bbox(self):
@@ -119,6 +124,8 @@ class SimpleTracker:
         self.max_missed = int(self.cfg.get("max_missed_frames", 8))
         self.max_u_step = float(self.cfg.get("max_u_step", .09))
         self.min_observations = int(self.cfg.get("confirm_observations", 5))
+        self.early_confirm_observations = int(self.cfg.get("early_confirm_observations", 3))
+        self.min_velocity = float(self.particle_cfg.get("min_velocity", 20))
         self.max_eta_s = float(self.cfg.get("max_eta_s", 1.5))
         self.seed = int(self.particle_cfg.get("deterministic_seed", 20261030))
         # Pink visual effects can drift a few pixels at the judgment row while
@@ -190,7 +197,7 @@ class SimpleTracker:
             return reject("span_width_ratio")
         velocity = track.tracking_velocity
         predicted_y = old_y + max(0., velocity or 0.) * dt
-        tolerance = max(9., min(24., 8. + max(0., velocity or 0.) * dt * .65))
+        tolerance = max(10., min(28., 10. + max(0., velocity or 0.) * dt * .9))
         residual = abs(new_y - predicted_y)
         if audit is not None:
             audit.update({"predicted_y": predicted_y, "predicted_u": old_u,
@@ -239,7 +246,8 @@ class SimpleTracker:
         y, u = self._center(candidate)
         track = SimpleTrack(self.next_id, candidate, [(timestamp, y, u)], timestamp, timestamp,
                             appearance_anchor=candidate.appearance,
-                            appearance_history=[candidate.appearance])
+                            appearance_history=[candidate.appearance],
+                            first_observation_y=y)
         self.next_id += 1
         track.key_history.append(tuple(candidate.candidate_keys))
         track.stable_keys = list(candidate.candidate_keys)
@@ -311,11 +319,39 @@ class SimpleTracker:
             displacement_ok = max(ys) - min(ys) >= self.pink_min_displacement_px
             if not displacement_ok and track.observations >= self.min_observations:
                 track.reason = "pink_displacement_insufficient"
-        if (track.observations >= self.min_observations and displacement_ok and
-                velocity is not None and math.isfinite(velocity) and
-                velocity >= track.particle_filter.min_velocity):
+        early_confirm = self._early_confirm_eligible(track, candidate, displacement_ok)
+        normal_confirm = (track.observations >= self.min_observations and displacement_ok and
+                          velocity is not None and math.isfinite(velocity) and
+                          velocity >= track.particle_filter.min_velocity)
+        if normal_confirm or early_confirm:
             track.status = "confirmed"
             track.confirmed_note_type = "tap"
+            if track.first_confirmed_at is None:
+                track.first_confirmed_y = y
+                track.first_confirmed_at = timestamp
+                track.confirmation_mode = "early_near_trigger" if early_confirm and not normal_confirm else "normal"
+                track.first_confirmed_after_trigger = y >= self.hit_y
+
+    def _early_confirm_eligible(self, track: SimpleTrack, candidate: Candidate,
+                                displacement_ok: bool) -> bool:
+        """Narrow late-entry confirmation path for real ordinary Tap tracks."""
+        if track.observations < max(3, self.early_confirm_observations):
+            return False
+        if track.status != "tentative" or not displacement_ok or candidate.note_type != "tap":
+            return False
+        if candidate.suspected_overlap or candidate.path_bbox is not None or candidate.hold_path_px > 0:
+            return False
+        if not track.stable_keys or track.tracking_velocity is None:
+            return False
+        if not math.isfinite(track.tracking_velocity) or track.tracking_velocity < self.min_velocity:
+            return False
+        y_values = [point[1] for point in track.history[-3:]]
+        if len(y_values) < 3 or any(b <= a for a, b in zip(y_values, y_values[1:])):
+            return False
+        # Require a genuinely near-line observation, but never use a predicted
+        # ETA to manufacture early confirmation.
+        early_window = float(self.cfg.get("early_confirm_window_px", 35.0))
+        return self.hit_y - early_window <= y_values[-1] < self.hit_y + 8.0
 
     def update(self, candidates: list[Candidate], timestamp: float, playing: bool = True,
                trace: dict | None = None, frame_index: int | None = None,
@@ -527,7 +563,12 @@ class SimpleTracker:
                     "appearance": track.candidate.appearance, "bbox": track.candidate.bbox,
                     "prediction_reason": track.prediction.reason,
                     "termination_reason": track.reason if track in self.finished else "",
-                    "state_transition": "matched" if matched else "coasting" if track in active else "terminated"})
+                    "state_transition": "matched" if matched else "coasting" if track in active else "terminated",
+                    "first_observation_y": track.first_observation_y if track.first_observation_y is not None else "",
+                    "first_confirmed_y": track.first_confirmed_y if track.first_confirmed_y is not None else "",
+                    "first_confirmed_at": track.first_confirmed_at if track.first_confirmed_at is not None else "",
+                    "confirmation_mode": track.confirmation_mode,
+                    "first_confirmed_after_trigger": track.first_confirmed_after_trigger})
             for track in active:
                 if track not in previous:
                     trace_append("track_rows", {"frame": frame_index, "timestamp": timestamp,
@@ -543,7 +584,12 @@ class SimpleTracker:
                         "stable_keys": "|".join(track.stable_keys),
                         "appearance": track.candidate.appearance, "bbox": track.candidate.bbox,
                         "prediction_reason": track.prediction.reason,
-                        "termination_reason": "", "state_transition": "new"})
+                        "termination_reason": "", "state_transition": "new",
+                        "first_observation_y": track.first_observation_y if track.first_observation_y is not None else "",
+                        "first_confirmed_y": track.first_confirmed_y if track.first_confirmed_y is not None else "",
+                        "first_confirmed_at": track.first_confirmed_at if track.first_confirmed_at is not None else "",
+                        "confirmation_mode": track.confirmation_mode,
+                        "first_confirmed_after_trigger": track.first_confirmed_after_trigger})
         self.stage_times = {"matching_s": time.perf_counter() - started,
                             "unknown_association_s": 0.}
         return list(active)
