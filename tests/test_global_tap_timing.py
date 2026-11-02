@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.global_tap_timing import GlobalTapTimingEstimator
+from src.particle_predictor import ParticlePredictor
 
 
 def track(track_id, history, *, status="confirmed", note_type="tap", missed=0):
@@ -49,20 +50,17 @@ def test_irregular_fps_and_processing_delay_do_not_shift_hit_at():
     assert result.hit_at == pytest.approx(1.51)
 
 
-@pytest.mark.parametrize("bad_track, reason", [
-    (track(1, [(1.0, 100), (1.1, 110), (1.2, 120)], status="coasting"),
-     "insufficient_independent_tracks"),
-    (track(1, [(1.0, 100), (1.1, 110), (1.2, 120)], missed=1),
-     "insufficient_independent_tracks"),
-    (track(1, [(1.0, 100), (1.1, 110), (1.2, 120)], note_type="hold"),
-     "insufficient_independent_tracks"),
+@pytest.mark.parametrize("bad_track", [
+    track(1, [(1.0, 100), (1.1, 110), (1.2, 120)], status="coasting"),
+    track(1, [(1.0, 100), (1.1, 110), (1.2, 120)], missed=1),
+    track(1, [(1.0, 100), (1.1, 110), (1.2, 120)], note_type="hold"),
 ])
-def test_invalid_track_state_does_not_enter_shared_model(bad_track, reason):
+def test_invalid_track_state_is_excluded_but_valid_single_track_can_bootstrap(bad_track):
     good = track(2, [(1.0, 100), (1.1, 110), (1.2, 120)])
     model = estimator().update([bad_track, good], trigger_y=150,
                                capture_timestamp=1.21, now=1.21)
-    assert model.ready is False
-    assert model.reason == reason
+    assert model.ready is True
+    assert model.independent_tracks == 1
 
 
 def test_stale_coasting_and_nonnumeric_observations_are_rejected():
@@ -83,7 +81,7 @@ def test_large_jump_and_nonlinear_speed_do_not_create_precise_eta():
     other = track(2, [(1.0, 90), (1.1, 100), (1.2, 110)])
     model = estimator().update([jump, other], trigger_y=250,
                                capture_timestamp=1.21, now=1.21)
-    assert model.ready is False
+    assert model.ready is True
     nonlinear_a = track(1, [(1.0, 100), (1.1, 110), (1.2, 140)])
     nonlinear_b = track(2, [(1.0, 80), (1.1, 90), (1.2, 120)])
     model = estimator().update([nonlinear_a, nonlinear_b], trigger_y=180,
@@ -137,3 +135,17 @@ def test_disabled_not_playing_and_active_require_dual_switch():
     active = estimator(mode="active", allow_active=False)
     assert active.active_enabled is False
     assert estimator(mode="active", allow_active=True).active_enabled is True
+
+
+def test_particle_tracking_only_does_not_emit_tap_eta_fields():
+    pf = ParticlePredictor({"count": 64, "min_real_observations": 3},
+                           track_id=7, physical_hit_y=325.5,
+                           timing_enabled=False)
+    prediction = pf.update([(1.0, 100.0, .4), (1.05, 106.0, .4),
+                            (1.10, 112.0, .4)], 295.5)
+    assert prediction.measurement_status == "INITIALIZED"
+    assert prediction.eta is None
+    assert prediction.hit_time is None
+    assert prediction.eta_p10 is None
+    assert prediction.valid_crossing_mass is None
+    assert prediction.fitted_y is not None

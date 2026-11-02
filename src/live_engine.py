@@ -649,9 +649,10 @@ class LiveEngine:
         if pf is not None and pf.initialized:
             fail(not math.isfinite(pf.ess) or pf.ess < pf.count*float(pf.cfg.get("identity_min_ess_fraction",.1)),
                  "PF_ESS_LOW")
-            mass = tr.prediction.valid_crossing_mass
-            fail(mass is None or mass < pf.min_crossing_mass, "PF_CROSSING_MASS_LOW")
-            fail(tr.prediction.reason == "PF_POSTERIOR_TOO_WIDE", "PF_POSTERIOR_TOO_WIDE")
+            # PF is tracking-only for ordinary Tap continuity.  Crossing
+            # mass, posterior width and PF hit-time quality belong to the
+            # retired timing path; the frozen Global TapIntent deadline is
+            # validated separately above.
         fail(event_id in self.hold_ids, "HOLD_INTENT")
         if tr.identity_state=="TAP_DEGRADED_OBSERVATION":
             fail(not self.tap_identity_cfg.get("allow_degraded_unknown"), "DEGRADED_UNKNOWN_DISABLED")
@@ -1624,30 +1625,39 @@ class LiveEngine:
                     self.last_decisions[tr.track_id] = ((), reason)
                     if reason != self.simple_decision_reasons.get(tr.track_id):
                         prediction = tr.prediction
+                        global_decision = self.simple_core.global_decisions.get(tr.track_id)
+                        global_hit = (global_decision.hit_at if global_decision and
+                                      global_decision.hit_at is not None else None)
+                        global_uncertainty = (global_decision.uncertainty_s if global_decision and
+                                              global_decision.uncertainty_s is not None else None)
+                        global_active = self.simple_core.global_timing.active_enabled
                         created.append({
                             "event_id": uid, "note_uid": uid, "track_id": tr.track_id,
                             "source_frame": frame.sequence,
                             "capture_timestamp": frame.captured_at,
                             "processing_timestamp": finished,
-                            "predicted_hit_time": prediction.hit_time if prediction.hit_time is not None else "",
-                            "uncertainty_s": prediction.uncertainty if prediction.uncertainty is not None else "",
+                            "predicted_hit_time": (global_hit if global_active and global_hit is not None else
+                                prediction.hit_time if prediction.hit_time is not None else ""),
+                            "uncertainty_s": (global_uncertainty if global_active and global_uncertainty is not None else
+                                prediction.uncertainty if prediction.uncertainty is not None else ""),
                             "key_candidates": "|".join(tr.stable_keys), "resolved_keys": "",
-                            "type": "tap", "appearance": tr.candidate.appearance,
+                        "type": "tap", "appearance": tr.candidate.appearance,
                             "confidence_label": "heuristic_only", "abstain_reason": reason,
-                            "gameplay_state": state, "predictor_mode": "particle",
+                            "gameplay_state": state, "predictor_mode": "global_fixed_speed" if global_active else "particle",
                             "geometry_status": self.geometry.status,
                             "geometry_sha256": self.geometry_hash,
                             "resolution_basis": "simple_confirmed_tap",
-                            "eta_p10_s": prediction.eta_p10 if prediction.eta_p10 is not None else "",
-                            "eta_p50_s": prediction.eta_p50 if prediction.eta_p50 is not None else "",
-                            "eta_p90_s": prediction.eta_p90 if prediction.eta_p90 is not None else "",
-                            "valid_crossing_mass": prediction.valid_crossing_mass if prediction.valid_crossing_mass is not None else "",
+                            "eta_p10_s": "" if global_active else prediction.eta_p10 if prediction.eta_p10 is not None else "",
+                            "eta_p50_s": "" if global_active else prediction.eta_p50 if prediction.eta_p50 is not None else "",
+                            "eta_p90_s": "" if global_active else prediction.eta_p90 if prediction.eta_p90 is not None else "",
+                            "valid_crossing_mass": "" if global_active else prediction.valid_crossing_mass if prediction.valid_crossing_mass is not None else "",
                             "particle_ess": prediction.ess if prediction.ess is not None else "",
                             "real_observation_count": prediction.real_observation_count if prediction.real_observation_count is not None else "",
                             "coast_ms": prediction.coast_ms,
                             "measurement_status": prediction.measurement_status,
                             "particle_predicted_y": prediction.fitted_y if prediction.fitted_y is not None else "",
-                            "particle_velocity_px_s": prediction.velocity if prediction.velocity is not None else "",
+                            "particle_velocity_px_s": (tr.tracking_velocity if global_active and
+                                tr.tracking_velocity is not None else prediction.velocity if prediction.velocity is not None else ""),
                             "simple_track_observations": tr.observations,
                             "simple_track_status": tr.status,
                             "particle_rejection_streak": tr.particle_rejection_streak,
@@ -1699,7 +1709,8 @@ class LiveEngine:
                         "confidence_label": "heuristic_only",
                         "abstain_reason": transition.get("reason", ""),
                         "gameplay_state": state,
-                        "predictor_mode": "particle",
+                        "predictor_mode": ("global_fixed_speed" if
+                            self.simple_core.global_timing.active_enabled else "particle"),
                         "geometry_status": self.geometry.status,
                         "geometry_sha256": self.geometry_hash,
                         "resolution_basis": "simple_confirmed_tap",

@@ -1,9 +1,9 @@
 @echo off
 cd /d "%~dp0.."
-echo C mode: Simple Tracker + Particle ETA, with visual Hold. Input starts OFF.
+echo C mode: Simple Tracker + Global Fixed-Speed ETA (PF tracking only), with visual Hold. Input starts OFF.
 echo Ctrl+Shift+Alt+Q toggles input; Esc or F12 stops and releases keys.
 echo Green/yellow Hold paths keep the start key held until the visible tail leaves.
-echo Ordinary cyan/yellow Tap uses the C particle-tracking core.
+echo Ordinary cyan/yellow Tap uses Global Fixed-Speed ETA; PF supplies tracking only.
 echo Recently confirmed scheduled notes may survive a brief detector dropout near the input line.
 echo No timing or lane, key conflicts, and stale or unfocused frames still abstain.
 echo Game window: hololive-Dreams

@@ -1,4 +1,4 @@
-"""Composition root for the deliberately small ordinary-Tap control path."""
+"""Composition root for the ordinary-Tap Global ETA control path."""
 from __future__ import annotations
 
 import json
@@ -64,6 +64,10 @@ class SimpleAssistCore:
         self.global_rows = []
         self.shadow_decisions = {}
         self.global_decisions = {}
+        self.global_model_frames = 0
+        self.global_ready_frames = 0
+        self.global_status_counts = {}
+        self.global_first_schedule_at = {}
         self._last_decision_fingerprints = {}
 
     def note_uid(self, track_id: int):
@@ -86,29 +90,16 @@ class SimpleAssistCore:
                 self.intents.note_confirmed(uid, captured_at)
         fixed = {uid: intent.key for uid, intent in self.intents.intents.items()
                  if intent.state == "PENDING"}
-        proposals, reasons = self.planner.plan(tracks if enabled else [], processed_at,
-            self.known_keys, scheduler, note_uids=note_uids, fixed_keys=fixed)
-        traces = self.planner.last_traces
-        # The simplified planner is a read-only comparator by default.  An
-        # active switch exists for controlled rollback experiments, but cannot
-        # be enabled accidentally by merely setting mode=active.
-        shadow = (self.planner.simplified_plan(tracks if enabled else [], processed_at,
-                    self.known_keys, scheduler, note_uids=note_uids, fixed_keys=fixed)
-                  if self.planner_mode in {"shadow", "active"} else {})
-        self.shadow_decisions = shadow
-        active_switch = (enabled and self.planner_mode == "active" and
-                         self.simplified_enabled and
-                         bool(self._active_config().get("allow_active", False)))
-        if active_switch:
-            proposals = self.planner.simplified_proposals(tracks if enabled else [], shadow)
-            reasons = {track_id: decision.reason for track_id, decision in shadow.items()
-                       if decision.status != "schedule"}
-        # Global fixed-speed ETA is an independent comparator.  It is always
-        # evaluated when enabled, but only replaces the legacy/PF proposal
-        # behind the explicit active dual switch (mode=active + allow_active).
+        # Global fixed-speed ETA is the only ordinary Tap timing source when
+        # explicitly enabled for Active use.  The legacy PF timing planner is
+        # retained only for backwards-compatible Shadow/disabled callers and
+        # is never a fallback in the Global Active path.
         global_model = self.global_timing.update(
             tracks if enabled else [], trigger_y=self.tracker.hit_y,
             capture_timestamp=captured_at, now=processed_at, playing=enabled)
+        self.global_model_frames += 1
+        if global_model.ready:
+            self.global_ready_frames += 1
         global_etas = {
             track.track_id: self.global_timing.estimate(
                 track, trigger_y=self.tracker.hit_y, now=processed_at)
@@ -118,13 +109,42 @@ class SimpleAssistCore:
             tracks if enabled else [], global_etas, processed_at, self.known_keys,
             scheduler, note_uids=note_uids, fixed_keys=fixed)
         self.global_decisions = global_decisions
+        for decision in global_decisions.values():
+            self.global_status_counts[decision.reason] = self.global_status_counts.get(decision.reason, 0) + 1
+            if decision.status == "schedule":
+                self.global_first_schedule_at.setdefault(decision.note_uid, captured_at)
         global_active = enabled and self.global_timing.active_enabled
-        if global_active:
-            # Global timing may amend only a proposal that already passed the
-            # complete Legacy/PF quality path.  It can never turn a PF-gated
-            # track into a new input proposal.
-            proposals = {track_id: global_proposals.get(track_id, proposal)
-                         for track_id, proposal in proposals.items()}
+        if self.global_timing.enabled:
+            # Global Shadow is strictly observational: it must not call the
+            # intent manager or Scheduler.offer.  Global Active is the only
+            # enabled scheduling path and has no PF/Linear fallback.
+            proposals = dict(global_proposals) if global_active else {}
+            reasons = {track_id: decision.reason for track_id, decision in global_decisions.items()
+                       if decision.status != "schedule"}
+            if not global_active:
+                reasons.update({track_id: "global_shadow_only"
+                                for track_id, decision in global_decisions.items()
+                                if decision.status == "schedule"})
+            traces = {}
+            shadow = {}
+        else:
+            proposals, reasons = self.planner.plan(tracks if enabled else [], processed_at,
+                self.known_keys, scheduler, note_uids=note_uids, fixed_keys=fixed)
+            traces = self.planner.last_traces
+            # The simplified planner remains a read-only comparator unless a
+            # caller explicitly requests its old Active experiment.
+            shadow = (self.planner.simplified_plan(tracks if enabled else [], processed_at,
+                        self.known_keys, scheduler, note_uids=note_uids, fixed_keys=fixed)
+                      if self.planner_mode in {"shadow", "active"} else {})
+            self.shadow_decisions = shadow
+            active_switch = (enabled and self.planner_mode == "active" and
+                             self.simplified_enabled and
+                             bool(self._active_config().get("allow_active", False)))
+            if active_switch:
+                proposals = self.planner.simplified_proposals(tracks if enabled else [], shadow)
+                reasons = {track_id: decision.reason for track_id, decision in shadow.items()
+                           if decision.status != "schedule"}
+        self.shadow_decisions = shadow
         accepted, rejected = self.intents.schedule(proposals, scheduler, processed_at)
         self.last_reasons = {**reasons, **{
             track.track_id: rejected[uid]
@@ -134,20 +154,22 @@ class SimpleAssistCore:
         }}
         self.last_traces = traces
         linear_estimates = {}
-        for track in tracks:
-            trace = traces.get(track.track_id)
-            if trace is None or self.linear_timing is None:
-                continue
-            linear = self.linear_timing.estimate(track.history, self.tracker.hit_y, captured_at,
-                                                  now=processed_at)
-            linear_estimates[track.track_id] = linear
-            trace.linear_eta_s = linear.eta
-            trace.linear_hit_at = linear.hit_at
-            trace.linear_quality = linear.quality
+        if not global_active:
+            for track in tracks:
+                trace = traces.get(track.track_id)
+                if trace is None or self.linear_timing is None:
+                    continue
+                linear = self.linear_timing.estimate(track.history, self.tracker.hit_y, captured_at,
+                                                      now=processed_at)
+                linear_estimates[track.track_id] = linear
+                trace.linear_eta_s = linear.eta
+                trace.linear_hit_at = linear.hit_at
+                trace.linear_quality = linear.quality
         self._append_diagnostics(tracks, captured_at, processed_at, proposals,
                                  reasons, rejected, traces, shadow, scheduler,
                                  linear_estimates, source_frame,
-                                 global_model, global_etas, global_decisions)
+                                 global_model, global_etas, global_decisions,
+                                 global_active)
         for track in tracks:
             uid = self.note_uid(track.track_id)
             trace = traces.get(track.track_id)
@@ -201,7 +223,7 @@ class SimpleAssistCore:
                             reasons, rejected, traces, shadow, scheduler,
                             linear_estimates, source_frame=None,
                             global_model=None, global_etas=None,
-                            global_decisions=None):
+                            global_decisions=None, global_active=False):
         """Append one ETA/shadow row per current track, every frame.
 
         These rows intentionally do not use the lifecycle fingerprint.  A
@@ -217,8 +239,10 @@ class SimpleAssistCore:
             if linear is not None:
                 linear_reason = linear.reason
             last_obs = track.history[-1][0] if track.history else ""
-            pf_status = "available" if prediction.hit_time is not None and prediction.eta is not None else "prediction_unavailable"
-            if prediction.eta is not None and prediction.eta <= 0:
+            pf_status = ("tracking_only" if global_active else
+                         "available" if prediction.hit_time is not None and prediction.eta is not None else
+                         "prediction_unavailable")
+            if not global_active and prediction.eta is not None and prediction.eta <= 0:
                 pf_status = "prediction_unavailable"
             planner_reason = reasons.get(track.track_id, "")
             if track.track_id in proposals:
@@ -238,13 +262,13 @@ class SimpleAssistCore:
                 "capture_timestamp": captured_at, "processing_timestamp": processed_at,
                 "note_uid": uid, "track_id": track.track_id,
                 "last_observation_timestamp": last_obs,
-                "pf_eta_s": prediction.eta if prediction.eta is not None else "",
-                "pf_hit_at": prediction.hit_time if prediction.hit_time is not None else "",
-                "pf_uncertainty_s": prediction.uncertainty if prediction.uncertainty is not None else "",
-                "pf_eta_p10": prediction.eta_p10 if prediction.eta_p10 is not None else "",
-                "pf_eta_p50": prediction.eta_p50 if prediction.eta_p50 is not None else "",
-                "pf_eta_p90": prediction.eta_p90 if prediction.eta_p90 is not None else "",
-                "pf_crossing_mass": prediction.valid_crossing_mass if prediction.valid_crossing_mass is not None else "",
+                "pf_eta_s": "" if global_active else prediction.eta if prediction.eta is not None else "",
+                "pf_hit_at": "" if global_active else prediction.hit_time if prediction.hit_time is not None else "",
+                "pf_uncertainty_s": "" if global_active else prediction.uncertainty if prediction.uncertainty is not None else "",
+                "pf_eta_p10": "" if global_active else prediction.eta_p10 if prediction.eta_p10 is not None else "",
+                "pf_eta_p50": "" if global_active else prediction.eta_p50 if prediction.eta_p50 is not None else "",
+                "pf_eta_p90": "" if global_active else prediction.eta_p90 if prediction.eta_p90 is not None else "",
+                "pf_crossing_mass": "" if global_active else prediction.valid_crossing_mass if prediction.valid_crossing_mass is not None else "",
                 "linear_eta_s": linear.eta if linear else "",
                 "linear_hit_at": linear.hit_at if linear else "",
                 "linear_velocity_px_s": linear.velocity if linear else "",
@@ -376,6 +400,16 @@ class SimpleAssistCore:
     def drain_global_rows(self):
         rows, self.global_rows = self.global_rows, []
         return rows
+
+    def global_stats(self):
+        return {
+            "model_frames": self.global_model_frames,
+            "ready_frames": self.global_ready_frames,
+            "ready_ratio": (self.global_ready_frames / self.global_model_frames
+                             if self.global_model_frames else 0.0),
+            "status_counts": dict(self.global_status_counts),
+            "first_schedule_at": dict(self.global_first_schedule_at),
+        }
 
     def record_scheduler_action(self, action: dict):
         self.intents.record_action(action)

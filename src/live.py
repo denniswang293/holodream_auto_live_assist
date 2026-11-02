@@ -143,6 +143,7 @@ def _summary(out, result):
     lines = ["# HoloDream Assist diagnostics", "", f"Stop: {result['stop_reason']}",
              f"Source: {result['source_kind']} | geometry: {result['geometry_status']} ({result['geometry_sha256']})", "",
              f"Input prediction target: y={result['input_trigger_y']:.1f}; physical track completion: y={result['tracking_completion_y']:.1f}.",
+             f"Tap timing source: {result.get('tap_timing_source', 'legacy')}; Global model: {result.get('global_timing_mode', 'disabled')}.",
              f"Processed frames: {result['processed_frames']}; acquired/source frames: {result['acquired_frames']}",
              f"Capture FPS: {result['capture_fps']:.3f}; processing FPS: {result['wall_processing_fps']:.3f}",
              f"Latency P50/P95: {result['latency_p50_ms']:.3f}/{result['latency_p95_ms']:.3f} ms",
@@ -260,7 +261,7 @@ def run(args):
         engine = LiveEngine(config, geometry, scheduler, clock,
                             identity_trace=identity_trace)
         engine_holder["engine"]=engine
-        print(f"Particle-based Tap assist + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
+        print(f"Global Fixed-Speed ETA Tap assist + PF tracking + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
         from .windows_runtime import GlobalControls
         def emergency_stop():
             stopped.set()
@@ -369,7 +370,12 @@ def run(args):
             simple_states={state:sum(intent.state==state for intent in engine.simple_core.intents.intents.values())
                            for state in ("PENDING","FIRED","CANCELED","EXPIRED")}
             result = {"mode": "assist", "predictor_mode": config["predictor"]["mode"],
-                      "tap_core": "simple_particle",
+                      "tap_core": "global_eta_pf_tracking",
+                      "tap_timing_source": ("global" if engine.simple_core.global_timing.active_enabled
+                                            else "legacy"),
+                      "global_timing_mode": engine.simple_core.global_timing.mode,
+                      "global_timing_active": engine.simple_core.global_timing.active_enabled,
+                      "global_timing_stats": engine.simple_core.global_stats(),
                       "simple_intent_states": simple_states,
                       "source_kind": "actual window capture",
                       "window_title": target.title if target else None,
@@ -427,6 +433,8 @@ def run(args):
                 "latency_p95_ms": result["latency_p95_ms"],
                 "dropped_frames": result["dropped_frames"],
                 "stale_frames": result["stale_frames"],
+                "tap_timing_source": result["tap_timing_source"],
+                "global_timing_stats": result["global_timing_stats"],
                 "accuracy": "UNVERIFIED"
             }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
             print(f"Saved {out}: {engine.frames} frames, {engine.events} events, {scheduler.sent_taps} taps, {scheduler.sent_holds} holds. Accuracy UNVERIFIED.", flush=True)

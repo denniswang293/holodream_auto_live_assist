@@ -26,7 +26,8 @@ class ParticlePredictor:
     """Small vectorized SMC with robust Student-t measurement weighting."""
 
     def __init__(self, cfg: dict | None = None, *, seed: int = 20261030,
-                 track_id: int = 0, physical_hit_y: float | None = None):
+                 track_id: int = 0, physical_hit_y: float | None = None,
+                 timing_enabled: bool = True):
         self.cfg = dict(cfg or {})
         if self.cfg.get("use_acceleration", False):
             raise ValueError("acceleration particles are not implemented; set use_acceleration=false")
@@ -57,6 +58,10 @@ class ParticlePredictor:
         # Stable arithmetic; never depend on Python's randomized hash().
         self.rng = np.random.default_rng((base_seed + int(track_id) * 2654435761) & 0xffffffff)
         self.physical_hit_y = physical_hit_y
+        # Simple Tap Assist passes ``False``: PF remains a spatial tracker
+        # (position/velocity/ESS/association), while GlobalTapTimingEstimator
+        # is the sole source of Tap ETA and hit_at.
+        self.timing_enabled = bool(timing_enabled)
         self.last_time: float | None = None
         self.initialized = False
         self.observation_count = 0
@@ -242,16 +247,19 @@ class ParticlePredictor:
                               predictor_mode="particle", measurement_status=status)
         ys = self.y + self.v * dt
         vs = self.v
+        common = dict(velocity=float(np.average(vs, weights=self.weights)),
+                      fitted_y=float(np.average(ys, weights=self.weights)),
+                      ess=self.ess,
+                      real_observation_count=self.observation_count, coast_ms=coast_ms,
+                      predictor_mode="particle", measurement_status=status)
+        if not self.timing_enabled:
+            return Prediction(**common, reason="tracking_only")
         valid = (vs > self.min_velocity) & (vs <= self.max_velocity * 1.05) & (ys < target_y)
         taus = np.full(self.count, np.nan)
         taus[valid] = (target_y - ys[valid]) / vs[valid]
         valid &= np.isfinite(taus) & (taus >= 0) & (taus <= self.max_horizon_s)
         mass = float(self.weights[valid].sum())
-        common = dict(velocity=float(np.average(vs, weights=self.weights)),
-                      fitted_y=float(np.average(ys, weights=self.weights)),
-                      valid_crossing_mass=mass, ess=self.ess,
-                      real_observation_count=self.observation_count, coast_ms=coast_ms,
-                      predictor_mode="particle", measurement_status=status)
+        common["valid_crossing_mass"] = mass
         if mass < self.min_crossing_mass:
             reason = "ALREADY_PAST_TRIGGER" if float(np.average(ys, weights=self.weights)) >= target_y else "PF_NO_VALID_CROSSING"
             return Prediction(**common, reason=reason)

@@ -146,7 +146,15 @@ class GlobalTapTimingEstimator:
                 continue
             candidates.append((track.track_id, speed, spread, last_t, len(history)))
         candidates = candidates[:self.max_tracks]
-        if len(candidates) < self.min_tracks:
+        # A single confirmed Tap with enough independent real observations is
+        # a valid cold-start source.  It may seed the shared model, but never
+        # uses a synthetic/default speed.  Later frames continue to update it
+        # from additional tracks when available.
+        single_track_bootstrap = (len(candidates) == 1 and
+                                  candidates[0][4] >= self.min_samples and
+                                  candidates[0][2] <= self.max_speed_dispersion *
+                                  max(candidates[0][1], self.min_velocity))
+        if len(candidates) < self.min_tracks and not single_track_bootstrap:
             self.model = GlobalTapModel(model_version=self._version,
                                         independent_tracks=len(candidates),
                                         sample_count=sum(row[4] for row in candidates),

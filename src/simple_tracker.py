@@ -2,7 +2,8 @@
 
 This tracker deliberately has no identity handoff, unknown-observation
 retention, or scheduler lifecycle behavior. It associates current detections
-to short, timestamped trajectories and exposes that evidence to a planner.
+to short, timestamped trajectories and exposes spatial evidence to the Global
+Tap timing planner. Its PF is tracking-only for this path.
 """
 from __future__ import annotations
 
@@ -10,6 +11,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 import math
 import time
+
+import numpy as np
 
 from .assignment import assign
 from .detector import Candidate
@@ -51,6 +54,9 @@ class SimpleTrack:
     last_association: dict = field(default_factory=dict)
     particle_rejection_streak: int = 0
     particle_reinitializations: int = 0
+    # Motion used only for spatial association/confirmation.  Tap timing is
+    # supplied by GlobalTapTimingEstimator, never by this value.
+    tracking_velocity: float | None = None
 
     @property
     def bbox(self):
@@ -89,7 +95,10 @@ class SimpleTrack:
         return self.confirmed_note_type == "tap"
 
     def eta(self, hit_y: float | None = None, lookahead: float = 1.5):
-        return self.prediction.eta if self.status == "confirmed" else None
+        # Tap ETA is owned exclusively by GlobalTapTimingEstimator.  Keep the
+        # compatibility method for overlays/callers, but never expose PF time
+        # as an Active scheduling value.
+        return None
 
 
 class SimpleTracker:
@@ -179,7 +188,7 @@ class SimpleTracker:
         ratio = new_width / old_width
         if not .45 <= ratio <= 2.2:
             return reject("span_width_ratio")
-        velocity = track.prediction.velocity
+        velocity = track.tracking_velocity
         predicted_y = old_y + max(0., velocity or 0.) * dt
         tolerance = max(9., min(24., 8. + max(0., velocity or 0.) * dt * .65))
         residual = abs(new_y - predicted_y)
@@ -235,7 +244,7 @@ class SimpleTracker:
         track.key_history.append(tuple(candidate.candidate_keys))
         track.stable_keys = list(candidate.candidate_keys)
         track.particle_filter = ParticlePredictor(self.particle_cfg, seed=self.seed,
-            track_id=track.track_id, physical_hit_y=self.hit_y)
+            track_id=track.track_id, physical_hit_y=self.hit_y, timing_enabled=False)
         return track
 
     def _observe(self, track: SimpleTrack, candidate: Candidate, timestamp: float):
@@ -244,6 +253,17 @@ class SimpleTracker:
         track.last_time = timestamp
         track.history.append((timestamp, y, u))
         track.history = track.history[-24:]
+        # Estimate forward motion from accepted observations for association
+        # only.  This is intentionally separate from PF hit-time fields.
+        slopes = []
+        for (t0, y0, _), (t1, y1, _) in zip(track.history, track.history[1:]):
+            dt, dy = t1 - t0, y1 - y0
+            if 0 < dt <= self.max_gap_s and dy > 0:
+                speed = dy / dt
+                if math.isfinite(speed) and self.particle_cfg.get("min_velocity", 20) <= speed <= self.particle_cfg.get("max_velocity", 1800):
+                    slopes.append(speed)
+        if slopes:
+            track.tracking_velocity = float(np.median(slopes[-7:]))
         track.observations += 1
         track.appearance_history.append(candidate.appearance)
         track.appearance_history = track.appearance_history[-12:]
@@ -273,7 +293,7 @@ class SimpleTracker:
             # those same observations. This recovers stale PF position state
             # without changing planner ETA or uncertainty limits.
             replacement = ParticlePredictor(self.particle_cfg, seed=self.seed,
-                track_id=track.track_id, physical_hit_y=self.hit_y)
+                track_id=track.track_id, physical_hit_y=self.hit_y, timing_enabled=False)
             replacement_prediction = replacement.update(track.history[-7:], self.hit_y)
             track.particle_rejection_streak = 0
             if replacement_prediction.measurement_status == "INITIALIZED":
@@ -284,7 +304,7 @@ class SimpleTracker:
         if y > self.cfg.get("completion_y", 325.5):
             track.status, track.reason = "completed", "past_physical_completion_line"
             return
-        velocity = track.prediction.velocity
+        velocity = track.tracking_velocity
         displacement_ok = True
         if candidate.appearance == "pink_candidate" and track.history:
             ys = [point[1] for point in track.history]
@@ -296,9 +316,6 @@ class SimpleTracker:
                 velocity >= track.particle_filter.min_velocity):
             track.status = "confirmed"
             track.confirmed_note_type = "tap"
-        if track.prediction.hit_time is not None:
-            track.hit_history.append(track.prediction.hit_time)
-            track.hit_history = track.hit_history[-5:]
 
     def update(self, candidates: list[Candidate], timestamp: float, playing: bool = True,
                trace: dict | None = None, frame_index: int | None = None,

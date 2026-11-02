@@ -17,7 +17,7 @@
     "reason": "Keep legacy gates until paired replay confirms no false-positive increase"
   },
   "linear_timing": {
-    "enabled": true,
+    "enabled": false,
     "mode": "shadow",
     "window": 5,
     "min_velocity": 20,
@@ -25,8 +25,8 @@
   },
   "global_tap_timing": {
     "enabled": true,
-    "mode": "shadow",
-    "allow_active": false,
+    "mode": "active",
+    "allow_active": true,
     "min_tracks": 2,
     "min_samples": 3,
     "history_size": 8,

@@ -348,8 +348,11 @@ class TapPlanner:
                     if fixed is not None and fixed not in legal:
                         reason = "fixed_key_not_legal"
                     else:
-                        key = fixed or max(legal, key=legal.get)
-                        if conflict(key, hit_at, uid):
+                        key_choices = ([fixed] if fixed is not None else
+                                       sorted(legal, key=lambda key: (-legal[key], KEYS.index(key))))
+                        key = next((candidate_key for candidate_key in key_choices
+                                    if not conflict(candidate_key, hit_at, uid)), None)
+                        if key is None:
                             reason = "tap_key_conflict"
                         else:
                             proposal = TapProposal(uid, track.track_id, key, hit_at,
@@ -374,7 +377,11 @@ class TapPlanner:
     def plan(self, tracks: list[SimpleTrack], now: float, known_keys: set[str], scheduler,
              *, note_uids: dict[int, str] | None = None,
              fixed_keys: dict[str, str] | None = None):
-        """Return proposals and per-track reasons; this never changes scheduler state."""
+        """Legacy PF-timing comparator retained for explicit disabled callers.
+
+        ``SimpleAssistCore`` never calls this method when Global timing is
+        enabled; ordinary Tap Active scheduling uses :meth:`global_plan`.
+        """
         note_uids = note_uids or {}
         fixed_keys = fixed_keys or {}
         reasons, proposals = {}, {}
