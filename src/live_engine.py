@@ -320,7 +320,8 @@ class LiveEngine:
                 "simplified_tap_planner": config.get("live", {}).get("simplified_tap_planner", {}),
                 "linear_timing": config.get("live", {}).get("linear_timing", {}),
                 "global_tap_timing": config.get("live", {}).get("global_tap_timing", {}),
-            })
+            },
+            physical_hit_y=geometry.hit_y)
         self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}
         self.track_births, self.recycled_ids = {}, set()
@@ -367,6 +368,7 @@ class LiveEngine:
                 c.note_type not in ('tap','unknown') or
                 not visual_match or (c.suspected_overlap and not self.speculative.get('enabled'))):
             return False
+
         if not (math.isfinite(c.u_min) and math.isfinite(c.u_max) and 0<=c.u_min<c.u_max<=1):
             return False
         lane = self.config['key_map'].index(intent.keys[0])
@@ -390,6 +392,23 @@ class LiveEngine:
         return ((key_covered or partial_head or fragment_in_original_body) and
                 (c.bbox[1]+c.bbox[3]>=self.commit_entry_y-jitter or fragment_in_original_body) and
                 tr.history[-1][1]<=self.geometry.hit_y)
+
+    def _hold_press_at(self, track):
+        """Return the Hold head press time on the explicit timing clock.
+
+        Hold remains controlled by its visual tail tracker.  When the Global
+        timing clock is explicitly physical-calibrated, only the head start
+        deadline is shifted from the legacy trigger crossing; release still
+        comes from the visible tail path.
+        """
+        prediction = track.prediction
+        global_timing = self.simple_core.global_timing if self.simple_core else None
+        physical = getattr(prediction, "physical_hit_time", None)
+        if (global_timing is not None and
+                global_timing.timing_reference == "physical_calibrated" and
+                physical is not None and math.isfinite(physical)):
+            return physical - global_timing.input_lead_ms / 1000.0
+        return prediction.hit_time
 
     def _dropout_still_valid(self, event_id, now, tr=None):
         commit = self.dropout_commits.get(event_id)
@@ -1362,7 +1381,7 @@ class LiveEngine:
                         if reason or event_id not in self.hold_ids:
                             continue
                         span = tr.candidate.u_min,tr.candidate.u_max
-                        hit = tr.prediction.hit_time
+                        hit = self._hold_press_at(tr)
                         duplicate = any(
                             other_id != event_id and
                             (held or abs(hit-other_hit)<=.15) and
@@ -1438,7 +1457,8 @@ class LiveEngine:
                 if not reason and self.input_eligible_ids.get(tr.track_id) == self.scheduler.arm_generation:
                     active_events.add(event_id)
                     hold = event_id in self.hold_ids
-                    intent = ActionIntent(event_id, keys, tr.prediction.hit_time, tr.prediction.uncertainty,
+                    intent_hit_at = self._hold_press_at(tr) if hold else tr.prediction.hit_time
+                    intent = ActionIntent(event_id, keys, intent_hit_at, tr.prediction.uncertainty,
                                           'hold' if hold else 'tap',
                                           (tr.candidate.u_min+tr.candidate.u_max)/2 if hold else None,
                                           self.hold_colors.get(event_id) if hold else None)
@@ -1701,6 +1721,18 @@ class LiveEngine:
                         "processing_timestamp": finished,
                         "predicted_hit_time": (intent.hit_at if intent else
                             proposal.hit_at if proposal else ""),
+                        "physical_cross_at": (intent.physical_cross_at if intent else
+                            proposal.physical_cross_at if proposal else ""),
+                        "press_at": (intent.hit_at if intent else
+                            proposal.press_at if proposal else ""),
+                        "lead_ms": (intent.lead_ms if intent else
+                            proposal.lead_ms if proposal else ""),
+                        "timing_source": (intent.timing_source if intent else
+                            proposal.timing_source if proposal else ""),
+                        "speed_epoch": (intent.speed_epoch if intent else
+                            proposal.speed_epoch if proposal else ""),
+                        "timing_group_id": (intent.timing_group_id if intent else
+                            proposal.timing_group_id if proposal else ""),
                         "uncertainty_s": (intent.uncertainty if intent else
                             proposal.uncertainty if proposal else ""),
                         "key_candidates": "|".join(tr.stable_keys) if tr else "",

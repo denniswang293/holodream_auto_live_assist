@@ -9,7 +9,8 @@
     "enabled": true,
     "freeze_window_ms": 30,
     "max_amend_step_ms": 40,
-    "max_total_amend_ms": 80
+    "max_total_amend_ms": 80,
+    "allow_earlier_amend": false
   },
   "simplified_tap_planner": {
     "enabled": false,
@@ -41,7 +42,9 @@
     "max_uncertainty_s": 0.04,
     "profile_segments": 4,
     "profile_ttl_ms": 450,
-    "profile_min_samples": 1
+    "profile_min_samples": 1,
+    "timing_reference": "physical_calibrated",
+    "input_lead_ms": 0.0
   },
   "judgment_calibration_v2": {
     "enabled": true,

@@ -28,6 +28,10 @@ class GlobalTapModel:
     profile_sigmas: tuple[float, ...] = ()
     profile_counts: tuple[int, ...] = ()
     profile_age_s: float | None = None
+    speed_epoch: int = 0
+    song_scale: float = 1.0
+    calibration_state: str = "unavailable"
+    timing_source: str = "global_trigger_legacy"
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,12 @@ class GlobalTapEta:
     observed_y: float | None = None
     observed_at: float | None = None
     model_version: int = 0
+    physical_cross_at: float | None = None
+    press_at: float | None = None
+    physical_eta_s: float | None = None
+    lead_ms: float = 0.0
+    timing_source: str = "global_trigger_legacy"
+    speed_epoch: int = 0
 
 
 class GlobalTapTimingEstimator:
@@ -70,6 +80,12 @@ class GlobalTapTimingEstimator:
         self.profile_segments = int(cfg.get("profile_segments", 4))
         self.profile_ttl_s = float(cfg.get("profile_ttl_ms", 450)) / 1000
         self.profile_min_samples = int(cfg.get("profile_min_samples", 1))
+        self.timing_reference = str(cfg.get("timing_reference", "trigger_legacy")).lower()
+        if self.timing_reference not in {"trigger_legacy", "physical_calibrated"}:
+            raise ValueError("global_tap_timing.timing_reference must be trigger_legacy or physical_calibrated")
+        self.input_lead_ms = float(cfg.get("input_lead_ms", 0.0))
+        if not (0.0 <= self.input_lead_ms <= 250.0):
+            raise ValueError("global_tap_timing.input_lead_ms must be between 0 and 250ms")
         if not (1 <= self.min_tracks <= 16 and 3 <= self.min_samples <= 12 and
                 3 <= self.history_size <= 32 and 1 <= self.max_tracks <= 64 and
                 2 <= self.profile_segments <= 6 and 1 <= self.profile_min_samples <= 8):
@@ -89,6 +105,10 @@ class GlobalTapTimingEstimator:
         self._profile_history = defaultdict(lambda: defaultdict(lambda: deque(maxlen=6)))
         self._profile_edges: tuple[float, ...] = ()
         self._profile_last_capture = -math.inf
+        self._profile_pair_seen: dict[tuple, float] = {}
+        self.speed_epoch = 1
+        self._was_playing = False
+        self._song_reference_velocity: float | None = None
 
     @property
     def active_enabled(self):
@@ -126,7 +146,7 @@ class GlobalTapTimingEstimator:
             speed = dy / dt
             if self.min_velocity <= speed <= self.max_velocity:
                 slopes.append(speed)
-                samples.append(((y0 + y1) / 2.0, speed))
+                samples.append(((y0 + y1) / 2.0, speed, t0, t1))
         if len(slopes) < self.min_samples - 1:
             return None
         speed = float(median(slopes[-(self.history_size - 1):]))
@@ -157,7 +177,15 @@ class GlobalTapTimingEstimator:
         self._profile_history.clear()
         self._profile_edges = ()
         self._profile_last_capture = -math.inf
-        self.model = GlobalTapModel(model_version=self._version, reason="RESET")
+        self._profile_pair_seen.clear()
+        self.speed_epoch += 1
+        self._was_playing = False
+        self._song_reference_velocity = None
+        self.model = GlobalTapModel(model_version=self._version, reason="RESET",
+                                    speed_epoch=self.speed_epoch,
+                                    timing_source=("global_physical_calibrated"
+                                                   if self.timing_reference == "physical_calibrated"
+                                                   else "global_trigger_legacy"))
 
     def update(self, tracks, *, trigger_y: float, capture_timestamp: float,
                now: float, playing: bool = True):
@@ -168,11 +196,23 @@ class GlobalTapTimingEstimator:
             capture_timestamp = float(now)
         self._capture_timestamp = capture_timestamp if math.isfinite(capture_timestamp) else float(now)
         if not self.enabled:
-            self.model = GlobalTapModel(model_version=self._version, reason="DISABLED")
+            self.model = GlobalTapModel(model_version=self._version, reason="DISABLED",
+                                        speed_epoch=self.speed_epoch,
+                                        timing_source=("global_physical_calibrated"
+                                                       if self.timing_reference == "physical_calibrated"
+                                                       else "global_trigger_legacy"))
             return self.model
         if not playing:
-            self.model = GlobalTapModel(model_version=self._version, reason="NOT_PLAYING")
+            if self._was_playing:
+                self.reset()
+            self._was_playing = False
+            self.model = GlobalTapModel(model_version=self._version, reason="NOT_PLAYING",
+                                        speed_epoch=self.speed_epoch,
+                                        timing_source=("global_physical_calibrated"
+                                                       if self.timing_reference == "physical_calibrated"
+                                                       else "global_trigger_legacy"))
             return self.model
+        self._was_playing = True
         edges = self._profile_edges_for(trigger_y)
         # Segment IDs are defined relative to the judgment line.  Never mix
         # samples collected under a different geometry/trigger coordinate.
@@ -196,10 +236,14 @@ class GlobalTapTimingEstimator:
             if not (math.isfinite(observation_age) and 0 <= observation_age <= self.max_observation_age_s):
                 continue
             candidates.append((track.track_id, speed, spread, last_t, len(history)))
-            for sample_y, sample_speed in samples:
+            for sample_y, sample_speed, t0, t1 in samples:
                 segment = self._profile_segment(sample_y, edges)
                 if segment is not None:
-                    current_segment_values[segment][track.track_id].append(sample_speed)
+                    pair_key = (track.track_id, round(float(t0), 7),
+                                round(float(t1), 7), segment)
+                    if pair_key not in self._profile_pair_seen:
+                        self._profile_pair_seen[pair_key] = self._capture_timestamp
+                        current_segment_values[segment][track.track_id].append(sample_speed)
         candidates = candidates[:self.max_tracks]
         # A single confirmed Tap with enough independent real observations is
         # a valid cold-start source.  It may seed the shared model, but never
@@ -219,6 +263,10 @@ class GlobalTapTimingEstimator:
                     del self._profile_history[segment][track_id]
             if not self._profile_history[segment]:
                 del self._profile_history[segment]
+        self._profile_pair_seen = {
+            key: seen_at for key, seen_at in self._profile_pair_seen.items()
+            if self._capture_timestamp - seen_at <= self.profile_ttl_s
+        }
 
         profile_speeds, profile_sigmas, profile_counts = [], [], []
         profile_track_ids = set()
@@ -261,7 +309,11 @@ class GlobalTapTimingEstimator:
                 profile_speeds=tuple(dict(profile_speeds).get(i, float("nan")) for i in range(len(edges)-1)),
                 profile_sigmas=tuple(dict(profile_sigmas).get(i, float("nan")) for i in range(len(edges)-1)),
                 profile_counts=tuple(dict(profile_counts).get(i, 0) for i in range(len(edges)-1)),
-                profile_age_s=(profile_age if math.isfinite(profile_age) else None))
+                profile_age_s=(profile_age if math.isfinite(profile_age) else None),
+                speed_epoch=self.speed_epoch,
+                calibration_state="temporarily_stale" if profile_age > 0 else "unavailable",
+                timing_source=("global_physical_calibrated" if self.timing_reference == "physical_calibrated"
+                               else "global_trigger_legacy"))
             return self.model
         single_track_bootstrap = (len(candidates) == 1 and candidates[0][4] >= self.min_samples)
         cached_age = profile_age
@@ -272,12 +324,21 @@ class GlobalTapTimingEstimator:
                                         sample_count=sum(row[4] for row in candidates),
                                         reason="insufficient_independent_tracks",
                                         profile_edges=edges,
-                                        profile_age_s=(cached_age if math.isfinite(cached_age) else None))
+                                        profile_age_s=(cached_age if math.isfinite(cached_age) else None),
+                                        speed_epoch=self.speed_epoch,
+                                        calibration_state=("temporarily_stale" if math.isfinite(cached_age) and cached_age > 0
+                                                           else "unavailable"),
+                                        timing_source=("global_physical_calibrated" if self.timing_reference == "physical_calibrated"
+                                                       else "global_trigger_legacy"))
             return self.model
         if candidates:
             self._profile_last_capture = self._capture_timestamp
         representative = [speed for _, speed in profile_speeds]
         velocity = float(median(representative))
+        if self._song_reference_velocity is None and math.isfinite(velocity) and velocity > 0:
+            self._song_reference_velocity = velocity
+        song_scale = (velocity / self._song_reference_velocity
+                      if self._song_reference_velocity else 1.0)
         mad = float(median([abs(value - velocity) for value in representative])) if representative else 0.0
         sigma_values = [sigma for _, sigma in profile_sigmas]
         sigma_v = math.sqrt(mad * mad + (median(sigma_values) if sigma_values else 0.0) ** 2)
@@ -286,6 +347,9 @@ class GlobalTapTimingEstimator:
                                 max(velocity, self.min_velocity)))
         source = ("global_profile" if len(profile_speeds) >= 2 and
                   len(profile_track_ids) >= self.min_tracks else "global_bootstrap")
+        calibration_state = ("calibrated" if source == "global_profile" and
+                              all(count >= 2 for _, count in profile_counts)
+                              else "bootstrap")
         profile_by_segment = dict(profile_speeds)
         sigma_by_segment = dict(profile_sigmas)
         count_by_segment = dict(profile_counts)
@@ -303,7 +367,12 @@ class GlobalTapTimingEstimator:
             profile_speeds=tuple(profile_by_segment.get(i, float("nan")) for i in range(len(edges)-1)),
             profile_sigmas=tuple(sigma_by_segment.get(i, float("nan")) for i in range(len(edges)-1)),
             profile_counts=tuple(count_by_segment.get(i, 0) for i in range(len(edges)-1)),
-            profile_age_s=(profile_age if math.isfinite(profile_age) else None))
+            profile_age_s=(profile_age if math.isfinite(profile_age) else None),
+            speed_epoch=self.speed_epoch,
+            song_scale=song_scale,
+            calibration_state=calibration_state,
+            timing_source=("global_physical_calibrated" if self.timing_reference == "physical_calibrated"
+                           else "global_trigger_legacy"))
         return self.model
 
     def _profile_eta(self, observed_y: float, trigger_y: float):
@@ -336,6 +405,13 @@ class GlobalTapTimingEstimator:
                 variance += ((right - left) * sigma_v / (speed * speed)) ** 2
             else:
                 variance += (segment_time * self.max_speed_dispersion) ** 2
+            segment_count = (model.profile_counts[source_index]
+                             if source_index < len(model.profile_counts) else 0)
+            if segment_count < 2 and model.timing_source == "global_physical_calibrated":
+                # Sparse sections remain usable only with an explicit,
+                # bounded uncertainty penalty; do not silently treat one
+                # observation as a high-confidence calibrated segment.
+                variance += (segment_time * .10) ** 2
             used += 1
         if used == 0 or not math.isfinite(total):
             return None
@@ -343,18 +419,29 @@ class GlobalTapTimingEstimator:
                      max(self.model.velocity_px_s or self.min_velocity, self.min_velocity)) ** 2
         return total, max(.001, math.sqrt(max(0.0, variance))), used
 
-    def estimate(self, track, *, trigger_y: float, now: float) -> GlobalTapEta:
+    def estimate(self, track, *, trigger_y: float, now: float,
+                 physical_hit_y: float | None = None,
+                 input_lead_ms: float | None = None) -> GlobalTapEta:
         model = self.model
+        use_physical = (self.timing_reference == "physical_calibrated" and
+                        physical_hit_y is not None and math.isfinite(float(physical_hit_y)))
+        target_y = float(physical_hit_y) if use_physical else float(trigger_y)
+        lead_ms = self.input_lead_ms if input_lead_ms is None else float(input_lead_ms)
+        timing_source = ("global_physical_calibrated" if use_physical
+                         else "global_trigger_legacy")
         history = self._real_history(track)
         if not model.ready or model.velocity_px_s is None:
             return GlobalTapEta(track.track_id, "NOT_READY", model.reason,
-                                 quality=model.quality, model_version=model.model_version)
+                                 quality=model.quality, model_version=model.model_version,
+                                 timing_source=timing_source, lead_ms=lead_ms,
+                                 speed_epoch=model.speed_epoch)
         if (getattr(track, "status", "") != "confirmed" or
                 getattr(track, "confirmed_note_type", None) != "tap" or
                 getattr(track, "missed", 0) != 0 or len(history) < self.min_samples):
             return GlobalTapEta(track.track_id, "NOT_READY", "track_not_current_confirmed",
                                  quality=model.quality, velocity_px_s=model.velocity_px_s,
-                                 model_version=model.model_version)
+                                 model_version=model.model_version, timing_source=timing_source,
+                                 lead_ms=lead_ms, speed_epoch=model.speed_epoch)
         observed_at, observed_y = history[-1]
         # Observation freshness is measured in capture time.  Processing
         # latency must not move the model's timestamp or make a valid frame
@@ -365,15 +452,21 @@ class GlobalTapTimingEstimator:
             return GlobalTapEta(track.track_id, "NOT_READY", "stale_observation",
                                  quality=model.quality, velocity_px_s=model.velocity_px_s,
                                  observed_y=observed_y, observed_at=observed_at,
-                                 model_version=model.model_version)
-        distance = trigger_y - observed_y
-        profile = self._profile_eta(observed_y, trigger_y)
+                                 model_version=model.model_version, timing_source=timing_source,
+                                 lead_ms=lead_ms, speed_epoch=model.speed_epoch)
+        distance = target_y - observed_y
+        profile = self._profile_eta(observed_y, target_y)
         if profile is None:
             return GlobalTapEta(track.track_id, "NOT_READY", "profile_not_ready",
                                 None, None, None, model.quality, model.velocity_px_s,
-                                observed_y, observed_at, model.model_version)
-        eta, profile_uncertainty, used_segments = profile
-        hit_at = observed_at + eta
+                                observed_y, observed_at, model.model_version,
+                                timing_source=timing_source, lead_ms=lead_ms,
+                                speed_epoch=model.speed_epoch)
+        physical_eta, profile_uncertainty, used_segments = profile
+        physical_cross_at = observed_at + physical_eta
+        press_at = physical_cross_at - lead_ms / 1000.0 if use_physical else physical_cross_at
+        hit_at = press_at
+        eta = press_at - observed_at
         velocity = model.velocity_px_s
         sigma_v = model.velocity_sigma_px_s
         sigma_y = self.measurement_noise_px
@@ -382,7 +475,10 @@ class GlobalTapTimingEstimator:
                 not math.isfinite(sigma_y) or sigma_y < 0):
             return GlobalTapEta(track.track_id, "NOT_READY", "invalid_uncertainty_inputs",
                                 eta, hit_at, None, model.quality, velocity,
-                                observed_y, observed_at, model.model_version)
+                                observed_y, observed_at, model.model_version,
+                                physical_cross_at=physical_cross_at, press_at=press_at,
+                                physical_eta_s=physical_eta, lead_ms=lead_ms,
+                                timing_source=timing_source, speed_epoch=model.speed_epoch)
         # First-order propagation for t = (target_y - observed_y) / v.
         # Both terms are seconds: position noise / speed and the distance
         # multiplied by speed uncertainty / speed squared.  Do not cap this
@@ -393,7 +489,7 @@ class GlobalTapTimingEstimator:
         uncertainty = max(.001, profile_uncertainty, math.sqrt(sigma_t_y ** 2 + sigma_t_v ** 2))
         if (not math.isfinite(eta) or not math.isfinite(hit_at) or
                 not math.isfinite(uncertainty) or eta <= 0 or hit_at <= now):
-            reason = "hit_time_not_future"
+            reason = "press_time_not_future" if use_physical else "hit_time_not_future"
             status = "REJECTED"
         elif eta > self.max_eta_s:
             reason, status = "eta_outside_horizon", "REJECTED"
@@ -403,4 +499,6 @@ class GlobalTapTimingEstimator:
             reason, status = "ready", "AVAILABLE"
         return GlobalTapEta(track.track_id, status, reason, eta, hit_at, uncertainty,
                             model.quality, model.velocity_px_s, observed_y, observed_at,
-                            model.model_version)
+                            model.model_version, physical_cross_at=physical_cross_at,
+                            press_at=press_at, physical_eta_s=physical_eta, lead_ms=lead_ms,
+                            timing_source=timing_source, speed_epoch=model.speed_epoch)

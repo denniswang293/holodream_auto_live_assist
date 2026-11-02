@@ -180,3 +180,37 @@ def test_particle_tracking_only_does_not_emit_tap_eta_fields():
     assert prediction.eta_p10 is None
     assert prediction.valid_crossing_mass is None
     assert prediction.fitted_y is not None
+
+
+def test_physical_crossing_and_press_deadline_apply_one_explicit_lead():
+    first = track(1, [(1.00, 200), (1.05, 215), (1.10, 230)])
+    second = track(2, [(1.00, 180), (1.05, 195), (1.10, 210)])
+    modeler = estimator(timing_reference="physical_calibrated", input_lead_ms=30)
+    assert modeler.update([first, second], trigger_y=295.5,
+                          capture_timestamp=1.10, now=1.10).ready
+    result = modeler.estimate(first, trigger_y=295.5, physical_hit_y=325.5, now=1.10)
+    assert result.status == "AVAILABLE"
+    assert result.physical_cross_at is not None
+    assert result.press_at == pytest.approx(result.physical_cross_at - .03)
+    assert result.hit_at == result.press_at
+    assert result.lead_ms == pytest.approx(30)
+    assert result.timing_source == "global_physical_calibrated"
+
+
+def test_profile_pair_is_inserted_once_and_new_epoch_does_not_reuse_old_song():
+    first = track(1, [(1.00, 100), (1.05, 110), (1.10, 120)])
+    second = track(2, [(1.00, 80), (1.05, 90), (1.10, 100)])
+    modeler = estimator()
+    modeler.update([first, second], trigger_y=150, capture_timestamp=1.10, now=1.10)
+    pair_count = len(modeler._profile_pair_seen)
+    modeler.update([first, second], trigger_y=150, capture_timestamp=1.11, now=1.11)
+    assert len(modeler._profile_pair_seen) == pair_count
+    old_epoch = modeler.model.speed_epoch
+    modeler.reset()
+    assert modeler.model.speed_epoch > old_epoch
+    faster_first = track(1, [(2.00, 100), (2.05, 125), (2.10, 150)])
+    faster_second = track(2, [(2.00, 80), (2.05, 105), (2.10, 130)])
+    faster = modeler.update([faster_first, faster_second], trigger_y=180,
+                            capture_timestamp=2.10, now=2.10)
+    assert faster.ready is True
+    assert faster.speed_epoch > old_epoch

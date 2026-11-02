@@ -412,6 +412,31 @@ def test_global_planner_respects_existing_hold_reservation():
     scheduler.close()
 
 
+def test_global_planner_marks_independent_taps_as_shared_timing_group():
+    _, _, _, scheduler = armed_scheduler()
+    planner = TapPlanner({"max_eta_s": .45}, min_y=190)
+    left = add_particle_evidence(make_ready_track(track_id=1, hit_at=10.20, key="F"))
+    right = add_particle_evidence(make_ready_track(track_id=2, hit_at=10.201, key="L"))
+    left.history.insert(0, (9.8, 220, .4))
+    right.history.insert(0, (9.8, 220, .8))
+    from src.global_tap_timing import GlobalTapEta
+    etas = {
+        1: GlobalTapEta(1, "AVAILABLE", "ready", eta_s=.20, hit_at=10.20,
+                         uncertainty_s=.01, quality=1.0, observed_y=280,
+                         observed_at=10.0, physical_cross_at=10.25, press_at=10.20),
+        2: GlobalTapEta(2, "AVAILABLE", "ready", eta_s=.201, hit_at=10.201,
+                         uncertainty_s=.01, quality=1.0, observed_y=280,
+                         observed_at=10.0, physical_cross_at=10.251, press_at=10.201),
+    }
+    decisions, proposals = planner.global_plan([left, right], etas, 10.0,
+                                                {"F", "L"}, scheduler)
+    assert set(proposals) == {1, 2}
+    assert proposals[1].key != proposals[2].key
+    assert proposals[1].timing_group_id == proposals[2].timing_group_id
+    assert decisions[1].timing_group_id == decisions[2].timing_group_id
+    scheduler.close()
+
+
 def test_global_planner_does_not_propose_rejected_uncertainty():
     _, actuator, _, scheduler = armed_scheduler()
     planner = TapPlanner({"max_eta_s": .45}, min_y=190)
@@ -518,6 +543,23 @@ def test_pending_amend_freeze_window_does_not_move_deadline():
     manager.schedule({9: TapProposal(first.note_uid, 9, "F", 10.21, .01, "late")}, scheduler, 10.18)
     assert scheduler.pending[first.note_uid].hit_at == pytest.approx(10.20)
     assert any(row.get("reason") == "deadline_freeze_window" for row in transitions)
+    scheduler.close()
+
+
+def test_pending_amend_does_not_push_deadline_earlier_by_default():
+    clock, _, _, scheduler = armed_scheduler()
+    transitions = []
+    manager = TapIntentManager(transitions.append, amend_enabled=True,
+                               freeze_window_ms=10, max_amend_step_ms=40,
+                               max_total_amend_ms=80)
+    first = TapProposal("session:simple:no_early_amend", 10, "F", 10.20, .01, "first")
+    assert manager.schedule({10: first}, scheduler, 10.0)[0]
+    clock.now = 10.02
+    scheduler.update_context(10.02, "PLAYING", True, True)
+    earlier = TapProposal(first.note_uid, 10, "F", 10.18, .01, "model_update")
+    manager.schedule({10: earlier}, scheduler, 10.02)
+    assert scheduler.pending[first.note_uid].hit_at == pytest.approx(10.20)
+    assert any(row.get("reason") == "amend_earlier_disabled" for row in transitions)
     scheduler.close()
 
 

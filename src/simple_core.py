@@ -14,10 +14,12 @@ class SimpleAssistCore:
     def __init__(self, *, session_id: str, tracker_cfg: dict,
                  particle_cfg: dict, hit_y: float,
                  event_cfg: dict, min_y: float, known_keys: set[str],
-                 on_transition=None, timing_cfg: dict | None = None):
+                 on_transition=None, timing_cfg: dict | None = None,
+                 physical_hit_y: float | None = None):
         self.session_id = session_id
         self.known_keys = set(known_keys)
         self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y)
+        self.physical_hit_y = float(physical_hit_y) if physical_hit_y is not None else None
         timing_cfg = dict(timing_cfg or {})
         simplified_cfg = dict(timing_cfg.get("simplified_tap_planner", {}) or {})
         self._simplified_cfg = simplified_cfg
@@ -43,6 +45,7 @@ class SimpleAssistCore:
         freeze_window_ms = amend_cfg.get("freeze_window_ms", timing_cfg.get("freeze_window_ms", 30))
         max_amend_step_ms = amend_cfg.get("max_amend_step_ms", timing_cfg.get("max_amend_step_ms", 40))
         max_total_amend_ms = amend_cfg.get("max_total_amend_ms", timing_cfg.get("max_total_amend_ms", 80))
+        allow_earlier_amend = amend_cfg.get("allow_earlier_amend", timing_cfg.get("allow_earlier_amend", False))
         self.transitions = []
         def record(row):
             self.transitions.append(dict(row))
@@ -52,7 +55,8 @@ class SimpleAssistCore:
             amend_enabled=bool(amend_enabled),
             freeze_window_ms=freeze_window_ms,
             max_amend_step_ms=max_amend_step_ms,
-            max_total_amend_ms=max_total_amend_ms)
+            max_total_amend_ms=max_total_amend_ms,
+            allow_earlier_amend=bool(allow_earlier_amend))
         self.last_reasons: dict[int, str] = {}
         self.last_traces = {}
         self.decision_rows = []
@@ -101,15 +105,21 @@ class SimpleAssistCore:
         # explicitly enabled for Active use.  The legacy PF timing planner is
         # retained only for backwards-compatible Shadow/disabled callers and
         # is never a fallback in the Global Active path.
+        global_target_y = (self.physical_hit_y
+                           if self.global_timing.timing_reference == "physical_calibrated"
+                           and self.physical_hit_y is not None else self.tracker.hit_y)
         global_model = self.global_timing.update(
-            tracks if enabled else [], trigger_y=self.tracker.hit_y,
+            tracks if enabled else [], trigger_y=global_target_y,
             capture_timestamp=captured_at, now=processed_at, playing=enabled)
         self.global_model_frames += 1
         if global_model.ready:
             self.global_ready_frames += 1
         global_etas = {
             track.track_id: self.global_timing.estimate(
-                track, trigger_y=self.tracker.hit_y, now=processed_at)
+                track, trigger_y=self.tracker.hit_y, now=processed_at,
+                physical_hit_y=(self.physical_hit_y
+                                if self.global_timing.timing_reference == "physical_calibrated"
+                                else None))
             for track in tracks
         }
         global_decisions, global_proposals = self.planner.global_plan(
@@ -325,16 +335,26 @@ class SimpleAssistCore:
                 "velocity_mad_px_s": global_model.velocity_mad_px_s if global_model and global_model.velocity_mad_px_s is not None else "",
                 "velocity_sigma_px_s": global_model.velocity_sigma_px_s if global_model and global_model.velocity_sigma_px_s is not None else "",
                 "model_quality": global_model.quality if global_model else 0.0,
+                "calibration_state": global_model.calibration_state if global_model else "unavailable",
+                "speed_epoch": global_model.speed_epoch if global_model else 0,
+                "song_scale": global_model.song_scale if global_model else 1.0,
+                "timing_source": global_model.timing_source if global_model else "global_trigger_legacy",
                 "eta_status": global_eta.status if global_eta else "NOT_READY",
                 "eta_reason": global_eta.reason if global_eta else "prediction_unavailable",
                 "eta_s": global_eta.eta_s if global_eta and global_eta.eta_s is not None else "",
                 "hit_at": global_eta.hit_at if global_eta and global_eta.hit_at is not None else "",
+                "physical_cross_at": global_eta.physical_cross_at if global_eta and global_eta.physical_cross_at is not None else "",
+                "press_at": global_eta.press_at if global_eta and global_eta.press_at is not None else "",
+                "physical_eta_s": global_eta.physical_eta_s if global_eta and global_eta.physical_eta_s is not None else "",
+                "lead_ms": global_eta.lead_ms if global_eta else "",
+                "eta_timing_source": global_eta.timing_source if global_eta else "global_trigger_legacy",
                 "uncertainty_s": global_eta.uncertainty_s if global_eta and global_eta.uncertainty_s is not None else "",
                 "observed_y": global_eta.observed_y if global_eta and global_eta.observed_y is not None else "",
                 "observed_at": global_eta.observed_at if global_eta and global_eta.observed_at is not None else "",
                 "planner_status": global_decision.status if global_decision else "disabled",
                 "planner_reason": global_decision.reason if global_decision else "",
                 "planner_key": global_decision.key if global_decision and global_decision.key else "",
+                "timing_group_id": global_decision.timing_group_id if global_decision else "",
                 "active_enabled": bool(self.global_timing.active_enabled),
                 "input_sent": False,
             })

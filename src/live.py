@@ -31,7 +31,8 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "confirmed_note_type", "current_observation_type", "identity_state",
                 "association_score", "measurement_quality", "note_uid",
                 "simple_core_state", "simple_core_reason", "lane_span", "crossing_y",
-                "revision", "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
+                "revision", "physical_cross_at", "press_at", "lead_ms", "timing_source",
+                "speed_epoch", "timing_group_id", "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
                 "simple_track_status", "particle_rejection_streak", "particle_reinitializations"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "process_begin", "process_end", "last_validated_capture", "scheduler_poll_at",
@@ -68,12 +69,16 @@ GLOBAL_ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "t
                      "model_status", "model_reason", "model_version",
                      "model_source", "independent_tracks", "sample_count",
                      "profile_segment_count", "profile_age_s", "velocity_px_s",
-                     "velocity_mad_px_s", "velocity_sigma_px_s", "model_quality", "eta_status", "eta_reason",
-                     "eta_s", "hit_at", "uncertainty_s", "observed_y", "observed_at",
-                     "planner_status", "planner_reason", "planner_key", "active_enabled",
+                     "velocity_mad_px_s", "velocity_sigma_px_s", "model_quality", "calibration_state",
+                     "speed_epoch", "song_scale", "timing_source", "eta_status", "eta_reason",
+                     "eta_s", "hit_at", "physical_cross_at", "press_at", "physical_eta_s", "lead_ms",
+                     "eta_timing_source", "uncertainty_s", "observed_y", "observed_at",
+                     "planner_status", "planner_reason", "planner_key", "timing_group_id", "active_enabled",
                      "input_sent"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
-                 "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision"]
+                 "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision",
+                 "physical_cross_at", "press_at", "lead_ms", "timing_source",
+                 "speed_epoch", "timing_group_id"]
 class CsvLog:
     def __init__(self, path, fields, *, batch_size=1, batch_interval_s=0.0):
         self.file = path.open("x", newline="", encoding="utf-8-sig")
@@ -263,6 +268,8 @@ def run(args):
                             identity_trace=identity_trace)
         engine_holder["engine"]=engine
         print(f"Global y-profile ETA Tap assist + PF tracking + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
+        global_cfg = engine.simple_core.global_timing
+        print(f"Tap timing reference: {global_cfg.timing_reference}; input lead: {global_cfg.input_lead_ms:.1f}ms; physical hit y={geometry.hit_y:.1f}", flush=True)
         from .windows_runtime import GlobalControls
         def emergency_stop():
             stopped.set()
@@ -311,7 +318,13 @@ def run(args):
                             "predicted_hit_time": event.get("predicted_hit_time", ""),
                             "uncertainty_s": event.get("uncertainty_s", ""),
                             "gameplay_state": event.get("gameplay_state", ""),
-                            "revision": event.get("revision", "")})
+                            "revision": event.get("revision", ""),
+                            "physical_cross_at": event.get("physical_cross_at", ""),
+                            "press_at": event.get("press_at", ""),
+                            "lead_ms": event.get("lead_ms", ""),
+                            "timing_source": event.get("timing_source", ""),
+                            "speed_epoch": event.get("speed_epoch", ""),
+                            "timing_group_id": event.get("timing_group_id", "")})
                         tap_funnel[event.get("simple_core_state", "unknown")] += 1
                     core_state=event.get("simple_core_state","")
                     if core_state:
@@ -388,6 +401,14 @@ def run(args):
                       "geometry_snapshot": geometry.document, "config": config,
                       "input_trigger_y": engine.trigger_y, "input_advance_px": engine.input_advance_px,
                       "tracking_completion_y": geometry.hit_y,
+                      "tap_timing_calibration": {
+                          "reference": engine.simple_core.global_timing.timing_reference,
+                          "input_lead_ms": engine.simple_core.global_timing.input_lead_ms,
+                          "physical_hit_y": geometry.hit_y,
+                          "timing_source": ("global_physical_calibrated"
+                                             if engine.simple_core.global_timing.timing_reference == "physical_calibrated"
+                                             else "global_trigger_legacy"),
+                      },
                       "hold_visual_enabled": engine.hold_enabled,
                       "judgment_time_model": {"status": engine.judgment_time.status,
                                               "samples": len(engine.judgment_time.samples),

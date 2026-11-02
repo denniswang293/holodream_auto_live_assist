@@ -29,6 +29,11 @@ class TapIntent:
     state: str = "PENDING"
     transitions: list[dict] = field(default_factory=list)
     valid_keys: tuple[str, ...] = ()
+    physical_cross_at: float | None = None
+    lead_ms: float = 0.0
+    timing_source: str = "global_trigger_legacy"
+    speed_epoch: int = 0
+    timing_group_id: str = ""
 
     def action(self):
         return ActionIntent(self.note_uid, (self.key,), self.hit_at,
@@ -48,7 +53,8 @@ class TapIntentManager:
     """
 
     def __init__(self, on_transition=None, *, amend_enabled=False,
-                 freeze_window_ms=30, max_amend_step_ms=40, max_total_amend_ms=80):
+                 freeze_window_ms=30, max_amend_step_ms=40, max_total_amend_ms=80,
+                 allow_earlier_amend=False):
         self.intents: dict[str, TapIntent] = {}
         self.on_transition = on_transition or (lambda row: None)
         self.last_rejections: dict[str, str] = {}
@@ -58,6 +64,7 @@ class TapIntentManager:
         self.freeze_window_s = float(freeze_window_ms) / 1000
         self.max_amend_step_s = float(max_amend_step_ms) / 1000
         self.max_total_amend_s = float(max_total_amend_ms) / 1000
+        self.allow_earlier_amend = bool(allow_earlier_amend)
 
     def note_seen(self, note_uid: str, timestamp: float):
         if note_uid not in self._seen:
@@ -98,7 +105,12 @@ class TapIntentManager:
                 if old.state == "PENDING":
                     if self.amend_enabled and old.key == proposal.key:
                         delta = proposal.hit_at - old.hit_at
-                        if abs(delta) > self.max_amend_step_s:
+                        if delta < 0 and not self.allow_earlier_amend:
+                            self._emit(proposal.note_uid, "REJECTED", now,
+                                       "amend_earlier_disabled", key=old.key,
+                                       hit_at=proposal.hit_at, revision=old.revision,
+                                       previous_hit_at=old.hit_at)
+                        elif abs(delta) > self.max_amend_step_s:
                             self._emit(proposal.note_uid, "REJECTED", now,
                                        "amend_step_too_large", key=old.key, hit_at=proposal.hit_at,
                                        revision=old.revision)
@@ -113,7 +125,10 @@ class TapIntentManager:
                                 proposal.evidence, old.lane_span, old.appearance,
                                 proposal.observed_y, revision, old.initial_hit_at or old.hit_at,
                                 old.total_amend_ms + abs(delta) * 1000,
-                                old.state, list(old.transitions), old.valid_keys)
+                                old.state, list(old.transitions), old.valid_keys,
+                                proposal.physical_cross_at, proposal.lead_ms,
+                                proposal.timing_source, proposal.speed_epoch,
+                                proposal.timing_group_id)
                             result = scheduler.amend_pending(amended.action(),
                                 expected_revision=old.revision,
                                 freeze_window_s=self.freeze_window_s)
@@ -123,7 +138,8 @@ class TapIntentManager:
                                     "state": "AMENDED", "timestamp": now,
                                     "reason": "deadline_updated", "revision": revision,
                                     "previous_hit_at": old.hit_at,
-                                    "hit_at": amended.hit_at}]
+                                    "hit_at": amended.hit_at,
+                                    "direction": "later" if delta > 0 else "earlier"}]
                                 self._emit(proposal.note_uid, "AMENDED", now, "deadline_updated",
                                            key=amended.key, hit_at=amended.hit_at,
                                            revision=revision, previous_hit_at=old.hit_at)
@@ -144,7 +160,12 @@ class TapIntentManager:
             intent = TapIntent(proposal.note_uid, proposal.key, proposal.hit_at,
                                generation, now, proposal.uncertainty, proposal.evidence,
                                proposal.lane_span, proposal.appearance, proposal.observed_y,
-                               0, proposal.hit_at, 0.0, valid_keys=tuple(proposal.valid_keys))
+                               0, proposal.hit_at, 0.0, valid_keys=tuple(proposal.valid_keys),
+                               physical_cross_at=proposal.physical_cross_at,
+                               lead_ms=proposal.lead_ms,
+                               timing_source=proposal.timing_source,
+                               speed_epoch=proposal.speed_epoch,
+                               timing_group_id=proposal.timing_group_id)
             result = scheduler.offer(intent.action())
             if result.accepted:
                 self.intents[proposal.note_uid] = intent

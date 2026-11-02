@@ -1,7 +1,7 @@
 """Evidence gates and one-key assignment for ordinary Simple Core Taps."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 
 from .assignment import assign
@@ -23,6 +23,12 @@ class TapProposal:
     # Preserve the keys already verified by the candidate and stable mapping.
     # The narrow Hold-conflict path may choose only from this evidence.
     valid_keys: tuple[str, ...] = ()
+    physical_cross_at: float | None = None
+    press_at: float | None = None
+    lead_ms: float = 0.0
+    timing_source: str = "global_trigger_legacy"
+    speed_epoch: int = 0
+    timing_group_id: str = ""
 
 
 @dataclass
@@ -72,6 +78,12 @@ class GlobalTapDecision:
     hit_at: float | None
     uncertainty_s: float | None = None
     timing_quality: float | None = None
+    physical_cross_at: float | None = None
+    press_at: float | None = None
+    lead_ms: float = 0.0
+    timing_source: str = "global_trigger_legacy"
+    speed_epoch: int = 0
+    timing_group_id: str = ""
 
 
 class TapPlanner:
@@ -357,21 +369,55 @@ class TapPlanner:
                         else:
                             proposal = TapProposal(uid, track.track_id, key, hit_at,
                                 float(uncertainty),
-                                f"global_speed_eta;quality={float(quality or 0):.3f}",
+                                f"global_eta;quality={float(quality or 0):.3f};"
+                                f"source={getattr(eta, 'timing_source', 'global_trigger_legacy')};"
+                                f"lead_ms={float(getattr(eta, 'lead_ms', 0.0) or 0.0):.1f}",
                                 (c.u_min, c.u_max), c.appearance,
                                 track.history[-1][1] if track.history else None,
-                                tuple(legal))
+                                tuple(legal),
+                                getattr(eta, "physical_cross_at", None),
+                                getattr(eta, "press_at", hit_at),
+                                float(getattr(eta, "lead_ms", 0.0) or 0.0),
+                                getattr(eta, "timing_source", "global_trigger_legacy"),
+                                int(getattr(eta, "speed_epoch", 0) or 0))
                             proposals[track.track_id] = proposal
                             reserved.append((key, hit_at, uid))
                             decisions[track.track_id] = GlobalTapDecision(uid, track.track_id,
                                 "schedule", "global_eligible", key, hit_at,
-                                uncertainty, quality)
+                                uncertainty, quality,
+                                getattr(eta, "physical_cross_at", None),
+                                getattr(eta, "press_at", hit_at),
+                                float(getattr(eta, "lead_ms", 0.0) or 0.0),
+                                getattr(eta, "timing_source", "global_trigger_legacy"),
+                                int(getattr(eta, "speed_epoch", 0) or 0))
                             continue
             decisions[track.track_id] = GlobalTapDecision(uid, track.track_id,
                 "reject" if reason in {"not_confirmed_ordinary_tap", "invalid_lane_span",
                     "hit_time_not_future", "eta_outside_horizon", "global_eta_uncertainty_too_high",
                     "no_stable_verified_covered_key", "fixed_key_not_legal", "tap_key_conflict"}
                 else "defer", reason, None, hit_at, uncertainty, quality)
+        # A timing group is diagnostic metadata only.  It records independent
+        # UIDs that share a calibrated crossing corridor; Scheduler still
+        # receives one intent per UID and keeps its existing reservations.
+        proposal_items = list(proposals.items())
+        for index, (track_id, proposal) in enumerate(proposal_items):
+            group_members = [proposal]
+            for other_id, other in proposal_items[index + 1:]:
+                if other.key == proposal.key:
+                    continue
+                left = proposal.physical_cross_at if proposal.physical_cross_at is not None else proposal.hit_at
+                right = other.physical_cross_at if other.physical_cross_at is not None else other.hit_at
+                if abs(left - right) <= self.conflict_window_s:
+                    group_members.append(other)
+            if len(group_members) < 2:
+                continue
+            group_id = "shared_timing:" + ":".join(sorted(item.note_uid for item in group_members))
+            for member in group_members:
+                member_id = next(item_id for item_id, item in proposal_items if item is member)
+                proposals[member_id] = replace(member, timing_group_id=group_id)
+                decision = decisions.get(member_id)
+                if decision is not None:
+                    decisions[member_id] = replace(decision, timing_group_id=group_id)
         return decisions, proposals
 
     def plan(self, tracks: list[SimpleTrack], now: float, known_keys: set[str], scheduler,

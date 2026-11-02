@@ -1,0 +1,75 @@
+{
+  "metric_scope": "diagnostic_funnel; not game accuracy",
+  "tap_lifecycle_transitions": {
+    "NOT_SCHEDULED": 771,
+    "DETECTED": 61,
+    "CONFIRMED": 40,
+    "PENDING": 19,
+    "SCHEDULED": 19,
+    "FIRED": 19
+  },
+  "input_action_counts": {
+    "arm_requested": 1,
+    "armed": 1,
+    "scheduled": 41,
+    "committed_near_judgment": 19,
+    "key_down": 38,
+    "hold_end": 19,
+    "key_up": 38,
+    "amended": 13,
+    "commit_retained": 15,
+    "canceled": 3,
+    "track_gate_rejected": 1,
+    "disarmed": 1
+  },
+  "simple_intent_terminal_states": {
+    "PENDING": 0,
+    "FIRED": 19,
+    "CANCELED": 0,
+    "EXPIRED": 0
+  },
+  "processed_frames": 2699,
+  "acquired_frames": 2768,
+  "capture_fps": 64.2787489536657,
+  "processing_fps": 61.98341494217869,
+  "latency_p50_ms": 13.03659999393858,
+  "latency_p95_ms": 26.968600013060495,
+  "dropped_frames": 69,
+  "stale_frames": 0,
+  "tap_timing_source": "global",
+  "global_timing_stats": {
+    "model_frames": 2699,
+    "ready_frames": 1634,
+    "ready_ratio": 0.6054094108929233,
+    "status_counts": {
+      "track_not_current_confirmed": 1150,
+      "below_event_min_y": 2532,
+      "eta_outside_horizon": 479,
+      "eta_uncertainty_too_high": 336,
+      "speed_variation_too_high": 70,
+      "global_eligible": 131
+    },
+    "first_schedule_at": {
+      "6848606b88e5:simple:1000003": 159481.5582554,
+      "6848606b88e5:simple:1000004": 159481.7441157,
+      "6848606b88e5:simple:1000005": 159482.3091738,
+      "6848606b88e5:simple:1000008": 159482.5287455,
+      "6848606b88e5:simple:1000014": 159487.5576748,
+      "6848606b88e5:simple:1000011": 159488.2719829,
+      "6848606b88e5:simple:1000012": 159488.2719829,
+      "6848606b88e5:simple:1000016": 159488.3986313,
+      "6848606b88e5:simple:1000028": 159493.0612528,
+      "6848606b88e5:simple:1000030": 159494.3404794,
+      "6848606b88e5:simple:1000034": 159496.321282,
+      "6848606b88e5:simple:1000036": 159496.4156978,
+      "6848606b88e5:simple:1000035": 159498.3353049,
+      "6848606b88e5:simple:1000040": 159501.5440685,
+      "6848606b88e5:simple:1000041": 159502.31858,
+      "6848606b88e5:simple:1000043": 159504.3052483,
+      "6848606b88e5:simple:1000054": 159507.5588059,
+      "6848606b88e5:simple:1000045": 159507.6051213,
+      "6848606b88e5:simple:1000057": 159508.5560518
+    }
+  },
+  "accuracy": "UNVERIFIED"
+}

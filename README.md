@@ -29,6 +29,7 @@ Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shi
 
 - `pf_assisted_reassociation.enabled=false`：PF-assisted 只做 Shadow/offline 診斷，不可送鍵。
 - `live.global_tap_timing`：多軌、分高度的 Global 速度輪廓 ETA 為普通 Tap 的 Active 時間來源；`allow_active=true` 只代表通過 Global gate 的 proposal 可送鍵，PF 僅提供空間追蹤與關聯。
+- `global_tap_timing.timing_reference=physical_calibrated` 時，模型分開記錄 physical crossing 與 press deadline；`input_lead_ms` 是唯一明示的輸入提前補償。預設為 0ms，需以固定歌曲短測校準，不可把 key_down 當成遊戲命中真值。
 - `diagnostics.trace_snapshot.enabled=true`：以有限佇列寫入逐影格追蹤摘要，僅供事後分析，不參與決策。
 - `control.dry_run`、人工啟用、失焦／stale／ESC／F12 停止保護保持不變。
 
