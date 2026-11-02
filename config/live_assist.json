@@ -44,7 +44,8 @@
     "profile_ttl_ms": 3000,
     "profile_min_samples": 1,
     "timing_reference": "physical_calibrated",
-    "input_lead_ms": 0.0
+    "input_lead_ms": 60.0,
+    "ab_label": "V7.14.3-lead-10ms"
   },
   "judgment_calibration_v2": {
     "enabled": true,
@@ -93,5 +94,8 @@
     "tap_min_hit_observations": 2,
     "tap_hit_drift_window": 3,
     "tap_last_chance_single_fit": true
+  },
+  "diagnostics": {
+    "timing_ab_label": "V7.14.3-lead-10ms"
   }
 }
