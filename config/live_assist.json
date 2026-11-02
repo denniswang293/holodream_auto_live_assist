@@ -41,7 +41,7 @@
     "measurement_noise_px": 3.0,
     "max_uncertainty_s": 0.04,
     "profile_segments": 4,
-    "profile_ttl_ms": 450,
+    "profile_ttl_ms": 3000,
     "profile_min_samples": 1,
     "timing_reference": "physical_calibrated",
     "input_lead_ms": 0.0

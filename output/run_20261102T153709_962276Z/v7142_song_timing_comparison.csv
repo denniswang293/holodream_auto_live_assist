@@ -1,3 +1,0 @@
-run_dir,confirmed_uids,scheduled_uids,fired_uids,not_scheduled_rows,key_down_rows,amend_rows,global_available_rows,global_not_ready_rows,global_rejected_rows,profile_rows,bootstrap_rows,timing_groups,game_accuracy
-output\run_20261102T153709_962276Z,118,68,68,1797,101,124,319,5923,6477,11698,910,0,UNKNOWN
-output\run_20261102T104856_979591Z,58,26,26,1202,52,67,116,4402,1998,0,0,0,UNKNOWN

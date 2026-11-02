@@ -214,3 +214,36 @@ def test_profile_pair_is_inserted_once_and_new_epoch_does_not_reuse_old_song():
                             capture_timestamp=2.10, now=2.10)
     assert faster.ready is True
     assert faster.speed_epoch > old_epoch
+
+
+def test_physical_profile_gradient_does_not_count_expected_height_change_as_noise():
+    def local_track(track_id, y, speed):
+        return track(track_id, [(10.0, y), (10.05, y + speed * .05),
+                                (10.10, y + speed * .10)])
+    tracks = [local_track(1, 40, 50), local_track(2, 45, 50),
+              local_track(3, 130, 80), local_track(4, 135, 80),
+              local_track(5, 210, 130), local_track(6, 215, 130),
+              local_track(7, 270, 195), local_track(8, 275, 195)]
+    modeler = estimator(timing_reference="physical_calibrated",
+                        profile_ttl_ms=3000, max_uncertainty_s=.04)
+    model = modeler.update(tracks, trigger_y=325.5,
+                           capture_timestamp=10.11, now=10.11)
+    assert model.calibration_state == "calibrated"
+    result = modeler.estimate(tracks[-1], trigger_y=295.5,
+                              physical_hit_y=325.5, now=10.11)
+    assert result.status == "AVAILABLE"
+    assert result.uncertainty_s < .04
+
+
+def test_physical_profile_same_segment_speed_noise_still_fails_closed():
+    def local_track(track_id, y, speed):
+        return track(track_id, [(10.0, y), (10.05, y + speed * .05),
+                                (10.10, y + speed * .10)])
+    tracks = [local_track(1, 210, 80), local_track(2, 215, 180),
+              local_track(3, 220, 80), local_track(4, 225, 180)]
+    modeler = estimator(timing_reference="physical_calibrated",
+                        profile_ttl_ms=3000, max_uncertainty_s=.04)
+    model = modeler.update(tracks, trigger_y=325.5,
+                           capture_timestamp=10.11, now=10.11)
+    assert model.ready is False
+    assert model.reason == "speed_variation_too_high"

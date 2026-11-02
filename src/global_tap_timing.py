@@ -97,7 +97,7 @@ class GlobalTapTimingEstimator:
                 .1 <= self.max_eta_s <= 1.5 and
                 .001 <= self.measurement_noise_px <= 20 and
                 .01 <= self.max_uncertainty_s <= .2 and
-                .1 <= self.profile_ttl_s <= 2.0):
+                .1 <= self.profile_ttl_s <= 5.0):
             raise ValueError("global_tap_timing limits are outside bounds")
         self.model = GlobalTapModel()
         self._version = 0
@@ -412,12 +412,14 @@ class GlobalTapTimingEstimator:
                 # bounded uncertainty penalty; do not silently treat one
                 # observation as a high-confidence calibrated segment.
                 variance += (segment_time * .10) ** 2
+            # A bounded same-segment process floor keeps a zero-MAD sample
+            # from claiming perfect timing and grows with traversed time. It
+            # is not a cross-height gradient penalty.
+            variance += (segment_time * .05) ** 2
             used += 1
         if used == 0 or not math.isfinite(total):
             return None
-        variance += (self.measurement_noise_px /
-                     max(self.model.velocity_px_s or self.min_velocity, self.min_velocity)) ** 2
-        return total, max(.001, math.sqrt(max(0.0, variance))), used
+        return total, max(0.0, math.sqrt(max(0.0, variance))), used
 
     def estimate(self, track, *, trigger_y: float, now: float,
                  physical_hit_y: float | None = None,
@@ -468,10 +470,8 @@ class GlobalTapTimingEstimator:
         hit_at = press_at
         eta = press_at - observed_at
         velocity = model.velocity_px_s
-        sigma_v = model.velocity_sigma_px_s
         sigma_y = self.measurement_noise_px
-        if (not math.isfinite(velocity) or velocity <= 0 or sigma_v is None or
-                not math.isfinite(sigma_v) or sigma_v < 0 or
+        if (not math.isfinite(velocity) or velocity <= 0 or
                 not math.isfinite(sigma_y) or sigma_y < 0):
             return GlobalTapEta(track.track_id, "NOT_READY", "invalid_uncertainty_inputs",
                                 eta, hit_at, None, model.quality, velocity,
@@ -479,14 +479,20 @@ class GlobalTapTimingEstimator:
                                 physical_cross_at=physical_cross_at, press_at=press_at,
                                 physical_eta_s=physical_eta, lead_ms=lead_ms,
                                 timing_source=timing_source, speed_epoch=model.speed_epoch)
-        # First-order propagation for t = (target_y - observed_y) / v.
-        # Both terms are seconds: position noise / speed and the distance
-        # multiplied by speed uncertainty / speed squared.  Do not cap this
-        # value before applying the safety gate; Shadow CSV must show the
-        # actual uncertainty that caused a rejection.
-        sigma_t_y = sigma_y / velocity
-        sigma_t_v = abs(distance) * sigma_v / (velocity * velocity)
-        uncertainty = max(.001, profile_uncertainty, math.sqrt(sigma_t_y ** 2 + sigma_t_v ** 2))
+        # Position noise is converted with the local v(y).  Do not append the
+        # old full-distance/global-sigma term: profile_uncertainty already
+        # propagated segment-local speed residuals and extrapolation risk.
+        local_segment = self._profile_segment(observed_y, model.profile_edges)
+        known_segments = [index for index, speed in enumerate(model.profile_speeds)
+                          if math.isfinite(speed) and speed > 0]
+        if local_segment is None or not known_segments:
+            local_index = min(known_segments, key=lambda item: abs(item - (local_segment or 0)))
+        else:
+            local_index = (local_segment if local_segment in known_segments else
+                            min(known_segments, key=lambda item: abs(item - local_segment)))
+        local_velocity = model.profile_speeds[local_index]
+        sigma_t_y = sigma_y / max(local_velocity, self.min_velocity)
+        uncertainty = max(.001, math.sqrt(profile_uncertainty ** 2 + sigma_t_y ** 2))
         if (not math.isfinite(eta) or not math.isfinite(hit_at) or
                 not math.isfinite(uncertainty) or eta <= 0 or hit_at <= now):
             reason = "press_time_not_future" if use_physical else "hit_time_not_future"
