@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "run_id": "run_20261103T100128_930576Z",
+  "queue_capacity": 4096,
+  "queue_size": 0,
+  "submitted_rows": 355113,
+  "written_rows": 355113,
+  "dropped_diagnostic_rows": 0,
+  "trace_coverage_frames": 7342,
+  "trace_coverage_min_frame": 0,
+  "trace_coverage_max_frame": 7725,
+  "closed": true
+}
