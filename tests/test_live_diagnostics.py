@@ -2,7 +2,13 @@ import csv
 from contextlib import ExitStack
 
 from src.live import (ACTION_FIELDS, DECISION_FIELDS, EVENT_FIELDS, INTENT_FIELDS,
-                      CsvLog, _render_overlay_if_recording)
+                      CsvLog, _render_overlay_if_recording, actual_timing_ab_label)
+
+
+def test_timing_label_is_derived_from_numeric_lead():
+    assert actual_timing_ab_label(60) == "timing-lead-60ms"
+    assert actual_timing_ab_label("10.0") == "timing-lead-10ms"
+    assert actual_timing_ab_label(float("nan")) == "timing-lead-0ms"
 
 
 def test_tap_decision_csv_preserves_per_gate_and_key_conflict_trace(tmp_path):

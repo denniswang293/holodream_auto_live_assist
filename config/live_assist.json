@@ -45,7 +45,7 @@
     "profile_min_samples": 1,
     "timing_reference": "physical_calibrated",
     "input_lead_ms": 60.0,
-    "ab_label": "V7.14.3-lead-10ms"
+    "ab_label": "timing-lead-60ms"
   },
   "judgment_calibration_v2": {
     "enabled": true,
@@ -96,6 +96,6 @@
     "tap_last_chance_single_fit": true
   },
   "diagnostics": {
-    "timing_ab_label": "V7.14.3-lead-10ms"
+    "timing_ab_label": "timing-lead-60ms"
   }
 }

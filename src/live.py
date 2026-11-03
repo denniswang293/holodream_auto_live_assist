@@ -7,6 +7,7 @@ from contextlib import ExitStack
 import csv
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import threading
 import time
@@ -125,6 +126,17 @@ def _render_overlay_if_recording(recorder, work, tracks, info, engine, dropped):
     return draw_live_overlay(work, tracks, info, engine, dropped)
 
 
+def actual_timing_ab_label(input_lead_ms):
+    """Return a diagnostic label that cannot disagree with numeric lead."""
+    try:
+        value = float(input_lead_ms)
+    except (TypeError, ValueError):
+        value = 0.0
+    if not math.isfinite(value):
+        value = 0.0
+    return f"timing-lead-{value:g}ms"
+
+
 class RecordingIndexLog(CsvLog):
     def submit(self, name, rows, state):
         for row in rows:
@@ -171,6 +183,22 @@ def run(args):
     if args.live_config.exists():
         live_document = json.loads(args.live_config.read_text(encoding="utf-8-sig"))
         config["live"] = {**config.get("live", {}), **live_document}
+    # Keep diagnostic A/B labels derived from the value that actually drives
+    # the active timing model.  Older copied configs occasionally retained a
+    # ``lead-10ms`` label after the numeric lead was changed to 60 ms.  That
+    # label is only metadata; correct it in memory so new runs cannot be
+    # misclassified, without rewriting the user's config file.
+    global_cfg = config.setdefault("live", {}).setdefault("global_tap_timing", {})
+    try:
+        actual_lead_ms = float(global_cfg.get("input_lead_ms", 0.0))
+    except (TypeError, ValueError):
+        actual_lead_ms = 0.0
+    if not math.isfinite(actual_lead_ms):
+        actual_lead_ms = 0.0
+    actual_label = actual_timing_ab_label(actual_lead_ms)
+    global_cfg["ab_label"] = actual_label
+    config.setdefault("live", {}).setdefault("diagnostics", {})["timing_ab_label"] = actual_label
+    config.setdefault("diagnostics", {})["timing_ab_label"] = actual_label
     config.setdefault("predictor", {})
     live_cfg = config.get("live", {})
     config["predictor"]["mode"] = "particle"
