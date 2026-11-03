@@ -1749,6 +1749,11 @@ class LiveEngine:
                         "resolution_basis": "simple_confirmed_tap",
                         "simple_core_state": transition.get("state", ""),
                         "simple_core_reason": transition.get("reason", ""),
+                        "amend_direction": transition.get("amend_direction", ""),
+                        "proposed_delta_ms": transition.get("proposed_delta_ms", ""),
+                        "old_deadline": transition.get("old_deadline", ""),
+                        "new_deadline": transition.get("new_deadline", ""),
+                        "freeze_remaining_ms": transition.get("freeze_remaining_ms", ""),
                         "revision": transition.get("revision", intent.revision if intent else 0),
                         "lane_span": (f"{tr.candidate.u_min:.6f}:{tr.candidate.u_max:.6f}" if tr else
                             f"{intent.lane_span[0]:.6f}:{intent.lane_span[1]:.6f}" if intent else

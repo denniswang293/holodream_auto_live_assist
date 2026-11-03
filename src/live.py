@@ -33,7 +33,9 @@ EVENT_FIELDS = ["event_id", "track_id", "source_frame", "capture_timestamp", "pr
                 "association_score", "measurement_quality", "note_uid",
                 "simple_core_state", "simple_core_reason", "lane_span", "crossing_y",
                 "revision", "physical_cross_at", "press_at", "lead_ms", "timing_source",
-                "speed_epoch", "timing_group_id", "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
+                "speed_epoch", "timing_group_id", "amend_direction", "proposed_delta_ms",
+                "old_deadline", "new_deadline", "freeze_remaining_ms",
+                "particle_predicted_y", "particle_velocity_px_s", "simple_track_observations",
                 "simple_track_status", "particle_rejection_streak", "particle_reinitializations"]
 FRAME_FIELDS = ["frame", "capture_timestamp", "acquired_timestamp", "processing_timestamp", "timestamp_source",
                 "process_begin", "process_end", "last_validated_capture", "scheduler_poll_at",
@@ -79,7 +81,9 @@ GLOBAL_ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "t
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision",
                  "physical_cross_at", "press_at", "lead_ms", "timing_source",
-                 "speed_epoch", "timing_group_id"]
+                 "speed_epoch", "timing_group_id", "amend_direction",
+                 "proposed_delta_ms", "old_deadline", "new_deadline",
+                 "freeze_remaining_ms"]
 class CsvLog:
     def __init__(self, path, fields, *, batch_size=1, batch_interval_s=0.0):
         self.file = path.open("x", newline="", encoding="utf-8-sig")
@@ -160,6 +164,7 @@ def _summary(out, result):
     (out/"live_run.json").write_text(json.dumps(result, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     lines = ["# HoloDream Assist diagnostics", "", f"Stop: {result['stop_reason']}",
              f"Source: {result['source_kind']} | geometry: {result['geometry_status']} ({result['geometry_sha256']})", "",
+             f"Experiment: {result.get('experiment_id', 'none')} | variant: {result.get('variant', 'baseline')}",
              f"Input prediction target: y={result['input_trigger_y']:.1f}; physical track completion: y={result['tracking_completion_y']:.1f}.",
              f"Tap timing source: {result.get('tap_timing_source', 'legacy')}; Global model: {result.get('global_timing_mode', 'disabled')}.",
              f"Processed frames: {result['processed_frames']}; acquired/source frames: {result['acquired_frames']}",
@@ -335,7 +340,7 @@ def run(args):
                     event_log.write(event)
                     if event.get("simple_core_state") in {
                             "DETECTED", "CONFIRMED", "SCHEDULED", "PENDING", "FIRED",
-                            "EXPIRED", "CANCELED", "NOT_SCHEDULED"}:
+                            "EXPIRED", "CANCELED", "NOT_SCHEDULED", "AMENDED", "REJECTED"}:
                         intent_log.write({
                             "event_id": event.get("event_id", ""),
                             "note_uid": event.get("note_uid", event.get("event_id", "")),
@@ -352,7 +357,12 @@ def run(args):
                             "lead_ms": event.get("lead_ms", ""),
                             "timing_source": event.get("timing_source", ""),
                             "speed_epoch": event.get("speed_epoch", ""),
-                            "timing_group_id": event.get("timing_group_id", "")})
+                            "timing_group_id": event.get("timing_group_id", ""),
+                            "amend_direction": event.get("amend_direction", ""),
+                            "proposed_delta_ms": event.get("proposed_delta_ms", ""),
+                            "old_deadline": event.get("old_deadline", ""),
+                            "new_deadline": event.get("new_deadline", ""),
+                            "freeze_remaining_ms": event.get("freeze_remaining_ms", "")})
                         tap_funnel[event.get("simple_core_state", "unknown")] += 1
                     core_state=event.get("simple_core_state","")
                     if core_state:
@@ -421,6 +431,10 @@ def run(args):
                       "simple_intent_states": simple_states,
                       "source_kind": "actual window capture",
                       "window_title": target.title if target else None,
+                      "experiment_id": (live_cfg.get("experiment") or {}).get("experiment_id", "none"),
+                      "variant": (live_cfg.get("experiment") or {}).get("variant", "baseline"),
+                      "experiment_input_lead_ms": engine.simple_core.global_timing.input_lead_ms,
+                      "experiment_allow_earlier_amend": engine.simple_core.intents.allow_earlier_amend,
                       "region": list(region.bounds) if region else None,
                       "normalization_transform": capture_fit.as_dict(),
                       "capture_backend": worker.backend_name,
@@ -484,6 +498,10 @@ def run(args):
                 "dropped_frames": result["dropped_frames"],
                 "stale_frames": result["stale_frames"],
                 "tap_timing_source": result["tap_timing_source"],
+                "experiment_id": result["experiment_id"],
+                "variant": result["variant"],
+                "experiment_input_lead_ms": result["experiment_input_lead_ms"],
+                "experiment_allow_earlier_amend": result["experiment_allow_earlier_amend"],
                 "global_timing_stats": result["global_timing_stats"],
                 "accuracy": "UNVERIFIED"
             }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")

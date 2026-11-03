@@ -1,0 +1,1135 @@
+{
+  "mode": "assist",
+  "predictor_mode": "particle",
+  "tap_core": "global_eta_pf_tracking",
+  "tap_timing_source": "global",
+  "global_timing_mode": "active",
+  "global_timing_active": true,
+  "global_timing_stats": {
+    "model_frames": 8142,
+    "ready_frames": 6501,
+    "ready_ratio": 0.7984524686809138,
+    "status_counts": {
+      "track_not_current_confirmed": 6033,
+      "below_event_min_y": 10165,
+      "eta_outside_horizon": 1548,
+      "speed_variation_too_high": 109,
+      "eta_uncertainty_too_high": 303,
+      "global_eligible": 2263,
+      "press_time_not_future": 107,
+      "tap_key_conflict": 56,
+      "fixed_key_not_legal": 2
+    },
+    "first_schedule_at": {
+      "d04061fe0afa:simple:1000001": 209494.1618129,
+      "d04061fe0afa:simple:1000003": 209495.1206985,
+      "d04061fe0afa:simple:1000007": 209495.2143154,
+      "d04061fe0afa:simple:1000004": 209496.1862354,
+      "d04061fe0afa:simple:1000005": 209496.4354123,
+      "d04061fe0afa:simple:1000008": 209496.7163009,
+      "d04061fe0afa:simple:1000006": 209496.9828003,
+      "d04061fe0afa:simple:1000009": 209497.2002701,
+      "d04061fe0afa:simple:1000010": 209502.1514788,
+      "d04061fe0afa:simple:1000011": 209502.1514788,
+      "d04061fe0afa:simple:1000015": 209502.2447201,
+      "d04061fe0afa:simple:1000012": 209502.961956,
+      "d04061fe0afa:simple:1000013": 209502.961956,
+      "d04061fe0afa:simple:1000019": 209503.2276574,
+      "d04061fe0afa:simple:1000024": 209504.2444078,
+      "d04061fe0afa:simple:1000023": 209505.9879844,
+      "d04061fe0afa:simple:1000022": 209506.0040411,
+      "d04061fe0afa:simple:1000027": 209506.9755565,
+      "d04061fe0afa:simple:1000031": 209507.48795,
+      "d04061fe0afa:simple:1000040": 209507.6566759,
+      "d04061fe0afa:simple:1000033": 209507.9841653,
+      "d04061fe0afa:simple:1000041": 209508.1881237,
+      "d04061fe0afa:simple:1000044": 209508.7142847,
+      "d04061fe0afa:simple:1000037": 209508.9812356,
+      "d04061fe0afa:simple:1000045": 209510.961201,
+      "d04061fe0afa:simple:1000047": 209513.2516549,
+      "d04061fe0afa:simple:1000052": 209513.331166,
+      "d04061fe0afa:simple:1000050": 209515.0027798,
+      "d04061fe0afa:simple:1000054": 209515.9971028,
+      "d04061fe0afa:simple:1000055": 209517.1313105,
+      "d04061fe0afa:simple:1000064": 209519.2545429,
+      "d04061fe0afa:simple:1000062": 209521.1385129,
+      "d04061fe0afa:simple:1000070": 209521.3261583,
+      "d04061fe0afa:simple:1000066": 209521.9664127,
+      "d04061fe0afa:simple:1000067": 209521.9664127,
+      "d04061fe0afa:simple:1000073": 209522.277881,
+      "d04061fe0afa:simple:1000068": 209522.9495344,
+      "d04061fe0afa:simple:1000069": 209522.9495344,
+      "d04061fe0afa:simple:1000078": 209523.3227247,
+      "d04061fe0afa:simple:1000071": 209523.9614439,
+      "d04061fe0afa:simple:1000072": 209523.9614439,
+      "d04061fe0afa:simple:1000083": 209524.3210783,
+      "d04061fe0afa:simple:1000074": 209524.461765,
+      "d04061fe0afa:simple:1000075": 209524.461765,
+      "d04061fe0afa:simple:1000085": 209524.6959943,
+      "d04061fe0afa:simple:1000087": 209524.7270116,
+      "d04061fe0afa:simple:1000088": 209524.883429,
+      "d04061fe0afa:simple:1000091": 209525.0380968,
+      "d04061fe0afa:simple:1000093": 209525.0681524,
+      "d04061fe0afa:simple:1000092": 209525.0999169,
+      "d04061fe0afa:simple:1000101": 209525.3179115,
+      "d04061fe0afa:simple:1000109": 209528.1431611,
+      "d04061fe0afa:simple:1000110": 209528.1431611,
+      "d04061fe0afa:simple:1000118": 209528.3004314,
+      "d04061fe0afa:simple:1000115": 209528.9719152,
+      "d04061fe0afa:simple:1000123": 209529.2059562,
+      "d04061fe0afa:simple:1000116": 209529.4848501,
+      "d04061fe0afa:simple:1000125": 209529.609439,
+      "d04061fe0afa:simple:1000127": 209529.718358,
+      "d04061fe0afa:simple:1000117": 209530.1411161,
+      "d04061fe0afa:simple:1000130": 209530.1411161,
+      "d04061fe0afa:simple:1000121": 209530.5025479,
+      "d04061fe0afa:simple:1000132": 209530.6712938,
+      "d04061fe0afa:simple:1000122": 209531.1233589,
+      "d04061fe0afa:simple:1000134": 209531.4047139,
+      "d04061fe0afa:simple:1000129": 209531.9943536,
+      "d04061fe0afa:simple:1000131": 209532.4925647,
+      "d04061fe0afa:simple:1000140": 209532.6488282,
+      "d04061fe0afa:simple:1000133": 209532.9733953,
+      "d04061fe0afa:simple:1000143": 209533.0831536,
+      "d04061fe0afa:simple:1000135": 209533.4755306,
+      "d04061fe0afa:simple:1000137": 209533.9737002,
+      "d04061fe0afa:simple:1000139": 209534.4760892,
+      "d04061fe0afa:simple:1000144": 209534.9764866,
+      "d04061fe0afa:simple:1000147": 209535.9728135,
+      "d04061fe0afa:simple:1000148": 209535.9728135,
+      "d04061fe0afa:simple:1000149": 209536.965477,
+      "d04061fe0afa:simple:1000150": 209537.4618158,
+      "d04061fe0afa:simple:1000151": 209537.9604366,
+      "d04061fe0afa:simple:1000153": 209538.4745543,
+      "d04061fe0afa:simple:1000154": 209538.9595381,
+      "d04061fe0afa:simple:1000156": 209539.9707621,
+      "d04061fe0afa:simple:1000157": 209540.4678951,
+      "d04061fe0afa:simple:1000158": 209540.9633454,
+      "d04061fe0afa:simple:1000161": 209541.1194799,
+      "d04061fe0afa:simple:1000159": 209541.4639025,
+      "d04061fe0afa:simple:1000163": 209541.6042606,
+      "d04061fe0afa:simple:1000160": 209541.9636831,
+      "d04061fe0afa:simple:1000165": 209544.1568746,
+      "d04061fe0afa:simple:1000176": 209544.251209,
+      "d04061fe0afa:simple:1000168": 209544.4879876,
+      "d04061fe0afa:simple:1000182": 209544.9720467,
+      "d04061fe0afa:simple:1000172": 209545.9701421,
+      "d04061fe0afa:simple:1000185": 209546.6268876,
+      "d04061fe0afa:simple:1000192": 209546.6726816,
+      "d04061fe0afa:simple:1000193": 209547.0002459,
+      "d04061fe0afa:simple:1000188": 209547.9650871,
+      "d04061fe0afa:simple:1000191": 209548.46397,
+      "d04061fe0afa:simple:1000201": 209548.7472995,
+      "d04061fe0afa:simple:1000194": 209548.9805572,
+      "d04061fe0afa:simple:1000204": 209549.2017557,
+      "d04061fe0afa:simple:1000203": 209549.2177258,
+      "d04061fe0afa:simple:1000198": 209549.4803689,
+      "d04061fe0afa:simple:1000208": 209549.6669136,
+      "d04061fe0afa:simple:1000199": 209549.9776929,
+      "d04061fe0afa:simple:1000213": 209550.2451866,
+      "d04061fe0afa:simple:1000200": 209550.4797921,
+      "d04061fe0afa:simple:1000214": 209550.7002305,
+      "d04061fe0afa:simple:1000215": 209550.7002305,
+      "d04061fe0afa:simple:1000217": 209551.1383524,
+      "d04061fe0afa:simple:1000211": 209551.9803728,
+      "d04061fe0afa:simple:1000218": 209552.4766094,
+      "d04061fe0afa:simple:1000220": 209553.0857708,
+      "d04061fe0afa:simple:1000222": 209553.9904527,
+      "d04061fe0afa:simple:1000228": 209554.2869404,
+      "d04061fe0afa:simple:1000223": 209554.4778838,
+      "d04061fe0afa:simple:1000231": 209555.0092422,
+      "d04061fe0afa:simple:1000226": 209555.9813031,
+      "d04061fe0afa:simple:1000229": 209556.4817723,
+      "d04061fe0afa:simple:1000236": 209556.6379662,
+      "d04061fe0afa:simple:1000237": 209556.7003361,
+      "d04061fe0afa:simple:1000232": 209556.96606,
+      "d04061fe0afa:simple:1000239": 209557.1990554,
+      "d04061fe0afa:simple:1000233": 209557.480647,
+      "d04061fe0afa:simple:1000234": 209557.9825798,
+      "d04061fe0afa:simple:1000235": 209558.4818982,
+      "d04061fe0afa:simple:1000238": 209558.9791504,
+      "d04061fe0afa:simple:1000240": 209564.166556,
+      "d04061fe0afa:simple:1000241": 209565.1363683,
+      "d04061fe0afa:simple:1000242": 209565.4642486,
+      "d04061fe0afa:simple:1000243": 209565.9611492,
+      "d04061fe0afa:simple:1000249": 209566.2923673,
+      "d04061fe0afa:simple:1000252": 209566.6516303,
+      "d04061fe0afa:simple:1000244": 209566.9618579,
+      "d04061fe0afa:simple:1000245": 209567.4650158,
+      "d04061fe0afa:simple:1000255": 209567.5587116,
+      "d04061fe0afa:simple:1000256": 209567.7122588,
+      "d04061fe0afa:simple:1000262": 209574.172632,
+      "d04061fe0afa:simple:1000260": 209576.1525076,
+      "d04061fe0afa:simple:1000261": 209576.1525076,
+      "d04061fe0afa:simple:1000263": 209576.9633883,
+      "d04061fe0afa:simple:1000264": 209578.1162961,
+      "d04061fe0afa:simple:1000266": 209578.4590371,
+      "d04061fe0afa:simple:1000267": 209578.9581729,
+      "d04061fe0afa:simple:1000268": 209579.9866532,
+      "d04061fe0afa:simple:1000269": 209580.4855378,
+      "d04061fe0afa:simple:1000273": 209580.6733698,
+      "d04061fe0afa:simple:1000270": 209581.189859,
+      "d04061fe0afa:simple:1000271": 209581.67326,
+      "d04061fe0afa:simple:1000272": 209582.2662355,
+      "d04061fe0afa:simple:1000281": 209584.1478615,
+      "d04061fe0afa:simple:1000284": 209584.1792029,
+      "d04061fe0afa:simple:1000280": 209584.4593247,
+      "d04061fe0afa:simple:1000296": 209584.799268,
+      "d04061fe0afa:simple:1000286": 209586.2371325,
+      "d04061fe0afa:simple:1000300": 209586.3142537,
+      "d04061fe0afa:simple:1000299": 209586.6406931,
+      "d04061fe0afa:simple:1000306": 209587.0790799,
+      "d04061fe0afa:simple:1000301": 209587.9719476,
+      "d04061fe0afa:simple:1000304": 209588.487604,
+      "d04061fe0afa:simple:1000319": 209588.6738964,
+      "d04061fe0afa:simple:1000307": 209588.9990531,
+      "d04061fe0afa:simple:1000320": 209589.0143968,
+      "d04061fe0afa:simple:1000309": 209589.4959987,
+      "d04061fe0afa:simple:1000321": 209589.620768,
+      "d04061fe0afa:simple:1000312": 209589.9964094,
+      "d04061fe0afa:simple:1000323": 209590.1531154,
+      "d04061fe0afa:simple:1000316": 209590.4997331,
+      "d04061fe0afa:simple:1000325": 209590.5153217,
+      "d04061fe0afa:simple:1000324": 209592.0929981,
+      "d04061fe0afa:simple:1000328": 209592.6233175,
+      "d04061fe0afa:simple:1000332": 209594.0154471,
+      "d04061fe0afa:simple:1000333": 209594.651046,
+      "d04061fe0afa:simple:1000336": 209594.7598598,
+      "d04061fe0afa:simple:1000334": 209596.1543192,
+      "d04061fe0afa:simple:1000335": 209596.4530622,
+      "d04061fe0afa:simple:1000341": 209596.6855426,
+      "d04061fe0afa:simple:1000337": 209597.1215614,
+      "d04061fe0afa:simple:1000344": 209597.2463619,
+      "d04061fe0afa:simple:1000338": 209597.4799227,
+      "d04061fe0afa:simple:1000339": 209597.9920844,
+      "d04061fe0afa:simple:1000340": 209598.477476,
+      "d04061fe0afa:simple:1000342": 209598.9931678
+    }
+  },
+  "simple_intent_states": {
+    "PENDING": 0,
+    "FIRED": 183,
+    "CANCELED": 0,
+    "EXPIRED": 0
+  },
+  "source_kind": "actual window capture",
+  "window_title": "hololive-Dreams",
+  "experiment_id": "v7147_tap_earlier_amend_ab",
+  "variant": "experiment",
+  "experiment_input_lead_ms": 60.0,
+  "experiment_allow_earlier_amend": true,
+  "region": [
+    0,
+    0,
+    1920,
+    1080
+  ],
+  "normalization_transform": {
+    "native_size": [
+      1920,
+      1080
+    ],
+    "viewport_size": [
+      720,
+      404
+    ],
+    "crop": [
+      0,
+      0,
+      1920,
+      1080
+    ],
+    "scale": 0.37407407407407406,
+    "letterbox_offset": [
+      0.8888888888889142,
+      0.0
+    ],
+    "stored_points": "native_original_frame"
+  },
+  "capture_backend": "dxcam",
+  "capture_fallback_reason": "",
+  "geometry_status": "pending_calibration",
+  "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+  "geometry_snapshot": {
+    "schema_version": 4,
+    "reference_resolution": [
+      720,
+      404
+    ],
+    "lane_count": 6,
+    "key_map": [
+      "S",
+      "D",
+      "F",
+      "J",
+      "K",
+      "L"
+    ],
+    "model_type": "linear",
+    "status": "pending_calibration",
+    "created_at": "2026-10-27T00:49:40.164394+00:00",
+    "updated_at": "2026-10-28T06:01:24.778611+00:00",
+    "source": {
+      "video": "C:\\Users\\USER\\Desktop\\holodream\\output\\live_v6\\run_20261028T053448_966460Z\\live_source_v6.mp4",
+      "video_sha256": "52dd25aa3ae568e520a8547bd4514c5782acb250ac2c952876b857edaf67b81f",
+      "fps": 60.0,
+      "frame_count": 9309
+    },
+    "controls": {
+      "lane_rows": [
+        {
+          "id": "spawn",
+          "band": "spawn",
+          "y": 28.0,
+          "points": [
+            {
+              "x": 317.11,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 331.02633333333335,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 344.9426666666667,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 358.85900000000004,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 372.7753333333333,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 386.69166666666666,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 400.608,
+              "y": 28.0,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            }
+          ]
+        },
+        {
+          "id": "middle",
+          "band": "middle",
+          "y": 176.75,
+          "points": [
+            {
+              "x": 188.05101080246914,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 245.16162011316874,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 302.27222942386834,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 359.38283873456794,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 416.4934480452675,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 473.6040573559671,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 530.7146666666667,
+              "y": 176.75,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            }
+          ]
+        },
+        {
+          "id": "hit",
+          "band": "hit",
+          "y": 325.5,
+          "points": [
+            {
+              "x": 58.99202160493826,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 159.29690689300412,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 259.60179218107,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 359.9066774691358,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 460.21156275720165,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 560.5164480452675,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            },
+            {
+              "x": 660.8213333333333,
+              "y": 325.5,
+              "origin": "derived_estimate",
+              "confirmed": false,
+              "frame": 1298,
+              "reviewer": "",
+              "method": "retained_lane_projection_at_measured_live_judgment",
+              "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+            }
+          ]
+        }
+      ],
+      "outer_rows": [
+        {
+          "y": 28.0,
+          "left": {
+            "x": 317.11,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          "right": {
+            "x": 400.608,
+            "y": 28.0,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          }
+        },
+        {
+          "y": 176.75,
+          "left": {
+            "x": 188.05101080246914,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          "right": {
+            "x": 530.7146666666666,
+            "y": 176.75,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          }
+        },
+        {
+          "y": 325.5,
+          "left": {
+            "x": 58.99202160493827,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          },
+          "right": {
+            "x": 660.8213333333333,
+            "y": 325.5,
+            "origin": "derived_estimate",
+            "confirmed": false,
+            "frame": 1298,
+            "reviewer": "",
+            "method": "retained_lane_projection_at_measured_live_judgment",
+            "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+          }
+        }
+      ],
+      "hit_line": [
+        {
+          "x": 58.99202160493827,
+          "y": 325.5,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        },
+        {
+          "x": 660.8213333333333,
+          "y": 325.5,
+          "origin": "derived_estimate",
+          "confirmed": false,
+          "frame": 1298,
+          "reviewer": "",
+          "method": "retained_lane_projection_at_measured_live_judgment",
+          "note": "Machine-derived live snapshot; not independently confirmed manual geometry"
+        }
+      ]
+    },
+    "frame_transform": {
+      "native_size": [
+        720,
+        404
+      ],
+      "crop": [
+        0,
+        0,
+        720,
+        404
+      ],
+      "coordinate_space": "native_recorded_source",
+      "preview_only": true
+    },
+    "validation_evidence": null,
+    "notes": "UNVERIFIED live control geometry: judgment bar measured from persistent native-frame edges; lane projection retained and compared with temporal cyan rails at upper/middle/lower heights. Original video geometry and human annotations are not overwritten.",
+    "model_parameters": {
+      "definition": "native frame coordinates; piecewise x per boundary vs y; homography uses normalized frame"
+    },
+    "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+    "derived_from_geometry_sha256": "f1aae5990a73f74be2ef563d1e4487e61c5f57d255e6f0c8454e7d66b633435b",
+    "live_measurement": {
+      "frames": [
+        1298,
+        1396,
+        1495,
+        1594,
+        1693,
+        1792,
+        1891,
+        1990,
+        2089,
+        2188,
+        2287,
+        2386,
+        2485,
+        2584,
+        2683,
+        2782,
+        2881,
+        2980,
+        3079,
+        3178,
+        3277,
+        3375,
+        3474,
+        3573,
+        3672,
+        3771,
+        3870,
+        3969,
+        4068,
+        4167,
+        4266,
+        4365,
+        4464,
+        4563,
+        4662,
+        4761,
+        4860,
+        4959,
+        5058,
+        5157,
+        5256,
+        5354,
+        5453,
+        5552,
+        5651,
+        5750,
+        5849,
+        5948,
+        6047,
+        6146,
+        6245,
+        6344,
+        6443,
+        6542,
+        6641,
+        6740,
+        6839,
+        6938,
+        7037,
+        7136,
+        7235,
+        7333,
+        7432,
+        7531,
+        7630,
+        7729,
+        7828,
+        7927,
+        8026,
+        8125,
+        8224,
+        8323,
+        8428,
+        8527,
+        8626,
+        8725,
+        8824,
+        8923,
+        9022,
+        9121,
+        9220
+      ],
+      "judgment_y": 325.5,
+      "split_sample_judgment_ys": [
+        325.5,
+        325.5,
+        325.5
+      ],
+      "rail_fit_p95_px": [
+        0.608288201259981,
+        0.9317656153163054
+      ],
+      "rail_registration": [
+        {
+          "y": 28.0,
+          "retained_rails": [
+            317.11,
+            400.608
+          ],
+          "measured_rail_fit": [
+            318.5801069273662,
+            401.0030220173242
+          ],
+          "max_difference_px": 1.4701069273662029
+        },
+        {
+          "y": 190.0,
+          "retained_rails": [
+            176.555,
+            542.304
+          ],
+          "measured_rail_fit": [
+            178.0024936397467,
+            541.7573488228456
+          ],
+          "max_difference_px": 1.447493639746682
+        },
+        {
+          "y": 325.5,
+          "retained_rails": [
+            58.99202160493827,
+            660.8213333333333
+          ],
+          "measured_rail_fit": [
+            60.42060104423774,
+            659.487048095365
+          ],
+          "max_difference_px": 1.4285794392994688
+        }
+      ],
+      "status": "AUTO_ESTIMATE_NOT_MANUAL_VALIDATION",
+      "judgment_bar_top_y": 313
+    }
+  },
+  "config": {
+    "reference_resolution": [
+      720,
+      404
+    ],
+    "key_map": [
+      "S",
+      "D",
+      "F",
+      "J",
+      "K",
+      "L"
+    ],
+    "playfield": {
+      "top_y": 28,
+      "top_left_x": 346,
+      "top_right_x": 374,
+      "hit_y": 352,
+      "bottom_left_x": 36,
+      "bottom_right_x": 684
+    },
+    "capture": {
+      "fps_target": 120,
+      "crop_game_window": true
+    },
+    "timing": {
+      "offset_ms": 0,
+      "tap_duration_ms": 25
+    },
+    "control": {
+      "dry_run": true,
+      "flick_mode": "unverified",
+      "hold_mode": "unverified"
+    },
+    "diagnostics": {
+      "live_identity_trace": {
+        "enabled": true,
+        "max_queue_rows": 4096,
+        "max_candidate_rows": 2000,
+        "max_pair_rows": 10000,
+        "sample_every": 1,
+        "case_frames": []
+      },
+      "trace_snapshot": {
+        "enabled": true,
+        "max_rows": 512,
+        "schema_version": "v791.1"
+      },
+      "timing_ab_label": "timing-lead-60ms"
+    },
+    "pf_assisted_reassociation": {
+      "enabled": false,
+      "mode": "shadow",
+      "offline_only": true,
+      "require_real_candidate": true,
+      "allow_coasting_to_fire": false,
+      "preserve_hard_gates": true,
+      "min_score_margin": 0.5
+    },
+    "detector": {
+      "edge_threshold": 65,
+      "min_area": 55,
+      "min_aspect": 2.0,
+      "min_score": 0.42,
+      "min_lane_width": 0.7,
+      "min_colored_fraction": 0.12,
+      "lane_min_overlap_fraction": 0.15,
+      "association_diagnostics": {
+        "enabled": false,
+        "max_candidate_rows": 2000,
+        "max_pair_rows": 10000
+      },
+      "pink_tap": {
+        "enabled": true,
+        "min_mask_fraction": 0.2,
+        "max_core_trim_px": 8
+      }
+    },
+    "gameplay": {
+      "confirm_frames": 3,
+      "hsv_lower": [
+        78,
+        65,
+        170
+      ],
+      "hsv_upper": [
+        104,
+        255,
+        255
+      ],
+      "min_cyan_fraction": 0.15,
+      "hud_regions": {
+        "score": [
+          80,
+          10,
+          280,
+          38
+        ],
+        "life": [
+          550,
+          10,
+          655,
+          40
+        ],
+        "pause": [
+          675,
+          10,
+          710,
+          50
+        ]
+      }
+    },
+    "tracker": {
+      "confirm_observations": 5,
+      "max_missed_frames": 8,
+      "max_gap_s": 0.16,
+      "max_u_step": 0.09,
+      "backward_jitter_px": 3.5,
+      "stationary_after_s": 0.2,
+      "stationary_span_px": 5,
+      "pink_min_displacement_px": 5,
+      "max_hit_drift_s": 0.08,
+      "experimental_local_reassociation": {
+        "enabled": false,
+        "offline_only": true
+      }
+    },
+    "predictor": {
+      "mode": "particle",
+      "window": 11,
+      "min_observations": 5,
+      "min_duration_s": 0.05,
+      "min_velocity": 20,
+      "max_velocity": 1800,
+      "min_displacement_px": 5,
+      "jitter_px": 3.5,
+      "lookahead_s": 1.5,
+      "max_uncertainty_s": 0.04,
+      "particle": {
+        "count": 128,
+        "ess_resample_fraction": 0.5,
+        "min_real_observations": 4,
+        "max_coast_ms": 90,
+        "max_posterior_width_ms": 40,
+        "min_valid_crossing_mass": 0.95,
+        "max_prediction_horizon_ms": 1500,
+        "use_acceleration": false,
+        "deterministic_seed": 20261030,
+        "measurement_model": "student_t",
+        "position_process_noise_px_sqrt_s": 1.8,
+        "velocity_process_noise_px_s_sqrt_s": 8.0,
+        "lane_process_noise_sqrt_s": 0.0015,
+        "position_measurement_noise_px": 3.0,
+        "lane_measurement_noise": 0.012,
+        "observation_gate_px": 32.0,
+        "min_velocity": 20,
+        "max_velocity": 1800
+      }
+    },
+    "events": {
+      "max_eta_s": 0.45,
+      "min_y": 190,
+      "max_hit_drift_s": 0.06
+    },
+    "live": {
+      "capture_fps": 120,
+      "keyboard_input_mode": "scan_code",
+      "max_frame_age_ms": 60,
+      "stale_context_pause_ms": 200,
+      "max_input_lateness_ms": 15,
+      "input_advance_px": 30,
+      "tap_deadline_amend": {
+        "enabled": true,
+        "freeze_window_ms": 30,
+        "max_amend_step_ms": 40,
+        "max_total_amend_ms": 80,
+        "allow_earlier_amend": true
+      },
+      "simplified_tap_planner": {
+        "enabled": false,
+        "mode": "shadow",
+        "reason": "Keep legacy gates until paired replay confirms no false-positive increase"
+      },
+      "linear_timing": {
+        "enabled": false,
+        "mode": "shadow",
+        "window": 5,
+        "min_velocity": 20,
+        "max_observation_age_ms": 200
+      },
+      "global_tap_timing": {
+        "enabled": true,
+        "mode": "active",
+        "allow_active": true,
+        "min_tracks": 2,
+        "min_samples": 3,
+        "history_size": 8,
+        "max_tracks": 32,
+        "max_observation_age_ms": 180,
+        "min_velocity": 20,
+        "max_velocity": 1800,
+        "max_speed_dispersion": 0.25,
+        "max_jump_px": 80,
+        "max_eta_s": 0.45,
+        "measurement_noise_px": 3.0,
+        "max_uncertainty_s": 0.04,
+        "profile_segments": 4,
+        "profile_ttl_ms": 3000,
+        "profile_min_samples": 1,
+        "timing_reference": "physical_calibrated",
+        "input_lead_ms": 60.0,
+        "ab_label": "timing-lead-60ms"
+      },
+      "judgment_calibration_v2": {
+        "enabled": true,
+        "mode": "shadow",
+        "min_samples": 20,
+        "offset_ms": 0
+      },
+      "hold_tracker_v2": {
+        "enabled": true,
+        "min_head_observations": 2,
+        "dropout_grace_ms": 120
+      },
+      "hold_visual": {
+        "enabled": true,
+        "path_appearances": [
+          "green_candidate",
+          "yellow_bar"
+        ],
+        "control_rule": "hold_start_key_to_visible_tail",
+        "confirmed_by": "user",
+        "confirmation": "按住起點鍵直到尾端，滑動中不換鍵",
+        "min_path_px": 40,
+        "release_gap_ms": 80,
+        "max_hold_s": 6.0
+      },
+      "tap_rule": {
+        "rule": "any_covered_key",
+        "commit_horizon_ms": 100,
+        "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+        "key_order": [
+          "S",
+          "D",
+          "F",
+          "J",
+          "K",
+          "L"
+        ],
+        "confirmed_by": "user",
+        "confirmation_date": "2026-10-28",
+        "confirmation": "範圍內任意一鍵；鍵位是 S D F J K L"
+      },
+      "speculative_taps": {
+        "enabled": true,
+        "max_uncertainty_s": 0.1,
+        "max_hit_drift_s": 0.15,
+        "tap_min_hit_observations": 2,
+        "tap_hit_drift_window": 3,
+        "tap_last_chance_single_fit": true
+      },
+      "diagnostics": {
+        "timing_ab_label": "timing-lead-60ms"
+      },
+      "experiment": {
+        "experiment_id": "v7147_tap_earlier_amend_ab",
+        "variant": "experiment",
+        "input_lead_ms": 60.0,
+        "allow_earlier_amend": true,
+        "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+        "ab_label": "v7147_tap_earlier_amend_ab:experiment:lead-60ms"
+      }
+    }
+  },
+  "input_trigger_y": 295.5,
+  "input_advance_px": 30.0,
+  "tracking_completion_y": 325.5,
+  "tap_timing_calibration": {
+    "reference": "physical_calibrated",
+    "input_lead_ms": 60.0,
+    "physical_hit_y": 325.5,
+    "timing_source": "global_physical_calibrated"
+  },
+  "hold_visual_enabled": true,
+  "judgment_time_model": {
+    "status": "shadow_insufficient_samples",
+    "samples": 0,
+    "min_samples": 20
+  },
+  "refactor_flags": {
+    "tap_deadline_amend": true,
+    "hold_tracker_v2": true,
+    "judgment_calibration_v2": true
+  },
+  "geometry_cache": {
+    "enabled": true,
+    "strategy": "exact_y_bounded_lru_v1",
+    "lookups": {
+      "lane_bounds_at_y": {
+        "hits": 406671,
+        "misses": 592,
+        "maxsize": 2048,
+        "currsize": 592
+      },
+      "outer_bounds_at_y": {
+        "hits": 212190,
+        "misses": 570,
+        "maxsize": 2048,
+        "currsize": 570
+      },
+      "row_lane_width": {
+        "hits": 370101,
+        "misses": 574,
+        "maxsize": 2048,
+        "currsize": 574
+      }
+    }
+  },
+  "tap_rule": {
+    "rule": "any_covered_key",
+    "commit_horizon_ms": 100,
+    "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
+    "key_order": [
+      "S",
+      "D",
+      "F",
+      "J",
+      "K",
+      "L"
+    ],
+    "confirmed_by": "user",
+    "confirmation_date": "2026-10-28",
+    "confirmation": "範圍內任意一鍵；鍵位是 S D F J K L",
+    "resolution_basis": "user_confirmed_any_covered_key",
+    "recognition_accuracy": "UNVERIFIED"
+  },
+  "processed_frames": 8142,
+  "acquired_frames": 8417,
+  "dropped_frames": 275,
+  "stale_frames": 0,
+  "events": 535,
+  "abstentions": 126,
+  "abstain_reasons": {
+    "selected_tap": 246,
+    "hit_time_drift": 10,
+    "unstable_hit_time": 32,
+    "duplicate_hold_path": 65,
+    "past_hit_time": 17,
+    "tap_key_conflict": 2
+  },
+  "sent_taps": 183,
+  "sent_holds": 62,
+  "sent_key_downs": 245,
+  "keyboard_backend": "Win32 SendInput",
+  "keyboard_input_mode": "scan_code",
+  "input_armed_at_start": false,
+  "recycled_track_ids": [],
+  "capture_fps": 64.1779673370827,
+  "wall_processing_fps": 60.421856317486224,
+  "latency_p50_ms": 13.221449989941902,
+  "latency_p95_ms": 27.216174990462605,
+  "stop_reason": "global_escape_or_f12",
+  "wall_elapsed_s": 134.75256300001638,
+  "recording_async": true,
+  "recording_encoded_frames": 8142,
+  "recording_dropped_frames": 0,
+  "recording_clean_source": true,
+  "recording_nominal_fps": 60,
+  "recording_index": "live_video_index.csv",
+  "recording_error": null,
+  "accuracy": "UNVERIFIED",
+  "real_game_sessions_validated": 0
+}

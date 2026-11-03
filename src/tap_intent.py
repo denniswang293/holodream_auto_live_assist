@@ -105,19 +105,26 @@ class TapIntentManager:
                 if old.state == "PENDING":
                     if self.amend_enabled and old.key == proposal.key:
                         delta = proposal.hit_at - old.hit_at
+                        amend_data = {
+                            "amend_direction": "earlier" if delta < 0 else "later" if delta > 0 else "none",
+                            "proposed_delta_ms": delta * 1000.0,
+                            "old_deadline": old.hit_at,
+                            "new_deadline": proposal.hit_at,
+                            "freeze_remaining_ms": max(0.0, (old.hit_at - now - self.freeze_window_s) * 1000.0),
+                        }
                         if delta < 0 and not self.allow_earlier_amend:
                             self._emit(proposal.note_uid, "REJECTED", now,
                                        "amend_earlier_disabled", key=old.key,
                                        hit_at=proposal.hit_at, revision=old.revision,
-                                       previous_hit_at=old.hit_at)
+                                       previous_hit_at=old.hit_at, **amend_data)
                         elif abs(delta) > self.max_amend_step_s:
                             self._emit(proposal.note_uid, "REJECTED", now,
                                        "amend_step_too_large", key=old.key, hit_at=proposal.hit_at,
-                                       revision=old.revision)
+                                       revision=old.revision, **amend_data)
                         elif abs(proposal.hit_at - (old.initial_hit_at or old.hit_at)) > self.max_total_amend_s:
                             self._emit(proposal.note_uid, "REJECTED", now,
                                        "amend_total_limit", key=old.key, hit_at=proposal.hit_at,
-                                       revision=old.revision)
+                                       revision=old.revision, **amend_data)
                         elif proposal.hit_at != old.hit_at:
                             revision = old.revision + 1
                             amended = TapIntent(old.note_uid, old.key, proposal.hit_at,
@@ -142,11 +149,12 @@ class TapIntentManager:
                                     "direction": "later" if delta > 0 else "earlier"}]
                                 self._emit(proposal.note_uid, "AMENDED", now, "deadline_updated",
                                            key=amended.key, hit_at=amended.hit_at,
-                                           revision=revision, previous_hit_at=old.hit_at)
+                                           revision=revision, previous_hit_at=old.hit_at,
+                                           **amend_data)
                             else:
                                 self._emit(proposal.note_uid, "REJECTED", now, result.reason,
                                            key=old.key, hit_at=proposal.hit_at,
-                                           revision=old.revision)
+                                           revision=old.revision, **amend_data)
                     continue
                 rejected[proposal.note_uid] = "intent_terminal_no_reschedule"
                 self._emit(proposal.note_uid, "NOT_SCHEDULED", now,

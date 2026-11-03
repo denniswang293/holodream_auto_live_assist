@@ -563,6 +563,45 @@ def test_pending_amend_does_not_push_deadline_earlier_by_default():
     scheduler.close()
 
 
+def test_pending_amend_accepts_safe_earlier_deadline_when_explicitly_enabled():
+    clock, _, _, scheduler = armed_scheduler()
+    transitions = []
+    manager = TapIntentManager(transitions.append, amend_enabled=True,
+                               freeze_window_ms=10, max_amend_step_ms=40,
+                               max_total_amend_ms=80, allow_earlier_amend=True)
+    first = TapProposal("session:simple:early_enabled", 12, "F", 10.25, .01, "first")
+    assert manager.schedule({12: first}, scheduler, 10.0)[0]
+    clock.now = 10.02
+    scheduler.update_context(10.02, "PLAYING", True, True)
+    earlier = TapProposal(first.note_uid, 12, "F", 10.22, .01, "safe_earlier")
+    accepted, rejected = manager.schedule({12: earlier}, scheduler, 10.02)
+    assert not rejected
+    assert scheduler.pending[first.note_uid].hit_at == pytest.approx(10.22)
+    row = next(row for row in transitions if row.get("state") == "AMENDED")
+    assert row["amend_direction"] == "earlier"
+    assert row["proposed_delta_ms"] == pytest.approx(-30.0)
+    scheduler.close()
+
+
+def test_pending_earlier_amend_keeps_step_and_total_limits():
+    clock, _, rows, scheduler = armed_scheduler()
+    manager = TapIntentManager(rows.append, amend_enabled=True,
+                               freeze_window_ms=10, max_amend_step_ms=30,
+                               max_total_amend_ms=40, allow_earlier_amend=True)
+    first = TapProposal("session:simple:early_limits", 13, "F", 10.30, .01, "first")
+    assert manager.schedule({13: first}, scheduler, 10.0)[0]
+    clock.now = 10.02
+    scheduler.update_context(10.02, "PLAYING", True, True)
+    manager.schedule({13: TapProposal(first.note_uid, 13, "F", 10.26, .01, "step")}, scheduler, 10.02)
+    assert scheduler.pending[first.note_uid].hit_at == pytest.approx(10.30)
+    assert any(row.get("reason") == "amend_step_too_large" for row in rows)
+    manager.schedule({13: TapProposal(first.note_uid, 13, "F", 10.275, .01, "within_step_over_total")}, scheduler, 10.02)
+    assert scheduler.pending[first.note_uid].hit_at == pytest.approx(10.275)
+    manager.schedule({13: TapProposal(first.note_uid, 13, "F", 10.25, .01, "total")}, scheduler, 10.02)
+    assert any(row.get("reason") == "amend_total_limit" for row in rows)
+    scheduler.close()
+
+
 def test_pending_tap_rekeys_once_for_verified_hold_conflict():
     clock, actuator, rows, scheduler = armed_scheduler()
     manager = TapIntentManager(
