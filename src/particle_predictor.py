@@ -22,38 +22,78 @@ class ParticleDiagnostics:
     coast_ms: float
 
 
+@dataclass(frozen=True)
+class ParticleTrackingPolicy:
+    """Module-owned PF tracking limits; timing remains Global ETA-owned."""
+    count: int = 128
+    min_real_observations: int = 4
+    max_coast_ms: float = 90.0
+    max_prediction_horizon_ms: float = 1500.0
+    max_posterior_width_ms: float = 40.0
+    min_valid_crossing_mass: float = .95
+    min_velocity: float = 20.0
+    max_velocity: float = 1800.0
+    position_process_noise_px_sqrt_s: float = 1.8
+    velocity_process_noise_px_s_sqrt_s: float = 8.0
+    lane_process_noise_sqrt_s: float = .0015
+    position_measurement_noise_px: float = 3.0
+    lane_measurement_noise: float = .012
+    observation_gate_px: float = 32.0
+    ess_resample_fraction: float = .5
+    measurement_model: str = "student_t"
+    use_acceleration: bool = False
+
+    @classmethod
+    def from_mapping(cls, config: dict | None = None):
+        cfg = dict(config or {})
+        values = {}
+        for field in cls.__dataclass_fields__:
+            default = getattr(cls, field)
+            key = field
+            if field == "max_coast_ms": key = "max_coast_ms"
+            values[field] = cfg.get(key, default)
+        return cls(**values).validate()
+
+    def validate(self):
+        if self.use_acceleration:
+            raise ValueError("acceleration particles are not implemented; set use_acceleration=false")
+        if self.measurement_model != "student_t":
+            raise ValueError("only the Student-t measurement model is currently implemented")
+        if not (32 <= int(self.count) <= 512 and 0 < self.min_valid_crossing_mass <= 1 and
+                0 < self.ess_resample_fraction <= 1 and 0 < self.max_coast_ms <= 300 and
+                self.max_prediction_horizon_ms > 0 and self.position_measurement_noise_px > 0 and
+                self.lane_measurement_noise > 0 and 1 <= self.min_velocity < self.max_velocity):
+            raise ValueError("invalid particle tracking policy")
+        return self
+
+    def to_dict(self):
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
 class ParticlePredictor:
     """Small vectorized SMC with robust Student-t measurement weighting."""
 
     def __init__(self, cfg: dict | None = None, *, seed: int = 20261030,
                  track_id: int = 0, physical_hit_y: float | None = None,
-                 timing_enabled: bool = True):
-        self.cfg = dict(cfg or {})
-        if self.cfg.get("use_acceleration", False):
-            raise ValueError("acceleration particles are not implemented; set use_acceleration=false")
-        if self.cfg.get("measurement_model", "student_t") != "student_t":
-            raise ValueError("only the Student-t measurement model is currently implemented")
-        self.count = int(self.cfg.get("count", 128))
-        if self.count < 32 or self.count > 512:
-            raise ValueError("particle count must be between 32 and 512")
-        self.min_observations = int(self.cfg.get("min_real_observations", 4))
-        self.max_coast_s = float(self.cfg.get("max_coast_ms", 90)) / 1000
-        self.max_horizon_s = float(self.cfg.get("max_prediction_horizon_ms", 1500)) / 1000
-        self.max_width_s = float(self.cfg.get("max_posterior_width_ms", 40)) / 1000
-        self.min_crossing_mass = float(self.cfg.get("min_valid_crossing_mass", .95))
-        self.min_velocity = float(self.cfg.get("min_velocity", 20))
-        self.max_velocity = float(self.cfg.get("max_velocity", 1800))
-        self.y_process = float(self.cfg.get("position_process_noise_px_sqrt_s", 1.8))
-        self.v_process = float(self.cfg.get("velocity_process_noise_px_s_sqrt_s", 8.0))
-        self.u_process = float(self.cfg.get("lane_process_noise_sqrt_s", .0015))
-        self.y_measurement = float(self.cfg.get("position_measurement_noise_px", 3.0))
-        self.u_measurement = float(self.cfg.get("lane_measurement_noise", .012))
-        self.gate_px = float(self.cfg.get("observation_gate_px", 32.0))
-        self.resample_fraction = float(self.cfg.get("ess_resample_fraction", .5))
-        if not (0 < self.min_crossing_mass <= 1 and 0 < self.resample_fraction <= 1 and
-                0 < self.max_coast_s <= .3 and self.max_horizon_s > 0 and
-                self.y_measurement > 0 and self.u_measurement > 0):
-            raise ValueError("invalid particle predictor configuration")
+                 timing_enabled: bool = True,
+                 policy: ParticleTrackingPolicy | None = None):
+        self.policy = policy or ParticleTrackingPolicy.from_mapping(cfg)
+        self.cfg = self.policy.to_dict()
+        self.count = int(self.policy.count)
+        self.min_observations = int(self.policy.min_real_observations)
+        self.max_coast_s = float(self.policy.max_coast_ms) / 1000
+        self.max_horizon_s = float(self.policy.max_prediction_horizon_ms) / 1000
+        self.max_width_s = float(self.policy.max_posterior_width_ms) / 1000
+        self.min_crossing_mass = float(self.policy.min_valid_crossing_mass)
+        self.min_velocity = float(self.policy.min_velocity)
+        self.max_velocity = float(self.policy.max_velocity)
+        self.y_process = float(self.policy.position_process_noise_px_sqrt_s)
+        self.v_process = float(self.policy.velocity_process_noise_px_s_sqrt_s)
+        self.u_process = float(self.policy.lane_process_noise_sqrt_s)
+        self.y_measurement = float(self.policy.position_measurement_noise_px)
+        self.u_measurement = float(self.policy.lane_measurement_noise)
+        self.gate_px = float(self.policy.observation_gate_px)
+        self.resample_fraction = float(self.policy.ess_resample_fraction)
         base_seed = int(seed) & 0xffffffff
         # Stable arithmetic; never depend on Python's randomized hash().
         self.rng = np.random.default_rng((base_seed + int(track_id) * 2654435761) & 0xffffffff)

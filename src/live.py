@@ -7,6 +7,7 @@ from contextlib import ExitStack
 import csv
 from datetime import datetime, timezone
 import json
+import hashlib
 import math
 from pathlib import Path
 import threading
@@ -408,6 +409,10 @@ def run(args):
             wall_elapsed = time.perf_counter()-wall_started
             simple_states={state:sum(intent.state==state for intent in engine.simple_core.intents.intents.values())
                            for state in ("PENDING","FIRED","CANCELED","EXPIRED")}
+            module_snapshot = engine.simple_core.module_policy_snapshot()
+            policy_fingerprint = hashlib.sha256(json.dumps(
+                module_snapshot, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":")).encode("utf-8")).hexdigest()
             result = {"mode": "assist", "predictor_mode": config["predictor"]["mode"],
                       "tap_core": "global_eta_pf_tracking",
                       "tap_timing_source": ("global" if engine.simple_core.global_timing.active_enabled
@@ -426,6 +431,10 @@ def run(args):
                       "config_source": assist_meta["source_map"],
                       "effective_config": config,
                       "effective_config_sha256": assist_meta["effective_config_sha256"],
+                      "module_policy_snapshot": module_snapshot,
+                      "policy_sources": {"active_core": "module_owned_typed_policy",
+                                         "legacy_config": assist_meta["source_mode"]},
+                      "policy_fingerprint": policy_fingerprint,
                       "experiment_input_lead_ms": engine.simple_core.global_timing.input_lead_ms,
                       "experiment_allow_earlier_amend": engine.simple_core.intents.allow_earlier_amend,
                       "region": list(region.bounds) if region else None,

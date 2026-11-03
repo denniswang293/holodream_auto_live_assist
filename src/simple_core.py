@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import json
 
-from .simple_tracker import SimpleTracker
-from .tap_intent import TapIntentManager
+from .simple_tracker import SimpleTracker, SimpleTrackerPolicy
+from .tap_intent import TapIntentManager, TapDeadlinePolicy
 from .tap_planner import TapPlanner
 from .timing_estimator import LinearTimingEstimator
-from .global_tap_timing import GlobalTapTimingEstimator
+from .global_tap_timing import GlobalTapTimingEstimator, GlobalTapTimingPolicy
+from .particle_predictor import ParticleTrackingPolicy
 
 
 class SimpleAssistCore:
@@ -15,10 +16,16 @@ class SimpleAssistCore:
                  particle_cfg: dict, hit_y: float,
                  event_cfg: dict, min_y: float, known_keys: set[str],
                  on_transition=None, timing_cfg: dict | None = None,
-                 physical_hit_y: float | None = None):
+                 physical_hit_y: float | None = None,
+                 tracker_policy: SimpleTrackerPolicy | None = None,
+                 particle_policy: ParticleTrackingPolicy | None = None,
+                 global_policy: GlobalTapTimingPolicy | None = None,
+                 deadline_policy: TapDeadlinePolicy | None = None):
         self.session_id = session_id
         self.known_keys = set(known_keys)
-        self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y)
+        self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y,
+                                     policy=tracker_policy,
+                                     particle_policy=particle_policy)
         self.physical_hit_y = float(physical_hit_y) if physical_hit_y is not None else None
         timing_cfg = dict(timing_cfg or {})
         simplified_cfg = dict(timing_cfg.get("simplified_tap_planner", {}) or {})
@@ -37,7 +44,7 @@ class SimpleAssistCore:
             max_observation_age_s=linear_cfg.get("max_observation_age_ms", 200) / 1000
         ) if linear_cfg.get("enabled", True) else None
         self.global_timing = GlobalTapTimingEstimator(
-            timing_cfg.get("global_tap_timing", {}) or {})
+            timing_cfg.get("global_tap_timing", {}) or {}, policy=global_policy)
         amend_cfg = dict(timing_cfg.get("tap_deadline_amend", {}) or {})
         # LiveEngine also supplies flattened values for compatibility, while
         # direct callers/tests commonly provide the nested config only.
@@ -51,12 +58,11 @@ class SimpleAssistCore:
             self.transitions.append(dict(row))
             if on_transition:
                 on_transition(row)
-        self.intents = TapIntentManager(record,
-            amend_enabled=bool(amend_enabled),
-            freeze_window_ms=freeze_window_ms,
-            max_amend_step_ms=max_amend_step_ms,
-            max_total_amend_ms=max_total_amend_ms,
+        self.deadline_policy = deadline_policy or TapDeadlinePolicy(
+            enabled=bool(amend_enabled), freeze_window_ms=freeze_window_ms,
+            max_amend_step_ms=max_amend_step_ms, max_total_amend_ms=max_total_amend_ms,
             allow_earlier_amend=bool(allow_earlier_amend))
+        self.intents = TapIntentManager(record, policy=self.deadline_policy)
         self.last_reasons: dict[int, str] = {}
         self.last_traces = {}
         self.decision_rows = []
@@ -74,6 +80,17 @@ class SimpleAssistCore:
         self.global_first_schedule_at = {}
         self._last_decision_fingerprints = {}
         self._last_arm_generation = None
+
+    def module_policy_snapshot(self):
+        """Serialize the policies owned by the active core objects."""
+        return {
+            "simple_tracker": self.tracker.policy.to_dict(),
+            "particle_tracking": self.tracker.particle_policy.to_dict()
+                if self.tracker.particle_policy is not None else dict(self.tracker.particle_cfg),
+            "global_tap_timing": self.global_timing.policy.to_dict(),
+            "tap_deadline": self.deadline_policy.to_dict(),
+            "pf_timing_enabled": False,
+        }
 
     def note_uid(self, track_id: int):
         return f"{self.session_id}:simple:{track_id}"

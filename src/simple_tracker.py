@@ -28,6 +28,40 @@ def is_simple_tap(candidate: Candidate) -> bool:
             candidate.hold_path_px <= 0)
 
 
+@dataclass(frozen=True)
+class SimpleTrackerPolicy:
+    """Typed owner for the motion/identity gates of the Simple Tap tracker."""
+    confirm_observations: int = 5
+    early_confirm_observations: int = 3
+    max_missed_frames: int = 8
+    max_gap_s: float = .16
+    max_u_step: float = .09
+    pink_min_displacement_px: float = 5.0
+    completion_y: float = 325.5
+
+    @classmethod
+    def from_mapping(cls, config: dict | None = None, *, completion_y: float | None = None):
+        cfg = dict(config or {})
+        values = {name: cfg.get(name, getattr(cls, name)) for name in cls.__dataclass_fields__}
+        if completion_y is not None and "completion_y" in cfg:
+            values["completion_y"] = completion_y
+        policy = cls(**values)
+        policy.validate()
+        return policy
+
+    def validate(self):
+        if not (1 <= int(self.confirm_observations) <= 20 and
+                1 <= int(self.early_confirm_observations) <= self.confirm_observations and
+                0 <= int(self.max_missed_frames) <= 32 and .02 <= float(self.max_gap_s) <= .5 and
+                0 < float(self.max_u_step) <= .5 and 0 <= float(self.pink_min_displacement_px) <= 50 and
+                math.isfinite(float(self.completion_y))):
+            raise ValueError("invalid Simple Tracker policy")
+        return self
+
+    def to_dict(self):
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
 @dataclass
 class SimpleTrack:
     track_id: int
@@ -110,9 +144,13 @@ class SimpleTracker:
     """One-to-one motion association with a bounded missed-frame coast."""
 
     def __init__(self, cfg: dict | None = None, particle_cfg: dict | None = None,
-                 hit_y: float = 310.5):
+                 hit_y: float = 310.5, policy: SimpleTrackerPolicy | None = None,
+                 particle_policy=None):
+        self.policy = policy or SimpleTrackerPolicy.from_mapping(cfg, completion_y=hit_y)
         self.cfg = dict(cfg or {})
+        self.cfg.update(self.policy.to_dict())
         self.particle_cfg = dict(particle_cfg or {})
+        self.particle_policy = particle_policy
         self.hit_y = float(hit_y)
         self.tracks: list[SimpleTrack] = []
         self.finished: list[SimpleTrack] = []
@@ -120,11 +158,11 @@ class SimpleTracker:
         self.elapsed = 0.0
         self.stage_times = {"matching_s": 0.0, "unknown_association_s": 0.0}
         self.last_unknown_association_audit: list[dict] = []
-        self.max_gap_s = float(self.cfg.get("max_gap_s", .16))
-        self.max_missed = int(self.cfg.get("max_missed_frames", 8))
-        self.max_u_step = float(self.cfg.get("max_u_step", .09))
-        self.min_observations = int(self.cfg.get("confirm_observations", 5))
-        self.early_confirm_observations = int(self.cfg.get("early_confirm_observations", 3))
+        self.max_gap_s = float(self.policy.max_gap_s)
+        self.max_missed = int(self.policy.max_missed_frames)
+        self.max_u_step = float(self.policy.max_u_step)
+        self.min_observations = int(self.policy.confirm_observations)
+        self.early_confirm_observations = int(self.policy.early_confirm_observations)
         self.min_velocity = float(self.particle_cfg.get("min_velocity", 20))
         self.max_eta_s = float(self.cfg.get("max_eta_s", 1.5))
         self.seed = int(self.particle_cfg.get("deterministic_seed", 20261030))
@@ -132,9 +170,7 @@ class SimpleTracker:
         # remaining stationary.  Require the same small physical displacement
         # already used by the particle predictor before confirming pink; this
         # is pink-specific and does not relax any global confirmation gate.
-        self.pink_min_displacement_px = float(
-            self.cfg.get("pink_min_displacement_px",
-                        self.particle_cfg.get("min_displacement_px", 5.0)))
+        self.pink_min_displacement_px = float(self.policy.pink_min_displacement_px)
         self.pf_reassociation = PFAssistedReassociation(
             self.cfg.get("pf_assisted_reassociation", {}))
 
@@ -252,7 +288,8 @@ class SimpleTracker:
         track.key_history.append(tuple(candidate.candidate_keys))
         track.stable_keys = list(candidate.candidate_keys)
         track.particle_filter = ParticlePredictor(self.particle_cfg, seed=self.seed,
-            track_id=track.track_id, physical_hit_y=self.hit_y, timing_enabled=False)
+            track_id=track.track_id, physical_hit_y=self.hit_y, timing_enabled=False,
+            policy=self.particle_policy)
         return track
 
     def _observe(self, track: SimpleTrack, candidate: Candidate, timestamp: float):
@@ -301,7 +338,8 @@ class SimpleTracker:
             # those same observations. This recovers stale PF position state
             # without changing planner ETA or uncertainty limits.
             replacement = ParticlePredictor(self.particle_cfg, seed=self.seed,
-                track_id=track.track_id, physical_hit_y=self.hit_y, timing_enabled=False)
+                track_id=track.track_id, physical_hit_y=self.hit_y, timing_enabled=False,
+                policy=self.particle_policy)
             replacement_prediction = replacement.update(track.history[-7:], self.hit_y)
             track.particle_rejection_streak = 0
             if replacement_prediction.measurement_status == "INITIALIZED":

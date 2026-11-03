@@ -154,8 +154,20 @@ def analyze_one(run_dir: Path, group: str):
             })
         keydowns = [row for row in history if row.get("action") == "key_down"]
         key_down = _f(keydowns[-1].get("timestamp")) if keydowns else None
-        final_state = next((row.get("state") for row in reversed(intent_by_uid.get(uid, []))
-                            if row.get("state") in {"FIRED", "CANCELED", "EXPIRED", "NOT_SCHEDULED"}), "UNKNOWN")
+        # A later planner diagnostic NOT_SCHEDULED must not erase an actual
+        # scheduler action.  Input actions are the software execution source;
+        # lifecycle terminal state is kept separate from post-fire diagnostics.
+        if keydowns:
+            final_state = "FIRED"
+        elif any(row.get("action") == "canceled" for row in history):
+            final_state = "CANCELED"
+        elif any(row.get("action") == "abstain" for row in history):
+            final_state = "EXPIRED"
+        else:
+            final_state = next((row.get("state") for row in reversed(intent_by_uid.get(uid, []))
+                                if row.get("state") in {"FIRED", "CANCELED", "EXPIRED", "PENDING"}), "UNKNOWN")
+        post_fire_diagnostic_rejection = bool(final_state == "FIRED" and any(
+            row.get("state") == "NOT_SCHEDULED" for row in intent_by_uid.get(uid, [])))
         per_uid.append({
             "group": group, "variant": variant, "uid": uid,
             "first_scheduled_at": first_scheduled_at or "", "first_deadline": initial or "",
@@ -167,7 +179,9 @@ def analyze_one(run_dir: Path, group: str):
             "key_down_at": key_down or "",
             "key_down_minus_final_deadline_ms": (key_down - current) * 1000.0 if key_down is not None else "",
             "key": keydowns[-1].get("key", "") if keydowns else deadlines[-1].get("key", ""),
-            "final_state": final_state, "explicit_rejection_count": len(explicit_rejections),
+            "final_state": final_state, "post_fire_diagnostic_rejection": post_fire_diagnostic_rejection,
+            "lifecycle_terminal": final_state,
+            "explicit_rejection_count": len(explicit_rejections),
             "no_input": not bool(keydowns), "hold_or_conflict": any(
                 token in str(row.get("reason", "")).lower() for row in intent_by_uid.get(uid, [])
                 for token in ("hold", "conflict")),

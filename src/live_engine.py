@@ -23,7 +23,10 @@ from .hold_visual import path_runs, nearest_run
 from .judgment_time import JudgmentTimeEstimator
 from .hold_tracker import HoldTracker
 from .simple_core import SimpleAssistCore
-from .simple_tracker import is_simple_tap
+from .simple_tracker import is_simple_tap, SimpleTrackerPolicy
+from .particle_predictor import ParticleTrackingPolicy
+from .global_tap_timing import GlobalTapTimingPolicy
+from .tap_intent import TapDeadlinePolicy
 
 PROVISIONAL_TAP_LOSS_GRACE_S = .070
 
@@ -321,7 +324,13 @@ class LiveEngine:
                 "linear_timing": config.get("live", {}).get("linear_timing", {}),
                 "global_tap_timing": config.get("live", {}).get("global_tap_timing", {}),
             },
-            physical_hit_y=geometry.hit_y)
+            physical_hit_y=geometry.hit_y,
+            tracker_policy=SimpleTrackerPolicy.from_mapping(tracker_cfg),
+            particle_policy=ParticleTrackingPolicy.from_mapping(particle_cfg),
+            global_policy=GlobalTapTimingPolicy.from_mapping(
+                config.get("live", {}).get("global_tap_timing", {})),
+            deadline_policy=TapDeadlinePolicy.from_mapping(
+                config.get("live", {}).get("tap_deadline_amend", {})))
         self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}
         self.track_births, self.recycled_ids = {}, set()

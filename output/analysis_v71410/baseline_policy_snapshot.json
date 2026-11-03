@@ -1,0 +1,47 @@
+{
+  "profile": "stable",
+  "source_mode": "source_first",
+  "key_map": [
+    "S",
+    "D",
+    "F",
+    "J",
+    "K",
+    "L"
+  ],
+  "global_tap_timing": {
+    "enabled": true,
+    "mode": "active",
+    "allow_active": true,
+    "min_tracks": 2,
+    "min_samples": 3,
+    "history_size": 8,
+    "max_tracks": 32,
+    "max_observation_age_ms": 180,
+    "min_velocity": 20,
+    "max_velocity": 1800,
+    "max_speed_dispersion": 0.25,
+    "max_jump_px": 80,
+    "max_eta_s": 0.45,
+    "measurement_noise_px": 3.0,
+    "max_uncertainty_s": 0.04,
+    "profile_segments": 4,
+    "profile_ttl_ms": 3000,
+    "profile_min_samples": 1,
+    "timing_reference": "physical_calibrated",
+    "input_lead_ms": 60.0,
+    "ab_label": "timing-lead-60ms"
+  },
+  "tap_deadline_amend": {
+    "enabled": true,
+    "freeze_window_ms": 30,
+    "max_amend_step_ms": 40,
+    "max_total_amend_ms": 80,
+    "allow_earlier_amend": false
+  },
+  "max_frame_age_ms": 60,
+  "max_input_lateness_ms": 15,
+  "pf_role": "tracking_only",
+  "hold_role": "visual_tail",
+  "game_truth": "UNKNOWN"
+}

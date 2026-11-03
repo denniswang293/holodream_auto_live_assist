@@ -55,36 +55,79 @@ class GlobalTapEta:
     speed_epoch: int = 0
 
 
-class GlobalTapTimingEstimator:
-    """Estimate one bounded motion model from multiple reliable tracks."""
+@dataclass(frozen=True)
+class GlobalTapTimingPolicy:
+    """Typed owner for the Global ETA safety policy.
 
-    def __init__(self, config: dict | None = None):
+    The mapping adapter is intentionally kept at the boundary for legacy
+    callers.  The estimator itself only reads this immutable policy, so the
+    active path cannot accidentally depend on a mutable configuration tree.
+    """
+    enabled: bool = True
+    mode: str = "active"
+    allow_active: bool = True
+    min_tracks: int = 2
+    min_samples: int = 3
+    history_size: int = 8
+    max_tracks: int = 32
+    max_observation_age_s: float = .180
+    min_velocity: float = 20.0
+    max_velocity: float = 1800.0
+    max_speed_dispersion: float = .25
+    max_jump_px: float = 80.0
+    max_eta_s: float = .45
+    measurement_noise_px: float = 3.0
+    max_uncertainty_s: float = .04
+    profile_segments: int = 4
+    profile_ttl_s: float = 3.0
+    profile_min_samples: int = 1
+    timing_reference: str = "physical_calibrated"
+    input_lead_ms: float = 60.0
+
+    @classmethod
+    def from_mapping(cls, config: dict | None = None):
         cfg = dict(config or {})
-        self.enabled = bool(cfg.get("enabled", False))
-        self.mode = str(cfg.get("mode", "shadow")).lower()
-        self.allow_active = bool(cfg.get("allow_active", False))
+        # Empty mappings are the compatibility constructor used by isolated
+        # unit tests/legacy callers. Source-first Active always supplies the
+        # complete mapping (or a typed policy) from resolve_config.
+        if not cfg:
+            return cls(enabled=False, mode="shadow", allow_active=False,
+                       profile_ttl_s=.45, timing_reference="trigger_legacy",
+                       input_lead_ms=0.0).validate()
+        values = {
+            "enabled": bool(cfg.get("enabled", cls.enabled)),
+            "mode": str(cfg.get("mode", cls.mode)).lower(),
+            "allow_active": bool(cfg.get("allow_active", cls.allow_active)),
+            "min_tracks": int(cfg.get("min_tracks", cls.min_tracks)),
+            "min_samples": int(cfg.get("min_samples", cls.min_samples)),
+            "history_size": int(cfg.get("history_size", cls.history_size)),
+            "max_tracks": int(cfg.get("max_tracks", cls.max_tracks)),
+            "max_observation_age_s": float(cfg.get("max_observation_age_ms", cls.max_observation_age_s * 1000)) / 1000,
+            "min_velocity": float(cfg.get("min_velocity", cls.min_velocity)),
+            "max_velocity": float(cfg.get("max_velocity", cls.max_velocity)),
+            "max_speed_dispersion": float(cfg.get("max_speed_dispersion", cls.max_speed_dispersion)),
+            "max_jump_px": float(cfg.get("max_jump_px", cls.max_jump_px)),
+            "max_eta_s": float(cfg.get("max_eta_s", cls.max_eta_s)),
+            "measurement_noise_px": float(cfg.get("measurement_noise_px", cls.measurement_noise_px)),
+            "max_uncertainty_s": float(cfg.get("max_uncertainty_s", cls.max_uncertainty_s)),
+            "profile_segments": int(cfg.get("profile_segments", cls.profile_segments)),
+            "profile_ttl_s": float(cfg.get("profile_ttl_ms", cls.profile_ttl_s * 1000)) / 1000,
+            "profile_min_samples": int(cfg.get("profile_min_samples", cls.profile_min_samples)),
+            # Partial legacy mappings retain the historical trigger clock;
+            # source-first config supplies these fields explicitly.
+            "timing_reference": str(cfg.get("timing_reference", "trigger_legacy")).lower(),
+            "input_lead_ms": float(cfg.get("input_lead_ms", 0.0)),
+        }
+        policy = cls(**values)
+        policy.validate()
+        return policy
+
+    def validate(self):
         if self.mode not in {"shadow", "active"}:
             raise ValueError("global_tap_timing.mode must be shadow or active")
-        self.min_tracks = int(cfg.get("min_tracks", 2))
-        self.min_samples = int(cfg.get("min_samples", 3))
-        self.history_size = int(cfg.get("history_size", 8))
-        self.max_tracks = int(cfg.get("max_tracks", 32))
-        self.max_observation_age_s = float(cfg.get("max_observation_age_ms", 180)) / 1000
-        self.min_velocity = float(cfg.get("min_velocity", 20))
-        self.max_velocity = float(cfg.get("max_velocity", 1800))
-        self.max_speed_dispersion = float(cfg.get("max_speed_dispersion", .25))
-        self.max_jump_px = float(cfg.get("max_jump_px", 80))
-        self.max_eta_s = float(cfg.get("max_eta_s", .45))
-        self.measurement_noise_px = float(cfg.get("measurement_noise_px", 3.0))
-        self.max_uncertainty_s = float(cfg.get("max_uncertainty_s", .04))
-        self.profile_segments = int(cfg.get("profile_segments", 4))
-        self.profile_ttl_s = float(cfg.get("profile_ttl_ms", 450)) / 1000
-        self.profile_min_samples = int(cfg.get("profile_min_samples", 1))
-        self.timing_reference = str(cfg.get("timing_reference", "trigger_legacy")).lower()
         if self.timing_reference not in {"trigger_legacy", "physical_calibrated"}:
             raise ValueError("global_tap_timing.timing_reference must be trigger_legacy or physical_calibrated")
-        self.input_lead_ms = float(cfg.get("input_lead_ms", 0.0))
-        if not (0.0 <= self.input_lead_ms <= 250.0):
+        if not (0 <= self.input_lead_ms <= 250):
             raise ValueError("global_tap_timing.input_lead_ms must be between 0 and 250ms")
         if not (1 <= self.min_tracks <= 16 and 3 <= self.min_samples <= 12 and
                 3 <= self.history_size <= 32 and 1 <= self.max_tracks <= 64 and
@@ -92,13 +135,53 @@ class GlobalTapTimingEstimator:
             raise ValueError("global_tap_timing track/history limits are outside bounds")
         if not (0.05 <= self.max_observation_age_s <= .5 and
                 1 <= self.min_velocity < self.max_velocity <= 3000 and
-                .05 <= self.max_speed_dispersion <= 1 and
-                8 <= self.max_jump_px <= 240 and
-                .1 <= self.max_eta_s <= 1.5 and
-                .001 <= self.measurement_noise_px <= 20 and
-                .01 <= self.max_uncertainty_s <= .2 and
-                .1 <= self.profile_ttl_s <= 5.0):
+                .05 <= self.max_speed_dispersion <= 1 and 8 <= self.max_jump_px <= 240 and
+                .1 <= self.max_eta_s <= 1.5 and .001 <= self.measurement_noise_px <= 20 and
+                .01 <= self.max_uncertainty_s <= .2 and .1 <= self.profile_ttl_s <= 5):
             raise ValueError("global_tap_timing limits are outside bounds")
+        return self
+
+    def to_dict(self):
+        return {
+            "enabled": self.enabled, "mode": self.mode, "allow_active": self.allow_active,
+            "min_tracks": self.min_tracks, "min_samples": self.min_samples,
+            "history_size": self.history_size, "max_tracks": self.max_tracks,
+            "max_observation_age_ms": self.max_observation_age_s * 1000,
+            "min_velocity": self.min_velocity, "max_velocity": self.max_velocity,
+            "max_speed_dispersion": self.max_speed_dispersion, "max_jump_px": self.max_jump_px,
+            "max_eta_s": self.max_eta_s, "measurement_noise_px": self.measurement_noise_px,
+            "max_uncertainty_s": self.max_uncertainty_s, "profile_segments": self.profile_segments,
+            "profile_ttl_ms": self.profile_ttl_s * 1000, "profile_min_samples": self.profile_min_samples,
+            "timing_reference": self.timing_reference, "input_lead_ms": self.input_lead_ms,
+        }
+
+
+class GlobalTapTimingEstimator:
+    """Estimate one bounded motion model from multiple reliable tracks."""
+
+    def __init__(self, config: dict | None = None, *, policy: GlobalTapTimingPolicy | None = None):
+        self.policy = policy or GlobalTapTimingPolicy.from_mapping(config)
+        self.policy.validate()
+        self.enabled = self.policy.enabled
+        self.mode = self.policy.mode
+        self.allow_active = self.policy.allow_active
+        self.min_tracks = self.policy.min_tracks
+        self.min_samples = self.policy.min_samples
+        self.history_size = self.policy.history_size
+        self.max_tracks = self.policy.max_tracks
+        self.max_observation_age_s = self.policy.max_observation_age_s
+        self.min_velocity = self.policy.min_velocity
+        self.max_velocity = self.policy.max_velocity
+        self.max_speed_dispersion = self.policy.max_speed_dispersion
+        self.max_jump_px = self.policy.max_jump_px
+        self.max_eta_s = self.policy.max_eta_s
+        self.measurement_noise_px = self.policy.measurement_noise_px
+        self.max_uncertainty_s = self.policy.max_uncertainty_s
+        self.profile_segments = self.policy.profile_segments
+        self.profile_ttl_s = self.policy.profile_ttl_s
+        self.profile_min_samples = self.policy.profile_min_samples
+        self.timing_reference = self.policy.timing_reference
+        self.input_lead_ms = self.policy.input_lead_ms
         self.model = GlobalTapModel()
         self._version = 0
         self._capture_timestamp = -math.inf

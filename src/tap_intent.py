@@ -11,6 +11,46 @@ from .tap_planner import TapProposal
 TERMINAL = {"FIRED", "CANCELED", "EXPIRED"}
 
 
+@dataclass(frozen=True)
+class TapDeadlinePolicy:
+    """Immutable owner for Tap amendment safety limits."""
+    enabled: bool = False
+    freeze_window_ms: float = 30.0
+    max_amend_step_ms: float = 40.0
+    max_total_amend_ms: float = 80.0
+    allow_earlier_amend: bool = False
+
+    def __post_init__(self):
+        if not isinstance(self.enabled, bool) or not isinstance(self.allow_earlier_amend, bool):
+            raise ValueError("Tap deadline policy boolean fields must be bool")
+        # Legacy unit-test callers may construct a manager with a synthetic
+        # freeze window.  Source-first config resolution performs the strict
+        # production check (>=30ms) before this policy reaches Active.
+        if not (0 <= float(self.freeze_window_ms) <= 500):
+            raise ValueError("freeze_window_ms must be between 0 and 500ms")
+        if not (0 <= float(self.max_amend_step_ms) <= 40):
+            raise ValueError("max_amend_step_ms must be between 0 and 40ms")
+        if not (0 <= float(self.max_total_amend_ms) <= 80):
+            raise ValueError("max_total_amend_ms must be between 0 and 80ms")
+
+    @classmethod
+    def from_mapping(cls, config: dict | None = None, **fallback):
+        cfg = dict(config or {})
+        values = {field: cfg.get(field, fallback.get(field, getattr(cls, field)))
+                  for field in ("enabled", "freeze_window_ms", "max_amend_step_ms",
+                                "max_total_amend_ms", "allow_earlier_amend")}
+        policy = cls(**values)
+        if float(policy.freeze_window_ms) < 30:
+            raise ValueError("freeze_window_ms must be at least 30ms for Active policy")
+        return policy
+
+    def to_dict(self):
+        return {"enabled": self.enabled, "freeze_window_ms": self.freeze_window_ms,
+                "max_amend_step_ms": self.max_amend_step_ms,
+                "max_total_amend_ms": self.max_total_amend_ms,
+                "allow_earlier_amend": self.allow_earlier_amend}
+
+
 @dataclass
 class TapIntent:
     note_uid: str
@@ -54,17 +94,21 @@ class TapIntentManager:
 
     def __init__(self, on_transition=None, *, amend_enabled=False,
                  freeze_window_ms=30, max_amend_step_ms=40, max_total_amend_ms=80,
-                 allow_earlier_amend=False):
+                 allow_earlier_amend=False, policy: TapDeadlinePolicy | None = None):
         self.intents: dict[str, TapIntent] = {}
         self.on_transition = on_transition or (lambda row: None)
         self.last_rejections: dict[str, str] = {}
         self._seen: set[str] = set()
         self._confirmed: set[str] = set()
-        self.amend_enabled = bool(amend_enabled)
-        self.freeze_window_s = float(freeze_window_ms) / 1000
-        self.max_amend_step_s = float(max_amend_step_ms) / 1000
-        self.max_total_amend_s = float(max_total_amend_ms) / 1000
-        self.allow_earlier_amend = bool(allow_earlier_amend)
+        self.policy = policy or TapDeadlinePolicy(
+            enabled=bool(amend_enabled), freeze_window_ms=freeze_window_ms,
+            max_amend_step_ms=max_amend_step_ms, max_total_amend_ms=max_total_amend_ms,
+            allow_earlier_amend=bool(allow_earlier_amend))
+        self.amend_enabled = self.policy.enabled
+        self.freeze_window_s = float(self.policy.freeze_window_ms) / 1000
+        self.max_amend_step_s = float(self.policy.max_amend_step_ms) / 1000
+        self.max_total_amend_s = float(self.policy.max_total_amend_ms) / 1000
+        self.allow_earlier_amend = self.policy.allow_earlier_amend
 
     def note_seen(self, note_uid: str, timestamp: float):
         if note_uid not in self._seen:
