@@ -19,6 +19,14 @@ python -m pip install -r requirements-live.txt
 .\tools\launch_assist.cmd
 ```
 
+一般啟動現在使用 `src/` 的 source-first `tap-earlier` profile（60ms、允許合規的較早 deadline amendment），啟動時會顯示 `EXPERIMENTAL / NEEDS_GAME_VALIDATION`。要立即回退到穩定組，使用：
+
+```powershell
+.\tools\launch_assist_stable.cmd
+```
+
+兩個 profile 只差 `allow_earlier_amend`；geometry 仍必須由外部 `config/geometry_live_assist.json` 提供。舊的 `--config`／`--live-config` 仍可明確傳入，會標示為 legacy override。
+
 Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次停用；`Esc` 或 `F12` 會停止程式並釋放按住的鍵。失焦、ROI 不合法、影格過期或安全條件失效時，輸入會自動停止。
 
 預設使用完整遊戲顯示區、720×404 內部座標、六鍵 `S D F J K L`，視窗標題為 `hololive-Dreams`。Tap 使用 PF 空間追蹤與 Global Fixed-Speed ETA；Hold 使用視覺尾端離開判定區控制放鍵。
@@ -29,7 +37,7 @@ Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shi
 
 - `pf_assisted_reassociation.enabled=false`：PF-assisted 只做 Shadow/offline 診斷，不可送鍵。
 - `live.global_tap_timing`：多軌、分高度的 Global 速度輪廓 ETA 為普通 Tap 的 Active 時間來源；`allow_active=true` 只代表通過 Global gate 的 proposal 可送鍵，PF 僅提供空間追蹤與關聯。
-- `global_tap_timing.timing_reference=physical_calibrated` 時，模型分開記錄 physical crossing 與 press deadline；`input_lead_ms` 是唯一明示的輸入提前補償。預設為 0ms，需以固定歌曲短測校準，不可把 key_down 當成遊戲命中真值。
+- `global_tap_timing.timing_reference=physical_calibrated` 時，模型分開記錄 physical crossing 與 press deadline；`input_lead_ms=60ms` 是目前本機體感基準，不代表所有歌曲／設備已完成遊戲校準，不可把 key_down 當成遊戲命中真值。
 - `diagnostics.trace_snapshot.enabled=true`：以有限佇列寫入逐影格追蹤摘要，僅供事後分析，不參與決策。
 - `control.dry_run`、人工啟用、失焦／stale／ESC／F12 停止保護保持不變。
 
@@ -65,5 +73,6 @@ python -m pytest -q
 - `src/hold_tracker.py`、`src/hold_visual.py`：Hold 視覺追蹤與放鍵。
 - `src/detector.py`、`src/geometry.py`：色塊偵測與六鍵幾何。
 - `src/live_input.py`、`src/windows_runtime.py`：人工啟用與 Windows 輸入安全。
+- `src/assist_defaults.py`、`src/assist_profiles.py`、`src/assist_config.py`：source-first 預設、stable/tap-earlier profile、nested override 與 fail-closed 驗證。
 - `tools/launch_assist.cmd`：正式 Assist 啟動器。
 - `docs/`：操作、架構與校正說明。

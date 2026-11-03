@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from .calibration import load_calibration, geometry_hash
+from .assist_config import resolve_config
 from .live_capture import AutoCapture, CaptureWorker, Region, normalization_transform
 from .live_engine import LiveEngine, draw_live_overlay
 from .live_input import TapScheduler
@@ -184,26 +185,10 @@ def _summary(out, result):
 
 
 def run(args):
-    config = json.loads(args.config.read_text(encoding="utf-8-sig"))
-    if args.live_config.exists():
-        live_document = json.loads(args.live_config.read_text(encoding="utf-8-sig"))
-        config["live"] = {**config.get("live", {}), **live_document}
-    # Keep diagnostic A/B labels derived from the value that actually drives
-    # the active timing model.  Older copied configs occasionally retained a
-    # ``lead-10ms`` label after the numeric lead was changed to 60 ms.  That
-    # label is only metadata; correct it in memory so new runs cannot be
-    # misclassified, without rewriting the user's config file.
-    global_cfg = config.setdefault("live", {}).setdefault("global_tap_timing", {})
-    try:
-        actual_lead_ms = float(global_cfg.get("input_lead_ms", 0.0))
-    except (TypeError, ValueError):
-        actual_lead_ms = 0.0
-    if not math.isfinite(actual_lead_ms):
-        actual_lead_ms = 0.0
-    actual_label = actual_timing_ab_label(actual_lead_ms)
-    global_cfg["ab_label"] = actual_label
-    config.setdefault("live", {}).setdefault("diagnostics", {})["timing_ab_label"] = actual_label
-    config.setdefault("diagnostics", {})["timing_ab_label"] = actual_label
+    resolved = resolve_config(profile=args.profile, config_path=args.config,
+                              live_config_path=args.live_config)
+    config = resolved.config
+    assist_meta = resolved.metadata
     config.setdefault("predictor", {})
     live_cfg = config.get("live", {})
     config["predictor"]["mode"] = "particle"
@@ -238,7 +223,9 @@ def run(args):
     identity_cfg["snapshot_max_rows"] = int(snapshot_cfg.get("max_rows", 512))
     identity_trace = (LiveIdentityTraceWriter(out, out.name, identity_cfg)
                       if identity_cfg.get("enabled", False) else None)
-    print(f"Assist | geometry {geometry.status} | predictor {config['predictor']['mode']} | output: {out}", flush=True)
+    print(f"Assist | profile {assist_meta['profile_name']} | source {assist_meta['source_mode']} | geometry {geometry.status} | predictor {config['predictor']['mode']} | output: {out}", flush=True)
+    if assist_meta["profile_name"] == "tap-earlier":
+        print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: tap-earlier is user-selectable and reversible.", flush=True)
     print("Ctrl+Shift+Alt+Q toggles assist only; Esc/F12 stops. Input starts OFF.", flush=True)
     print(f"Actual physical capture rectangle: {region.bounds} (entire game display)",flush=True)
     wall_started = time.perf_counter()
@@ -431,8 +418,14 @@ def run(args):
                       "simple_intent_states": simple_states,
                       "source_kind": "actual window capture",
                       "window_title": target.title if target else None,
-                      "experiment_id": (live_cfg.get("experiment") or {}).get("experiment_id", "none"),
-                      "variant": (live_cfg.get("experiment") or {}).get("variant", "baseline"),
+                      "experiment_id": assist_meta["experiment_id"],
+                      "variant": assist_meta["variant"],
+                      "profile_name": assist_meta["profile_name"],
+                      "defaults_version": assist_meta["defaults_version"],
+                      "config_source_mode": assist_meta["source_mode"],
+                      "config_source": assist_meta["source_map"],
+                      "effective_config": config,
+                      "effective_config_sha256": assist_meta["effective_config_sha256"],
                       "experiment_input_lead_ms": engine.simple_core.global_timing.input_lead_ms,
                       "experiment_allow_earlier_amend": engine.simple_core.intents.allow_earlier_amend,
                       "region": list(region.bounds) if region else None,
@@ -515,8 +508,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--window-title",default=DEFAULT_WINDOW_TITLE,help="Game window title (default: %(default)s)")
     parser.add_argument("--list-windows", action="store_true")
-    parser.add_argument("--config", type=Path, default=Path("config.json"))
-    parser.add_argument("--live-config", type=Path, default=Path("config/live_assist.json"))
+    parser.add_argument("--profile", choices=("stable", "tap-earlier"), default="tap-earlier",
+                        help="Source-first Tap profile (default: %(default)s)")
+    parser.add_argument("--config", type=Path, default=None,
+                        help="Optional legacy/root JSON override")
+    parser.add_argument("--live-config", type=Path, default=None,
+                        help="Optional explicit live JSON override")
     parser.add_argument("--geometry", type=Path, default=Path("config/geometry_live_assist.json"))
     parser.add_argument("--out", type=Path, default=Path("output/assist"))
     parser.add_argument("--backend", choices=("auto", "dxcam", "mss"), default="auto")
