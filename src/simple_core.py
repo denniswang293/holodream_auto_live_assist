@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 
 from .simple_tracker import SimpleTracker, SimpleTrackerPolicy
 from .tap_intent import TapIntentManager, TapDeadlinePolicy
@@ -20,7 +21,9 @@ class SimpleAssistCore:
                  tracker_policy: SimpleTrackerPolicy | None = None,
                  particle_policy: ParticleTrackingPolicy | None = None,
                  global_policy: GlobalTapTimingPolicy | None = None,
-                 deadline_policy: TapDeadlinePolicy | None = None):
+                 deadline_policy: TapDeadlinePolicy | None = None,
+                 geometry_sha256: str = "",
+                 profile_name: str = "unknown"):
         self.session_id = session_id
         self.known_keys = set(known_keys)
         self.tracker = SimpleTracker(tracker_cfg, particle_cfg, hit_y=hit_y,
@@ -72,6 +75,14 @@ class SimpleAssistCore:
         # experiment.  This is diagnostic-only and never enters scheduling.
         self.pf_gate_shadow_rows = []
         self.global_rows = []
+        self.global_rescue_rows = []
+        self._rescue_by_uid = {}
+        self._rescue_candidate_frames = 0
+        self._rescue_candidate_uids = set()
+        self._rescue_scheduled_uids = set()
+        self._rescue_key_down_uids = set()
+        self.geometry_sha256 = geometry_sha256
+        self.profile_name = profile_name
         self.shadow_decisions = {}
         self.global_decisions = {}
         self.global_model_frames = 0
@@ -139,6 +150,61 @@ class SimpleAssistCore:
                                 else None))
             for track in tracks
         }
+        global_active = enabled and self.global_timing.active_enabled
+        rescue_meta = {}
+        if global_active and self.global_timing.guarded_reuse_enabled:
+            readiness = scheduler._readiness_failure(processed_at) if hasattr(scheduler, "_readiness_failure") else ""
+            for track in tracks:
+                uid = note_uids.get(track.track_id, self.note_uid(track.track_id))
+                original = global_etas.get(track.track_id)
+                meta = {"attempted": False, "passed_rescue_gate": False,
+                        "rescue_rejected_reason": "NOT_ATTEMPTED",
+                        "effective_uncertainty_ms": "", "final_planner_status": "",
+                        "scheduler_action": "", "key_down_at": ""}
+                if readiness:
+                    meta["rescue_rejected_reason"] = "SCHEDULER_NOT_READY"
+                elif original is None or getattr(original, "reason", "") != "speed_variation_too_high":
+                    meta["rescue_rejected_reason"] = "ORIGINAL_MODEL_NOT_SPEED_VARIATION"
+                elif uid in self.intents.intents:
+                    meta["rescue_rejected_reason"] = ("UID_ALREADY_PENDING" if
+                        self.intents.intents[uid].state == "PENDING" else "UID_ALREADY_TERMINAL")
+                elif (track.status != "confirmed" or track.confirmed_note_type != "tap" or
+                      track.missed or not track.stable_keys or
+                      not math.isfinite(track.candidate.u_min) or not math.isfinite(track.candidate.u_max) or
+                      not (0 <= track.candidate.u_min < track.candidate.u_max <= 1) or
+                      not (set(track.stable_keys) & set(track.candidate.candidate_keys) & self.known_keys)):
+                    meta["rescue_rejected_reason"] = "TRACK_NOT_CURRENT"
+                else:
+                    rescued, meta = self.global_timing.guarded_reuse_estimate(
+                        track, trigger_y=self.tracker.hit_y, now=processed_at,
+                        physical_hit_y=(self.physical_hit_y
+                                        if self.global_timing.timing_reference == "physical_calibrated"
+                                        else None),
+                        geometry_target_y=global_target_y)
+                    if rescued is not None:
+                        global_etas[track.track_id] = rescued
+                meta.update({"uid": uid, "track_id": track.track_id,
+                             "capture_timestamp": captured_at, "processed_at": processed_at,
+                             "profile": self.profile_name, "speed_epoch": getattr(original, "speed_epoch", self.global_timing.speed_epoch),
+                             "geometry_sha256": self.geometry_sha256,
+                             "original_model_reason": global_model.reason,
+                             "original_eta_status": getattr(original, "status", "NOT_READY"),
+                             "original_eta_reason": getattr(original, "reason", "prediction_unavailable"),
+                             "original_uncertainty_ms": meta.get("original_uncertainty_ms",
+                                 (getattr(original, "uncertainty_s", None) * 1000
+                                  if getattr(original, "uncertainty_s", None) is not None else "")),
+                             "physical_cross_at": getattr(global_etas.get(track.track_id), "physical_cross_at", "") or "",
+                             "press_at": getattr(global_etas.get(track.track_id), "press_at", "") or "",
+                             "model_source": "global_profile_guarded_reuse" if global_etas.get(track.track_id) is not original else "global_profile"})
+                rescue_meta[track.track_id] = meta
+                if meta.get("attempted"):
+                    self._rescue_candidate_frames += 1
+                    self._rescue_candidate_uids.add(uid)
+                # Record attempted and rejected candidates; successful rows
+                # are finalized with planner/scheduler outcomes below.
+                if self.global_timing.guarded_reuse_enabled and (meta.get("attempted") or
+                        meta.get("rescue_rejected_reason") not in {"ORIGINAL_MODEL_NOT_SPEED_VARIATION", "NOT_ATTEMPTED"}):
+                    self.global_rescue_rows.append(dict(meta))
         global_decisions, global_proposals = self.planner.global_plan(
             tracks if enabled else [], global_etas, processed_at, self.known_keys,
             scheduler, note_uids=note_uids, fixed_keys=fixed)
@@ -147,7 +213,13 @@ class SimpleAssistCore:
             self.global_status_counts[decision.reason] = self.global_status_counts.get(decision.reason, 0) + 1
             if decision.status == "schedule":
                 self.global_first_schedule_at.setdefault(decision.note_uid, captured_at)
-        global_active = enabled and self.global_timing.active_enabled
+        for track_id, meta in rescue_meta.items():
+            decision = global_decisions.get(track_id)
+            uid = meta["uid"]
+            meta["final_planner_status"] = decision.status if decision else "none"
+            if decision and decision.status != "schedule" and not meta.get("rescue_rejected_reason"):
+                meta["rescue_rejected_reason"] = decision.reason
+            meta["scheduler_action"] = "candidate" if global_proposals.get(track_id) is not None else "not_scheduled"
         if self.global_timing.enabled:
             # Global Shadow is strictly observational: it must not call the
             # intent manager or Scheduler.offer.  Global Active is the only
@@ -180,6 +252,20 @@ class SimpleAssistCore:
                            if decision.status != "schedule"}
         self.shadow_decisions = shadow
         accepted, rejected = self.intents.schedule(proposals, scheduler, processed_at)
+        for track_id, meta in rescue_meta.items():
+            if not meta.get("passed_rescue_gate"):
+                continue
+            uid = meta["uid"]
+            if any(intent.note_uid == uid for intent in accepted):
+                meta["scheduler_action"] = "scheduled"
+                self._rescue_by_uid[uid] = dict(meta)
+                self._rescue_scheduled_uids.add(uid)
+            elif uid in rejected:
+                meta["scheduler_action"] = "rejected"
+                meta["rescue_rejected_reason"] = rejected[uid]
+            else:
+                meta["scheduler_action"] = "not_scheduled"
+            self.global_rescue_rows.append(dict(meta))
         self.last_reasons = {**reasons, **{
             track.track_id: rejected[uid]
             for track in tracks
@@ -449,6 +535,10 @@ class SimpleAssistCore:
         rows, self.global_rows = self.global_rows, []
         return rows
 
+    def drain_global_rescue_rows(self):
+        rows, self.global_rescue_rows = self.global_rescue_rows, []
+        return rows
+
     def global_stats(self):
         return {
             "model_frames": self.global_model_frames,
@@ -457,6 +547,17 @@ class SimpleAssistCore:
                              if self.global_model_frames else 0.0),
             "status_counts": dict(self.global_status_counts),
             "first_schedule_at": dict(self.global_first_schedule_at),
+            "guarded_reuse": self.global_rescue_stats(),
+        }
+
+    def global_rescue_stats(self):
+        return {
+            "candidate_frames": self._rescue_candidate_frames,
+            "candidate_uids": len(self._rescue_candidate_uids),
+            "scheduled_uids": len(self._rescue_scheduled_uids),
+            "key_down_uids": len(self._rescue_key_down_uids),
+            "potentially_recovered_uids": len(self._rescue_key_down_uids),
+            "game_truth": "UNKNOWN",
         }
 
     def reset_global_timing(self):
@@ -472,3 +573,8 @@ class SimpleAssistCore:
 
     def record_scheduler_action(self, action: dict):
         self.intents.record_action(action)
+        if action.get("action") == "key_down" and action.get("event_id") in self._rescue_by_uid:
+            self._rescue_key_down_uids.add(action["event_id"])
+            row = dict(self._rescue_by_uid[action["event_id"]])
+            row.update({"scheduler_action": "key_down", "key_down_at": action.get("timestamp", "")})
+            self.global_rescue_rows.append(row)

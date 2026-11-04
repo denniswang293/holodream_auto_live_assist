@@ -69,9 +69,16 @@ def validate_effective_config(config: dict) -> None:
         value = live[path[0]].get(path[1])
         if not isinstance(value, bool):
             raise ValueError(f"live.{path[0]}.{path[1]} must be a boolean")
+    guarded_enabled = global_timing.get("guarded_reuse_enabled", False)
+    if not isinstance(guarded_enabled, bool):
+        raise ValueError("live.global_tap_timing.guarded_reuse_enabled must be a boolean")
+    _number(global_timing.get("guarded_reuse_max_age_ms", 80),
+            "live.global_tap_timing.guarded_reuse_max_age_ms", minimum=0, maximum=80)
     _number(live.get("max_frame_age_ms"), "live.max_frame_age_ms", maximum=60)
     _number(live.get("max_input_lateness_ms"), "live.max_input_lateness_ms", maximum=15)
     _number(live.get("input_advance_px"), "live.input_advance_px", minimum=0, maximum=30)
+    _number(live.get("hold_visual", {}).get("start_delay_ms", 0),
+            "live.hold_visual.start_delay_ms", minimum=0, maximum=20)
     _number(amend.get("freeze_window_ms"), "live.tap_deadline_amend.freeze_window_ms", minimum=30)
     _number(amend.get("max_amend_step_ms"), "live.tap_deadline_amend.max_amend_step_ms", minimum=0, maximum=40)
     _number(amend.get("max_total_amend_ms"), "live.tap_deadline_amend.max_total_amend_ms", minimum=0, maximum=80)
@@ -87,7 +94,7 @@ def effective_fingerprint(config: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def resolve_config(*, profile="tap-earlier", config_path: Path | None = None,
+def resolve_config(*, profile="stable", config_path: Path | None = None,
                    live_config_path: Path | None = None) -> EffectiveConfig:
     config = apply_profile(builtin_defaults(), profile)
     source_map = {key: "builtin" for key in config}
@@ -121,5 +128,6 @@ def resolve_config(*, profile="tap-earlier", config_path: Path | None = None,
         "variant": experiment.get("variant", profile),
         "input_lead_ms": live["global_tap_timing"]["input_lead_ms"],
         "allow_earlier_amend": live["tap_deadline_amend"]["allow_earlier_amend"],
+        "hold_start_delay_ms": live.get("hold_visual", {}).get("start_delay_ms", 0.0),
     }
     return EffectiveConfig(config=deepcopy(config), metadata=metadata)

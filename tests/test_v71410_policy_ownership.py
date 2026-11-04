@@ -32,7 +32,7 @@ def test_source_first_policy_snapshot_matches_current_work_values():
     assert deadline.freeze_window_ms == 30
     assert deadline.max_amend_step_ms == 40
     assert deadline.max_total_amend_ms == 80
-    assert deadline.allow_earlier_amend is False
+    assert deadline.allow_earlier_amend is True
 
 
 def test_legacy_manager_adapter_keeps_nested_deadline_values():

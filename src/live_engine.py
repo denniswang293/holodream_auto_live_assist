@@ -21,7 +21,7 @@ from .tracker import Tracker
 from .tap_assignment import AnyCoveredKeyRule
 from .hold_visual import path_runs, nearest_run
 from .judgment_time import JudgmentTimeEstimator
-from .hold_tracker import HoldTracker
+from .hold_tracker import HoldTracker, select_hold_heads
 from .simple_core import SimpleAssistCore
 from .simple_tracker import is_simple_tap, SimpleTrackerPolicy
 from .particle_predictor import ParticleTrackingPolicy
@@ -159,7 +159,7 @@ def track_decision(track,now,known_keys,event_cfg):
 
 class LiveEngine:
     def __init__(self, config, geometry, scheduler, clock=time.perf_counter, detector=detect,
-                 identity_trace=None):
+                 identity_trace=None, profile_name="unknown"):
         self.config, self.geometry, self.scheduler, self.clock = config, geometry, scheduler, clock
         self.detector = detector
         self.identity_trace = identity_trace
@@ -232,8 +232,11 @@ class LiveEngine:
             raise ValueError('Visual Hold input needs the user-confirmed start-key rule')
         self.hold_path_px = int(hold_cfg.get('min_path_px',40*self.pixel_scale_y))
         self.hold_release_gap_s = float(hold_cfg.get('release_gap_ms',120))/1000
+        self.hold_start_delay_s = float(hold_cfg.get('start_delay_ms',0.0))/1000
         if not (32*self.pixel_scale_y<=self.hold_path_px<=100*self.pixel_scale_y and .06<=self.hold_release_gap_s<=.25):
             raise ValueError('Hold path and release limits are outside supported range')
+        if not 0<=self.hold_start_delay_s<=.020:
+            raise ValueError('Hold start delay must be between 0 and 20 ms')
         self.hold_ids = set()
         hold_tracker_cfg = config.get("live", {}).get("hold_tracker_v2", {})
         self.hold_tracker_v2 = HoldTracker(
@@ -258,6 +261,11 @@ class LiveEngine:
         # head cannot be scheduled again after its original action fires.
         self.reidentified_tracker_ids = {}
         self.judgment_bar_top = geometry.document.get('live_measurement',{}).get('judgment_bar_top_y')
+        # Pressed-key illumination lies inside the judgment strip and can
+        # sustain its own color detection after the actual ribbon has ended.
+        self.hold_probe_y = ((self.judgment_bar_top-6*self.pixel_scale_y)
+                             if self.judgment_bar_top is not None else
+                             geometry.hit_y-18.5*self.pixel_scale_y)
         self.gate = GameplayGate(config.get("gameplay"), geometry.reference_resolution)
         tracker_cfg = {**config.get("tracker", {}), "key_map": config["key_map"]}
         tracker_cfg["pf_assisted_reassociation"] = dict(
@@ -284,7 +292,12 @@ class LiveEngine:
             predictor_cfg["max_uncertainty_s"] = self.speculative["max_uncertainty_s"]
         # The legacy tracker remains only as the visual Hold path.
         hold_predictor_mode = "legacy"
-        self.tracker = Tracker(tracker_cfg,self.trigger_y,predictor_cfg,
+        hold_tracker_cfg = dict(tracker_cfg)
+        global_clock = config.get('live', {}).get('global_tap_timing', {})
+        if global_clock.get('timing_reference') == 'physical_calibrated':
+            hold_tracker_cfg['hold_input_lead_s'] = (
+                float(global_clock.get('input_lead_ms', 60))/1000 - self.hold_start_delay_s)
+        self.tracker = Tracker(hold_tracker_cfg,self.trigger_y,predictor_cfg,
                                predictor_mode=hold_predictor_mode,particle_cfg=particle_cfg,
                                physical_hit_y=geometry.hit_y)
         self.collector = EventCollector({**config.get("events", {}), "reference_height": geometry.reference_resolution[1]})
@@ -330,7 +343,9 @@ class LiveEngine:
             global_policy=GlobalTapTimingPolicy.from_mapping(
                 config.get("live", {}).get("global_tap_timing", {})),
             deadline_policy=TapDeadlinePolicy.from_mapping(
-                config.get("live", {}).get("tap_deadline_amend", {})))
+                config.get("live", {}).get("tap_deadline_amend", {})),
+            geometry_sha256=self.geometry_hash,
+            profile_name=profile_name)
         self.simple_core.tracker.next_id = 1_000_000
         self.seen_ids, self.input_eligible_ids = set(), {}
         self.track_births, self.recycled_ids = {}, set()
@@ -416,8 +431,9 @@ class LiveEngine:
         if (global_timing is not None and
                 global_timing.timing_reference == "physical_calibrated" and
                 physical is not None and math.isfinite(physical)):
-            return physical - global_timing.input_lead_ms / 1000.0
-        return prediction.hit_time
+            return physical - global_timing.input_lead_ms / 1000.0 + self.hold_start_delay_s
+        return (prediction.hit_time + self.hold_start_delay_s
+                if prediction.hit_time is not None else None)
 
     def _dropout_still_valid(self, event_id, now, tr=None):
         commit = self.dropout_commits.get(event_id)
@@ -910,21 +926,62 @@ class LiveEngine:
         if not self.hold_enabled:
             return
         runs_by_color = {}
+        supported_by_color = {}
         current = set()
-        for key, (_, intent) in list(self.scheduler.held.items()):
-            if intent.note_type != 'hold':
-                continue
+        holds = [intent for _, intent in self.scheduler.held.values()
+                 if intent.note_type == 'hold']
+        # Freeze the expected positions for this frame: updating one watch
+        # first must not allow a finished Hold to jump onto its neighbour.
+        expected = {intent.event_id: self.hold_watch.get(intent.event_id, {}).get(
+                        'u', intent.path_u) for intent in holds}
+        for intent in holds:
             appearance = intent.path_appearance or 'green_candidate'
             if appearance not in runs_by_color:
-                runs_by_color[appearance] = path_runs(work,self.geometry,self.trigger_y-6.5*self.pixel_scale_y,appearance)
+                # Observe above the input-lit strip; its green/yellow key
+                # feedback is not evidence that this Hold still exists.
+                runs = path_runs(work,self.geometry,self.hold_probe_y,appearance)
+                # White hit effects can hide the judgment row while the
+                # ribbon is still present. Require matching color on two
+                # adjacent rows above it, rather than extending a blind timer.
+                # This evidence only keeps an already held start key down.
+                above = [path_runs(work, self.geometry,
+                                   self.hold_probe_y-offset*self.pixel_scale_y, appearance)
+                         for offset in (12, 24, 36)]
+                supported = []
+                for lower, upper in zip(above, above[1:]):
+                    for span in lower:
+                        if any(min(span[1], other[1])-max(span[0], other[0]) >=
+                               .5*min(span[1]-span[0], other[1]-other[0])
+                               for other in upper):
+                            supported.append(span)
+                runs_by_color[appearance] = runs
+                supported_by_color[appearance] = supported
             current.add(intent.event_id)
             watch = self.hold_watch.setdefault(intent.event_id,
                         {'u':intent.path_u,'start':now,'last_visible':now})
             run = nearest_run(runs_by_color[appearance],watch['u'],.12)
+            direct = run is not None
+            # White hit effects can briefly hide this row. Restore the bounded
+            # bridge; only evidence above the input-lit strip can renew it.
+            if (run is None and
+                    now-watch.get('last_direct', watch['start']) <= .25):
+                run = nearest_run(supported_by_color[appearance], watch['u'], .12)
+            if (run is not None and not run[0] <= expected[intent.event_id] <= run[1] and
+                    any(other.event_id != intent.event_id and
+                        (other.path_appearance or 'green_candidate') == appearance and
+                        run[0] <= expected[other.event_id] <= run[1]
+                        for other in holds)):
+                # An adjacent ribbon already contains its own held note.
+                # It cannot keep this disappearing tail alive as well.
+                run = None
             if run is not None:
-                watch['u'] = min(max(watch['u'],run[0]),run[1])
+                if direct:
+                    watch['u'] = min(max(watch['u'],run[0]),run[1])
+                    watch['last_direct'] = now
                 watch['last_visible'] = now
-            elif (now-watch['last_visible'] >= self.hold_release_gap_s and
+                watch['span'] = run
+            elif (now-watch['last_visible'] >= max(self.hold_release_gap_s,
+                    self.hold_pending_coast.get(intent.event_id, {}).get('tail_travel_s', 0.)) and
                   now-watch['start'] >= self.hold_release_gap_s):
                 color = 'yellow' if appearance=='yellow_bar' else 'green'
                 self.scheduler.release_hold(intent.event_id,f'{color}_tail_left_judgment_row')
@@ -942,18 +999,56 @@ class LiveEngine:
                 0 <= now - record["last_valid_head_at"] <= record["grace_s"] and
                 now <= intent.hit_at + self.scheduler.max_lateness)
 
+    def _edge_on_held_ribbon(self, work, track, held_ids):
+        """Trace a thin fragment down to an existing same-color Hold.
+
+        Comparing spans at different heights misses curved ribbons. Only
+        nearby thin edges with actual connected color evidence qualify.
+        """
+        c = track.candidate
+        y = c.bbox[1] + c.bbox[3]/2
+        if (c.bbox[3] > 6*self.pixel_scale_y or
+                not self.geometry.hit_y-80*self.pixel_scale_y <= y <=
+                    self.geometry.hit_y-12*self.pixel_scale_y):
+            return False
+        span = c.u_min, c.u_max
+        for event_id in held_ids:
+            if self.hold_colors.get(event_id) != c.appearance:
+                continue
+            watch = self.hold_watch.get(event_id)
+            if not watch:
+                continue
+            u, misses, seen, run = (span[0]+span[1])/2, 0, 0, None
+            end = self.geometry.hit_y-12*self.pixel_scale_y
+            rows = list(np.arange(y, end, 8*self.pixel_scale_y)) + [end]
+            for row in rows:
+                run = nearest_run(path_runs(work, self.geometry, row, c.appearance), u, .08)
+                if run is None:
+                    misses += 1
+                    if misses >= 2:
+                        break
+                    continue
+                if seen == 0 and min(span[1], run[1])-max(span[0], run[0]) < .75*(span[1]-span[0]):
+                    break
+                misses = 0
+                seen += 1
+                u = min(max(u, run[0]), run[1])
+            if run is not None and seen >= 2:
+                old = watch.get('span', self.hold_spans.get(event_id, ((watch['u'], watch['u']), 0))[0])
+                gap = max(old[0]-run[1], run[0]-old[1], 0.)
+                if span[1] > span[0] and gap <= .04:
+                    return True
+        return False
+
     def _hold_conflict_until(self, track, intent):
-        """Return a bounded predicted Hold occupation end, or None."""
-        path_px = float(getattr(track.candidate, "hold_path_px", 0) or 0)
-        velocity = track.prediction.velocity
-        if (not math.isfinite(path_px) or path_px <= 0 or velocity is None or
-                not math.isfinite(velocity) or velocity <= 0):
-            return None
-        duration = path_px / velocity
-        if not math.isfinite(duration) or duration <= 0:
-            return None
-        duration = min(self.scheduler.max_hold_s, max(.06, duration))
-        return intent.hit_at + duration
+        """Reserve a Hold key until its bounded maximum occupation time.
+
+        The measured path is capped at 80px and may be hidden by highlights;
+        it cannot predict when the tail will end. Use the Scheduler's existing
+        bound for choosing a verified alternative Tap key. Actual release is
+        still controlled by the visible tail and the safety stop.
+        """
+        return intent.hit_at + self.scheduler.max_hold_s
 
     def _rekey_pending_taps_for_hold_conflict(self, hold_track, hold_intent, now):
         """Use only previously verified Tap keys when a new Hold claims one."""
@@ -976,7 +1071,7 @@ class LiveEngine:
                             if key in tap_intent.valid_keys and key != hold_key]
             if not alternatives:
                 self.scheduler._log("rekey_rejected", "alternative_key_not_verified",
-                                    tap_intent, hold_key)
+                                    tap_intent.action(), hold_key)
                 continue
             for alternative in alternatives:
                 result = self.simple_core.intents.rekey_for_hold_conflict(
@@ -1035,6 +1130,7 @@ class LiveEngine:
             if self.hold_enabled and state == "PLAYING":
                 raw_holds = [c for c in candidates if c.appearance in self.hold_path_colors and
                              (c.hold_path_px > 0 or c.path_bbox is not None)]
+                raw_holds = select_hold_heads(raw_holds)
                 hold_candidates = (self.hold_tracker_v2.observe(raw_holds, frame.captured_at)
                                    if self.hold_tracker_v2 else
                                    [c for c in raw_holds if c.hold_path_px >= self.hold_path_px])
@@ -1255,10 +1351,25 @@ class LiveEngine:
                     still_valid = (self._edge_fragment_commit_still_valid(tr,commit,frame.captured_at)
                                    if event_id in self.edge_fragment_commits else
                                    self._commit_still_valid(tr,commit,finished))
-                    if (still_valid and state=='PLAYING' and
+                    hold_fragment_retained = False
+                    if (not still_valid and pending is commit[0] and pending.note_type == 'hold' and
+                            tr.status in ('confirmed', 'lost') and tr.history[-1][1] <= self.geometry.hit_y and
+                            tr.candidate.appearance == commit[4] and
+                            pending.keys[0] in tr.candidate.candidate_keys and
+                            self._hold_pending_still_valid(event_id, finished, state,
+                                                           focused, roi_valid, stale)):
+                        old_span = commit[3]
+                        new_span = (tr.candidate.u_min, tr.candidate.u_max)
+                        overlap = max(0., min(old_span[1], new_span[1]) - max(old_span[0], new_span[0]))
+                        hold_fragment_retained = overlap >= .5 * min(
+                            old_span[1] - old_span[0], new_span[1] - new_span[0])
+                    if ((still_valid or hold_fragment_retained) and state=='PLAYING' and
                             focused and roi_valid and not stale):
                         active_events.add(event_id)
                         retained[tr.track_id] = commit[0].keys,""
+                        if hold_fragment_retained:
+                            self.scheduler._log('hold_pending_coast',
+                                'same_color_key_span_fragment_original_deadline', commit[0])
                         if tr.status!='confirmed' or tr.prediction.reason:
                             self.scheduler._log('commit_retained',f'{tr.status}:{tr.prediction.reason}',commit[0])
                     else:
@@ -1319,6 +1430,22 @@ class LiveEngine:
                                         self.scheduler.pending[event_id])
                     continue
                 if tr.status != "confirmed" or tr.missed or tr.history[-1][1] < self.config.get("events", {}).get("min_y", 190*self.pixel_scale_y):
+                    # A Hold that was already scheduled can survive the same
+                    # bounded head dropout when its track is still present as
+                    # lost.  Previously only an absent ID reached the coast
+                    # check below, so one missed observation withdrew the
+                    # original action before its deadline.
+                    if (pending is not None and pending.note_type == "hold" and
+                            tr.history[-1][1] <= self.geometry.hit_y and
+                            self._hold_pending_still_valid(event_id, finished, state,
+                                                           focused, roi_valid, stale)):
+                        self.scheduler.resume(event_id)
+                        active_events.add(event_id)
+                        retained[tr.track_id] = (pending.keys, "")
+                        self.scheduler._log("hold_pending_coast",
+                                            "existing_head_track_lost_within_grace_original_deadline",
+                                            pending)
+                        continue
                     gate_failures=[]
                     if tr.status!="confirmed": gate_failures.append(
                         "TRACKER_TENTATIVE" if tr.status=="tentative" else "TRACKER_LOST_OR_REJECTED")
@@ -1381,9 +1508,17 @@ class LiveEngine:
                     # narrow edge fragments. Keep the widest physical span.
                     held_ids = {intent.event_id for _,intent in self.scheduler.held.values()
                                 if intent.note_type=='hold'}
-                    prior = [(span,hit,event_id in held_ids,event_id) for event_id,(span,hit)
-                             in self.hold_spans.items()
-                             if event_id in self.scheduler.pending or event_id in held_ids]
+                    prior = []
+                    for event_id,(span,hit) in self.hold_spans.items():
+                        held = event_id in held_ids
+                        if event_id not in self.scheduler.pending and not held:
+                            continue
+                        # Slides move across lanes while the original key
+                        # remains held. Comparing a new tail/edge UID only
+                        # with the start span permits another Hold key-down.
+                        if held:
+                            span = self.hold_watch.get(event_id, {}).get('span', span)
+                        prior.append((span,hit,held,event_id))
                     for tr in sorted(ready,key=lambda tr:-(tr.candidate.u_max-tr.candidate.u_min)):
                         event_id = f"{self.session_id}:{tr.track_id}"
                         keys,reason = options[tr.track_id]
@@ -1393,12 +1528,16 @@ class LiveEngine:
                         hit = self._hold_press_at(tr)
                         duplicate = any(
                             other_id != event_id and
+                            self.hold_colors.get(other_id, tr.candidate.appearance) == tr.candidate.appearance and
                             (held or abs(hit-other_hit)<=.15) and
                             max(0.,min(span[1],old[1])-max(span[0],old[0])) >=
                                 .75*min(span[1]-span[0],old[1]-old[0])
                             for old,other_hit,held,other_id in prior)
                         if duplicate:
                             options[tr.track_id] = (), 'duplicate_hold_path'
+                        elif (event_id not in held_ids and
+                              self._edge_on_held_ribbon(work, tr, held_ids)):
+                            options[tr.track_id] = (), 'hold_edge_on_active_ribbon'
                         else:
                             prior.append((span,hit,False,event_id))
                 decisions = self.tap_rule.decide(ready,options,self.scheduler,active_ids={tr.track_id for tr in tracks})
@@ -1492,6 +1631,12 @@ class LiveEngine:
                                 "hold_tracker_v2", {}).get("dropout_grace_ms", 120)) / 1000,
                             "span": (tr.candidate.u_min, tr.candidate.u_max),
                             "appearance": tr.candidate.appearance,
+                            # The tail still travels from the observation row
+                            # to the physical line. Reuse the head's measured
+                            # speed, bounded by the existing visual grace.
+                            "tail_travel_s": min(.25, (self.geometry.hit_y-self.hold_probe_y)/
+                                tr.prediction.velocity) if tr.prediction.velocity is not None and
+                                math.isfinite(tr.prediction.velocity) and tr.prediction.velocity > 0 else 0.,
                         }
                         # A new Hold may claim the key of an already pending
                         # Tap. Rekey only through previously verified key

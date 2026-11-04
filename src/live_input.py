@@ -469,10 +469,15 @@ class TapScheduler:
                         return
                 if (self.armed and failure == 'validated_capture_expired' and
                         state == 'PLAYING' and focused and roi and self.focus_check()):
-                    # Pause input during a brief capture gap without dropping
-                    # the manual Arm latch. Holds are released by disarm below;
-                    # no new key-down is allowed until a fresh frame arrives.
+                    # Release stale inputs immediately, but preserve the same
+                    # bounded wait used between notes. A held key must not turn
+                    # a brief capture gap into a permanent stop. Released
+                    # intents remain consumed and are never restarted here.
                     self._release_due(now)
+                    for key in list(self.held):
+                        self._log('stale_key_release', 'validated_capture_expired',
+                                  self.held[key][1], key)
+                        self._release(key, now)
                     if not self.held:
                         if not self.waiting_for_decision:
                             self.waiting_for_decision = True

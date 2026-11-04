@@ -242,6 +242,61 @@ def test_scheduler_uses_fresh_inflight_capture_before_disarming_hold():
     scheduler.close()
 
 
+def test_stale_hold_releases_then_resumes_without_restarting_old_hold():
+    clock, actuator, rows, scheduler = armed_scheduler()
+    hold = ActionIntent('hold-gap', ('F',), 10.01, .01, 'hold', .5)
+    assert scheduler.offer(hold)
+    clock.now = 10.01
+    scheduler.poll()
+    assert actuator.calls == [('down', 'F')]
+    future = ActionIntent('next-tap', ('S',), 10.08, .01)
+    assert scheduler.offer(future)
+    clock.now = 10.061
+    scheduler.poll()
+    assert actuator.calls == [('down', 'F'), ('up', 'F')]
+    assert scheduler.armed and scheduler.waiting_for_decision
+    clock.now = 10.07
+    scheduler.poll()
+    assert len(actuator.calls) == 2
+    scheduler.update_context(10.07, 'PLAYING', True, True)
+    clock.now = 10.08
+    scheduler.poll()
+    assert actuator.calls[-1] == ('down', 'S')
+    assert not scheduler.offer(hold)
+    assert not scheduler.waiting_for_decision
+    assert not any(r['reason'] == 'stale_context_timeout' for r in rows)
+    scheduler.close()
+
+
+@pytest.mark.parametrize('stop', ['timeout', 'focus', 'hotkey', 'roi', 'state'])
+def test_stale_hold_wait_preserves_stop_protection(stop):
+    clock, actuator, rows, scheduler = armed_scheduler()
+    assert scheduler.offer(ActionIntent('hold-gap', ('F',), 10.01, .01, 'hold', .5))
+    clock.now = 10.01
+    scheduler.poll()
+    clock.now = 10.061
+    scheduler.poll()
+    assert scheduler.armed and not scheduler.held
+    if stop == 'timeout':
+        clock.now = 10.262
+        scheduler.poll()
+        assert scheduler.last_reason == 'stale_context_timeout'
+    elif stop == 'hotkey':
+        scheduler.toggle()
+    elif stop == 'focus':
+        scheduler.focus_check = lambda: False
+        scheduler.poll()
+    else:
+        scheduler.update_context(clock.now, 'NOT_PLAYING' if stop == 'state' else 'PLAYING',
+                                 True, stop != 'roi')
+    assert not scheduler.armed
+    scheduler.update_context(clock.now, 'PLAYING', True, True)
+    scheduler.poll()
+    assert not scheduler.armed
+    assert actuator.calls == [('down', 'F'), ('up', 'F')]
+    scheduler.close()
+
+
 def test_planner_emits_per_gate_trace_and_candidate_key_conflicts():
     _, _, _, scheduler = armed_scheduler()
     planner = TapPlanner({"max_eta_s": .45}, min_y=190)

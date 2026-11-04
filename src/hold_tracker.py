@@ -6,7 +6,47 @@ dropout for the existing safe tracker.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+
+
+def select_hold_heads(candidates):
+    """Keep one moving head for duplicate contours of the same visible path.
+
+    A Hold's wide head and thin colored edge can share a path bbox in one
+    frame. Sending both to the motion tracker makes them compete for one UID.
+    Only exact same-path, same-color, strongly overlapping lane spans merge.
+    """
+    selected = []
+    for candidate in candidates:
+        duplicate = None
+        if candidate.path_bbox is not None:
+            for index, prior in enumerate(selected):
+                if (prior.path_bbox != candidate.path_bbox or
+                        prior.appearance != candidate.appearance or
+                        set(prior.candidate_keys) != set(candidate.candidate_keys)):
+                    continue
+                overlap = max(0.0, min(prior.u_max, candidate.u_max) -
+                              max(prior.u_min, candidate.u_min))
+                narrower = min(prior.u_max-prior.u_min,
+                               candidate.u_max-candidate.u_min)
+                heights = prior.bbox[3], candidate.bbox[3]
+                centers = (prior.bbox[1]+heights[0]/2,
+                           candidate.bbox[1]+heights[1]/2)
+                # Two real heads may share a connected Hold glow. Only a
+                # nearby thin edge beside a clearly sized head is removable.
+                if (narrower > 0 and overlap / narrower >= .75 and
+                        min(heights) <= 6 and max(heights) >= 8 and
+                        abs(centers[0]-centers[1]) <= 18):
+                    duplicate = index
+                    break
+        if duplicate is None:
+            selected.append(candidate)
+            continue
+        prior = selected[duplicate]
+        head = max((prior, candidate), key=lambda item: item.bbox[2]*item.bbox[3])
+        selected[duplicate] = replace(
+            head, hold_path_px=max(prior.hold_path_px, candidate.hold_path_px))
+    return selected
 
 
 @dataclass
@@ -64,9 +104,14 @@ class HoldTracker:
             evidence.observations += 1
             evidence.max_path_px = max(evidence.max_path_px, candidate.hold_path_px)
             evidence.continuity_confidence = min(1.0, evidence.observations / self.min_head_observations)
+            # A yellow Tap's complete bar can surround a thin edge contour.
+            # That short bbox is not a Hold body. Preserve green early-path
+            # continuity; its curved-head evidence follows the existing rule.
             evidence.accepted = (evidence.observations >= self.min_head_observations and
                                  (evidence.max_path_px >= self.min_path_px or
-                                  candidate.path_bbox is not None))
+                                  (candidate.path_bbox is not None and
+                                   (candidate.appearance != 'yellow_bar' or
+                                    candidate.path_bbox[3] >= self.min_path_px))))
             seen.add(id(evidence))
             if evidence.accepted:
                 accepted.append(candidate)

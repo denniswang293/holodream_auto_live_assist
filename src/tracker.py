@@ -1,7 +1,7 @@
 """Global sorted-pair association with motion gates and explicit lifecycle."""
 from __future__ import annotations
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import time
 import numpy as np
 from .detector import Candidate
@@ -18,6 +18,7 @@ class Track:
     status: str = "tentative"
     reason: str = "insufficient_observations"
     missed: int = 0
+    physical_hold_clock: bool = False
     was_confirmed: bool = False
     observations: int = 0
     first_time: float = 0.0
@@ -142,7 +143,26 @@ class Track:
         else:
             began = time.perf_counter()
             try:
-                self.prediction = predictor.predict(self.history, hit_y)
+                hold_lead = cfg.get('hold_input_lead_s')
+                physical_hold = (hold_lead is not None and physical_hit_y is not None and
+                    c.appearance in ('green_candidate', 'yellow_bar') and
+                    (self.physical_hold_clock or c.path_bbox is not None or c.hold_path_px > 0))
+                if physical_hold and not self.physical_hold_clock:
+                    # Predictions before Hold path confirmation targeted the
+                    # earlier trigger row. Do not compare those deadlines to
+                    # the new physical-judgment-row clock for hit-time drift.
+                    self.hit_history.clear()
+                self.physical_hold_clock = self.physical_hold_clock or physical_hold
+                # Fit and validate against the real judgment row. Validating
+                # against the old, earlier trigger row would expire a Hold
+                # before its physical-clock action deadline.
+                self.prediction = predictor.predict(
+                    self.history, physical_hit_y if physical_hold else hit_y)
+                p = self.prediction
+                if physical_hold and p.hit_time is not None:
+                    self.prediction = replace(p, physical_hit_time=p.hit_time,
+                                              hit_time=p.hit_time-hold_lead,
+                                              eta=p.eta-hold_lead)
             finally:
                 predictor.elapsed = getattr(predictor, "elapsed", 0.0) + time.perf_counter() - began
         if self.status == "rejected":

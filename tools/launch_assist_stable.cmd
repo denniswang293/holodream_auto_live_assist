@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0.."
-echo Stable source-first Assist: 60ms + earlier amendment OFF. Input starts OFF.
+echo Stable Assist: 60ms lead + bounded timing corrections. Input starts OFF.
 echo Ctrl+Shift+Alt+Q toggles input; Esc or F12 stops and releases keys.
 echo Game window: hololive-Dreams
 set "holodream_assist_record=N"

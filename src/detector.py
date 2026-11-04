@@ -332,6 +332,23 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         if appearance in path_boxes:
             paths = [p for p in path_boxes[appearance] if _iou(box,p)>0 and p[3]>bh*1.5]
             path_bbox = max(paths,key=lambda p:p[2]*p[3],default=None)
+        depth = 0
+        if path_bbox is None and appearance in path_boxes:
+            # A white highlight can disconnect the colored head from its
+            # translucent Hold body. Requiring contour intersection then
+            # turns a yellow Hold into a 25ms Tap. Bridge only a small gap
+            # ABOVE the head, with a long body in the same horizontal span
+            # and independently measured continuous path evidence.
+            nearby = [p for p in path_boxes[appearance]
+                      if p[3] >= 40*sy and 0 <= y-(p[1]+p[3]) <= 6*sy and
+                      max(0, min(x+bw, p[0]+p[2])-max(x, p[0])) >= .5*bw]
+            if nearby:
+                depth = path_depth(frame,playfield,cy,(u0+u1)/2,appearance,
+                                   mask=path_masks[appearance])
+                if depth >= 40:
+                    path_bbox = max(nearby,key=lambda p:p[2]*p[3])
+                else:
+                    depth = 0
         # Paired horizontal edges plus colored body evidence establish only
         # a provisional conventional tap appearance; track motion must confirm.
         note_type = ("tap" if appearance in ("cyan_bar","yellow_bar","neutral_candidate") and
@@ -342,10 +359,17 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         # Path-depth is the expensive part of candidate classification.  A
         # candidate can only be a Hold when a matching path contour was found;
         # avoid scanning the full frame for ordinary taps (including pink).
-        depth = (path_depth(frame,playfield,cy,(u0+u1)/2,appearance,
-                            mask=path_masks[appearance])
-                 if appearance in path_masks and path_bbox is not None and
-                 cy>=250*rh/404 else 0)
+        if depth == 0 and appearance in path_masks and path_bbox is not None and cy>=250*rh/404:
+            depth = path_depth(frame,playfield,cy,(u0+u1)/2,appearance,
+                               mask=path_masks[appearance])
+        # A yellow head/arrow joined to its glow can have a tall contour,
+        # without a ribbon extending behind the head. Near the input line,
+        # do not let that contour divert a normal bar away from Tap tracking.
+        if (appearance == 'yellow_bar' and cy >= 250*rh/404 and
+                path_bbox is not None and depth < 40 and
+                y-path_bbox[1] < 40*sy):
+            path_bbox, depth = None, 0
+            note_type = 'tap' if edge_count >= 2 and bh >= 4 else 'unknown'
         candidate = Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
                               body_box,path_bbox,raw,False,depth,
                               diagnostic_id=proposal_id, parent_proposal_id=proposal_id)

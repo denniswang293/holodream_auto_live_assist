@@ -2,8 +2,28 @@ import json
 from pathlib import Path
 import cv2
 import numpy as np
+import pytest
 from src.detector import detect
 from src.geometry import Playfield
+from src.calibration import load_calibration
+from src.assist_config import resolve_config
+
+
+def test_recorded_yellow_head_glow_remains_tap():
+    # Run 091102, source frame 2929: the bar's connected glow was mistaken
+    # for a Hold, starving Tap tracking before this visible note was missed.
+    root = Path(__file__).resolve().parents[1]
+    crop = cv2.imread(str(root/'tests/fixtures/yellow_head_glow.png'))
+    assert crop is not None
+    frame = np.zeros((404,720,3), np.uint8)
+    frame[230:315,90:290] = crop
+    geometry = load_calibration(root/'config/geometry_live_assist.json')
+    cfg = resolve_config().config
+    notes = detect(frame, geometry, cfg['key_map'],
+                   {**cfg['detector'], 'reference_resolution': geometry.reference_resolution})
+    heads = [n for n in notes if n.appearance == 'yellow_bar' and n.bbox[2] > 140 and n.bbox[3] > 10]
+    assert len(heads) == 1 and heads[0].note_type == 'tap'
+    assert heads[0].path_bbox is None and heads[0].hold_path_px == 0
 
 
 def run(frame):
@@ -138,5 +158,29 @@ def test_yellow_hold_body_provides_path_evidence_but_short_tap_does_not():
     hsv[230:292]=0
     notes=run(cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR))
     assert notes and all(c.hold_path_px<40 for c in notes)
+
+
+@pytest.mark.parametrize('hue', [27, 60])
+def test_hold_path_survives_a_highlight_gap_above_the_head(hue):
+    hsv = np.zeros((404,720,3),np.uint8)
+    hsv[180:245,308:362] = (hue,110,170)
+    # Three blank rows split the body and head into separate contours.
+    hsv[248:257,280:381] = (hue,220,250)
+    heads = [c for c in run(cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR)) if c.bbox[1] >= 245]
+    assert heads
+    assert all(c.path_bbox is not None and c.note_type == 'unknown' for c in heads)
+    assert any(c.hold_path_px >= 40 for c in heads)
+
+
+@pytest.mark.parametrize('body_box', [(308,180,362,230), (400,180,470,245), (308,230,362,245)])
+def test_separate_or_short_color_patch_does_not_convert_yellow_tap(body_box):
+    hsv = np.zeros((404,720,3),np.uint8)
+    x0,y0,x1,y1 = body_box
+    hsv[y0:y1,x0:x1] = (27,110,170)
+    hsv[248:257,280:381] = (27,220,250)
+    heads = [c for c in run(cv2.cvtColor(hsv,cv2.COLOR_HSV2BGR))
+             if c.bbox[1] >= 245 and c.bbox[0] < 390]
+    assert heads and any(c.note_type == 'tap' for c in heads)
+    assert all(c.path_bbox is None and c.hold_path_px == 0 for c in heads)
 
 

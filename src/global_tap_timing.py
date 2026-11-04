@@ -83,6 +83,8 @@ class GlobalTapTimingPolicy:
     profile_min_samples: int = 1
     timing_reference: str = "physical_calibrated"
     input_lead_ms: float = 60.0
+    guarded_reuse_enabled: bool = False
+    guarded_reuse_max_age_s: float = .080
 
     @classmethod
     def from_mapping(cls, config: dict | None = None):
@@ -94,10 +96,15 @@ class GlobalTapTimingPolicy:
             return cls(enabled=False, mode="shadow", allow_active=False,
                        profile_ttl_s=.45, timing_reference="trigger_legacy",
                        input_lead_ms=0.0).validate()
+        def strict_bool(name, default):
+            value = cfg.get(name, default)
+            if not isinstance(value, bool):
+                raise ValueError(f"global_tap_timing.{name} must be a boolean")
+            return value
         values = {
-            "enabled": bool(cfg.get("enabled", cls.enabled)),
+            "enabled": strict_bool("enabled", cls.enabled),
             "mode": str(cfg.get("mode", cls.mode)).lower(),
-            "allow_active": bool(cfg.get("allow_active", cls.allow_active)),
+            "allow_active": strict_bool("allow_active", cls.allow_active),
             "min_tracks": int(cfg.get("min_tracks", cls.min_tracks)),
             "min_samples": int(cfg.get("min_samples", cls.min_samples)),
             "history_size": int(cfg.get("history_size", cls.history_size)),
@@ -117,6 +124,8 @@ class GlobalTapTimingPolicy:
             # source-first config supplies these fields explicitly.
             "timing_reference": str(cfg.get("timing_reference", "trigger_legacy")).lower(),
             "input_lead_ms": float(cfg.get("input_lead_ms", 0.0)),
+            "guarded_reuse_enabled": strict_bool("guarded_reuse_enabled", False),
+            "guarded_reuse_max_age_s": float(cfg.get("guarded_reuse_max_age_ms", 80.0)) / 1000,
         }
         policy = cls(**values)
         policy.validate()
@@ -139,6 +148,8 @@ class GlobalTapTimingPolicy:
                 .1 <= self.max_eta_s <= 1.5 and .001 <= self.measurement_noise_px <= 20 and
                 .01 <= self.max_uncertainty_s <= .2 and .1 <= self.profile_ttl_s <= 5):
             raise ValueError("global_tap_timing limits are outside bounds")
+        if not isinstance(self.guarded_reuse_enabled, bool) or not (0 <= self.guarded_reuse_max_age_s <= .080):
+            raise ValueError("guarded reuse must be disabled or bounded to 80ms")
         return self
 
     def to_dict(self):
@@ -153,6 +164,8 @@ class GlobalTapTimingPolicy:
             "max_uncertainty_s": self.max_uncertainty_s, "profile_segments": self.profile_segments,
             "profile_ttl_ms": self.profile_ttl_s * 1000, "profile_min_samples": self.profile_min_samples,
             "timing_reference": self.timing_reference, "input_lead_ms": self.input_lead_ms,
+            "guarded_reuse_enabled": self.guarded_reuse_enabled,
+            "guarded_reuse_max_age_ms": self.guarded_reuse_max_age_s * 1000,
         }
 
 
@@ -182,6 +195,8 @@ class GlobalTapTimingEstimator:
         self.profile_min_samples = self.policy.profile_min_samples
         self.timing_reference = self.policy.timing_reference
         self.input_lead_ms = self.policy.input_lead_ms
+        self.guarded_reuse_enabled = self.policy.guarded_reuse_enabled
+        self.guarded_reuse_max_age_s = self.policy.guarded_reuse_max_age_s
         self.model = GlobalTapModel()
         self._version = 0
         self._capture_timestamp = -math.inf
@@ -192,6 +207,11 @@ class GlobalTapTimingEstimator:
         self.speed_epoch = 1
         self._was_playing = False
         self._song_reference_velocity: float | None = None
+        self._last_good_model: GlobalTapModel | None = None
+        self._last_good_capture = -math.inf
+        self._last_good_target_y: float | None = None
+        self._last_good_edges: tuple[float, ...] = ()
+        self._last_good_timing_reference = self.timing_reference
 
     @property
     def active_enabled(self):
@@ -264,6 +284,11 @@ class GlobalTapTimingEstimator:
         self.speed_epoch += 1
         self._was_playing = False
         self._song_reference_velocity = None
+        self._last_good_model = None
+        self._last_good_capture = -math.inf
+        self._last_good_target_y = None
+        self._last_good_edges = ()
+        self._last_good_timing_reference = self.timing_reference
         self.model = GlobalTapModel(model_version=self._version, reason="RESET",
                                     speed_epoch=self.speed_epoch,
                                     timing_source=("global_physical_calibrated"
@@ -302,6 +327,10 @@ class GlobalTapTimingEstimator:
         if self._profile_edges and edges != self._profile_edges:
             self._profile_history.clear()
             self._profile_last_capture = -math.inf
+            self._last_good_model = None
+            self._last_good_capture = -math.inf
+            self._last_good_target_y = None
+            self._last_good_edges = ()
         self._profile_edges = edges
         candidates = []
         current_segment_values = defaultdict(lambda: defaultdict(list))
@@ -456,10 +485,19 @@ class GlobalTapTimingEstimator:
             calibration_state=calibration_state,
             timing_source=("global_physical_calibrated" if self.timing_reference == "physical_calibrated"
                            else "global_trigger_legacy"))
+        if (self.model.ready and self.model.reason == "ready" and
+                self.model.source == "global_profile" and
+                self.model.profile_speeds and
+                all(math.isfinite(value) and value > 0 for value in self.model.profile_speeds)):
+            self._last_good_model = self.model
+            self._last_good_capture = self._capture_timestamp
+            self._last_good_target_y = float(trigger_y)
+            self._last_good_edges = tuple(edges)
+            self._last_good_timing_reference = self.timing_reference
         return self.model
 
-    def _profile_eta(self, observed_y: float, trigger_y: float):
-        model = self.model
+    def _profile_eta(self, observed_y: float, trigger_y: float, model=None):
+        model = model or self.model
         if not model.profile_edges or not model.profile_speeds:
             return None
         if not (math.isfinite(observed_y) and math.isfinite(trigger_y) and trigger_y > observed_y):
@@ -506,14 +544,18 @@ class GlobalTapTimingEstimator:
 
     def estimate(self, track, *, trigger_y: float, now: float,
                  physical_hit_y: float | None = None,
-                 input_lead_ms: float | None = None) -> GlobalTapEta:
-        model = self.model
+                 input_lead_ms: float | None = None,
+                 model_override: GlobalTapModel | None = None,
+                 uncertainty_penalty_s: float = 0.0,
+                 timing_source_override: str | None = None) -> GlobalTapEta:
+        model = model_override or self.model
         use_physical = (self.timing_reference == "physical_calibrated" and
                         physical_hit_y is not None and math.isfinite(float(physical_hit_y)))
         target_y = float(physical_hit_y) if use_physical else float(trigger_y)
         lead_ms = self.input_lead_ms if input_lead_ms is None else float(input_lead_ms)
-        timing_source = ("global_physical_calibrated" if use_physical
-                         else "global_trigger_legacy")
+        timing_source = (timing_source_override or
+                         ("global_physical_calibrated" if use_physical
+                          else "global_trigger_legacy"))
         history = self._real_history(track)
         if not model.ready or model.velocity_px_s is None:
             return GlobalTapEta(track.track_id, "NOT_READY", model.reason,
@@ -540,7 +582,7 @@ class GlobalTapTimingEstimator:
                                  model_version=model.model_version, timing_source=timing_source,
                                  lead_ms=lead_ms, speed_epoch=model.speed_epoch)
         distance = target_y - observed_y
-        profile = self._profile_eta(observed_y, target_y)
+        profile = self._profile_eta(observed_y, target_y, model=model)
         if profile is None:
             return GlobalTapEta(track.track_id, "NOT_READY", "profile_not_ready",
                                 None, None, None, model.quality, model.velocity_px_s,
@@ -576,6 +618,8 @@ class GlobalTapTimingEstimator:
         local_velocity = model.profile_speeds[local_index]
         sigma_t_y = sigma_y / max(local_velocity, self.min_velocity)
         uncertainty = max(.001, math.sqrt(profile_uncertainty ** 2 + sigma_t_y ** 2))
+        if uncertainty_penalty_s:
+            uncertainty = math.hypot(uncertainty, max(0.0, float(uncertainty_penalty_s)))
         if (not math.isfinite(eta) or not math.isfinite(hit_at) or
                 not math.isfinite(uncertainty) or eta <= 0 or hit_at <= now):
             reason = "press_time_not_future" if use_physical else "hit_time_not_future"
@@ -591,3 +635,86 @@ class GlobalTapTimingEstimator:
                             model.model_version, physical_cross_at=physical_cross_at,
                             press_at=press_at, physical_eta_s=physical_eta, lead_ms=lead_ms,
                             timing_source=timing_source, speed_epoch=model.speed_epoch)
+
+    def guarded_reuse_estimate(self, track, *, trigger_y: float, now: float,
+                               physical_hit_y: float | None = None,
+                               geometry_target_y: float | None = None):
+        """Try the bounded last-good profile only for a transient variance gate.
+
+        Returns ``(eta, metadata)``.  No state is mutated and no scheduler is
+        touched; the caller still routes a successful estimate through the
+        existing Planner → IntentManager → Scheduler path.
+        """
+        meta = {"attempted": False, "passed_rescue_gate": False,
+                "rescue_rejected_reason": "GUARDED_REUSE_DISABLED",
+                "cache_available": self._last_good_model is not None,
+                "cache_age_ms": "", "cache_source": "",
+                "same_epoch": False, "same_geometry": False,
+                "real_observation_age_ms": ""}
+        if not self.guarded_reuse_enabled:
+            return None, meta
+        meta["attempted"] = True
+        if self.model.reason != "speed_variation_too_high":
+            meta["rescue_rejected_reason"] = "ORIGINAL_MODEL_NOT_SPEED_VARIATION"
+            return None, meta
+        cached = self._last_good_model
+        if cached is None:
+            meta["rescue_rejected_reason"] = "NO_CACHE"
+            return None, meta
+        age = self._capture_timestamp - self._last_good_capture
+        meta["cache_age_ms"] = age * 1000 if math.isfinite(age) else ""
+        meta["cache_source"] = cached.source
+        if not math.isfinite(age) or age < 0:
+            meta["rescue_rejected_reason"] = "CACHE_NEGATIVE_AGE"
+            return None, meta
+        if age > self.guarded_reuse_max_age_s:
+            meta["rescue_rejected_reason"] = "CACHE_OLDER_THAN_80MS"
+            return None, meta
+        target = (float(geometry_target_y) if geometry_target_y is not None else float(trigger_y))
+        same_epoch = cached.speed_epoch == self.speed_epoch == self.model.speed_epoch
+        same_geometry = (tuple(cached.profile_edges) == tuple(self._profile_edges) == tuple(self._last_good_edges)
+                         and self._last_good_target_y is not None
+                         and abs(float(self._last_good_target_y) - target) <= 1e-6
+                         and self._last_good_timing_reference == self.timing_reference)
+        meta["same_epoch"] = same_epoch; meta["same_geometry"] = same_geometry
+        if not same_epoch:
+            meta["rescue_rejected_reason"] = "EPOCH_MISMATCH"
+            return None, meta
+        if not same_geometry:
+            meta["rescue_rejected_reason"] = "GEOMETRY_MISMATCH"
+            return None, meta
+        history = self._real_history(track)
+        if (getattr(track, "status", "") != "confirmed" or
+                getattr(track, "confirmed_note_type", None) != "tap" or
+                getattr(track, "missed", 0) != 0 or not history):
+            meta["rescue_rejected_reason"] = "TRACK_NOT_CURRENT"
+            return None, meta
+        observation_age = self._capture_timestamp - history[-1][0]
+        meta["real_observation_age_ms"] = observation_age * 1000 if math.isfinite(observation_age) else ""
+        if not math.isfinite(observation_age) or observation_age < 0 or observation_age > self.max_observation_age_s:
+            meta["rescue_rejected_reason"] = "STALE_OBSERVATION"
+            return None, meta
+        penalty = .25 * age
+        base_eta = self.estimate(track, trigger_y=trigger_y, now=now,
+                                 physical_hit_y=physical_hit_y, model_override=cached,
+                                 uncertainty_penalty_s=0.0,
+                                 timing_source_override="global_profile_guarded_reuse")
+        meta["original_uncertainty_ms"] = (base_eta.uncertainty_s * 1000
+                                            if base_eta.uncertainty_s is not None else "")
+        eta = self.estimate(track, trigger_y=trigger_y, now=now,
+                            physical_hit_y=physical_hit_y, model_override=cached,
+                            uncertainty_penalty_s=penalty,
+                            timing_source_override="global_profile_guarded_reuse")
+        if eta.status != "AVAILABLE":
+            meta["rescue_rejected_reason"] = {
+                "eta_uncertainty_too_high": "UNCERTAINTY_TOO_HIGH",
+                "press_time_not_future": "PAST_DEADLINE",
+                "hit_time_not_future": "PAST_DEADLINE",
+                "eta_outside_horizon": "ETA_OUTSIDE_HORIZON",
+            }.get(eta.reason, eta.reason.upper() if eta.reason else "RESCUE_ESTIMATE_REJECTED")
+            meta["effective_uncertainty_ms"] = eta.uncertainty_s * 1000 if eta.uncertainty_s is not None else ""
+            return None, meta
+        meta["passed_rescue_gate"] = True
+        meta["rescue_rejected_reason"] = ""
+        meta["effective_uncertainty_ms"] = eta.uncertainty_s * 1000 if eta.uncertainty_s is not None else ""
+        return eta, meta

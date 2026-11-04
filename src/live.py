@@ -80,6 +80,15 @@ GLOBAL_ETA_FIELDS = ["capture_timestamp", "processing_timestamp", "note_uid", "t
                      "eta_timing_source", "uncertainty_s", "observed_y", "observed_at",
                      "planner_status", "planner_reason", "planner_key", "timing_group_id", "active_enabled",
                      "input_sent"]
+GLOBAL_RESCUE_FIELDS = ["uid", "track_id", "capture_timestamp", "processed_at", "profile",
+                        "speed_epoch", "geometry_sha256", "original_model_reason",
+                        "original_eta_status", "original_eta_reason", "cache_available",
+                        "cache_age_ms", "cache_source", "same_epoch", "same_geometry",
+                        "real_observation_age_ms", "attempted", "passed_rescue_gate",
+                        "rescue_rejected_reason", "original_uncertainty_ms",
+                        "effective_uncertainty_ms", "physical_cross_at", "press_at",
+                        "final_planner_status", "scheduler_action", "key_down_at",
+                        "model_source"]
 INTENT_FIELDS = ["event_id", "note_uid", "state", "reason", "timestamp", "key",
                  "predicted_hit_time", "uncertainty_s", "gameplay_state", "revision",
                  "physical_cross_at", "press_at", "lead_ms", "timing_source",
@@ -123,6 +132,35 @@ class CsvLog:
             self._pending_rows = 0
             self._last_flush = time.monotonic()
             self.file.close()
+
+
+class _NoLog:
+    """Discard diagnostic rows while leaving their producers and callbacks active."""
+    def write(self, row):
+        pass
+
+    def close(self):
+        pass
+
+
+def _output_directory(args, no_logs):
+    return None if no_logs else new_run_directory(args.out)
+
+
+def _make_action_logger(key_log, input_log, input_actions, engine_holder):
+    def log_action(row):
+        key_log.write(row)
+        input_log.write(row)
+        input_actions[row.get("action", "unknown")] += 1
+        if "engine" in engine_holder:
+            engine_holder["engine"].record_scheduler_action(row)
+        if row["action"] in ("armed", "disarmed", "arm_rejected", "arm_requested",
+                              "arm_waiting_for_fresh_frame", "arm_resumed_on_fresh_frame",
+                              "decision_wait", "decision_resumed"):
+            print(f"INPUT {row['action']}: {row['reason']}", flush=True)
+        elif row["action"] == "key_down":
+            print(f"{row['note_type'].upper()} sent: {row['key']}", flush=True)
+    return log_action
 
 
 def _render_overlay_if_recording(recorder, work, tracks, info, engine, dropped):
@@ -169,6 +207,7 @@ def _summary(out, result):
              f"Experiment: {result.get('experiment_id', 'none')} | variant: {result.get('variant', 'baseline')}",
              f"Input prediction target: y={result['input_trigger_y']:.1f}; physical track completion: y={result['tracking_completion_y']:.1f}.",
              f"Tap timing source: {result.get('tap_timing_source', 'legacy')}; Global model: {result.get('global_timing_mode', 'disabled')}.",
+             f"Hold start delay: {result.get('hold_start_delay_ms', 0):g} ms.",
              f"Processed frames: {result['processed_frames']}; acquired/source frames: {result['acquired_frames']}",
              f"Capture FPS: {result['capture_fps']:.3f}; processing FPS: {result['wall_processing_fps']:.3f}",
              f"Latency P50/P95: {result['latency_p50_ms']:.3f}/{result['latency_p95_ms']:.3f} ms",
@@ -186,6 +225,9 @@ def _summary(out, result):
 
 
 def run(args):
+    no_logs = bool(getattr(args, "no_logs", False))
+    if no_logs and getattr(args, "record_overlay", False):
+        raise ValueError("--record-overlay cannot be used with --no-logs")
     resolved = resolve_config(profile=args.profile, config_path=args.config,
                               live_config_path=args.live_config)
     config = resolved.config
@@ -214,8 +256,9 @@ def run(args):
     region = target.monitor_region()
     capture_fit = normalization_transform((region.width, region.height), geometry.reference_resolution)
     video_fps = live_cfg.get("capture_fps", 120)
+    print(f"Capture target: {video_fps:g} FPS | frame age limit: {max_age*1000:.0f} ms", flush=True)
     focus_check, modifier_check = target.focused, modifiers_down
-    out = new_run_directory(args.out)
+    out = _output_directory(args, no_logs)
     identity_cfg = dict(config.get("diagnostics", {}).get("live_identity_trace", {}) or {})
     snapshot_cfg = dict(config.get("diagnostics", {}).get("trace_snapshot", {}) or {})
     # Snapshot serialization is diagnostic-only and explicitly opt-in.  It is
@@ -223,10 +266,15 @@ def run(args):
     identity_cfg["snapshot_enabled"] = bool(snapshot_cfg.get("enabled", False))
     identity_cfg["snapshot_max_rows"] = int(snapshot_cfg.get("max_rows", 512))
     identity_trace = (LiveIdentityTraceWriter(out, out.name, identity_cfg)
-                      if identity_cfg.get("enabled", False) else None)
-    print(f"Assist | profile {assist_meta['profile_name']} | source {assist_meta['source_mode']} | geometry {geometry.status} | predictor {config['predictor']['mode']} | output: {out}", flush=True)
+                      if not no_logs and identity_cfg.get("enabled", False) else None)
+    output_status = "diagnostic output disabled" if no_logs else f"output: {out}"
+    print(f"Assist | profile {assist_meta['profile_name']} | source {assist_meta['source_mode']} | geometry {geometry.status} | predictor {config['predictor']['mode']} | {output_status}", flush=True)
     if assist_meta["profile_name"] == "tap-earlier":
         print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: tap-earlier is user-selectable and reversible.", flush=True)
+    elif assist_meta["profile_name"] == "stable-global-rescue":
+        print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: guarded last-good Global ETA reuse (max 80ms).", flush=True)
+    elif assist_meta["profile_name"] == "timing-balance":
+        print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: bounded earlier Tap amendments; Hold starts 15ms later.", flush=True)
     print("Ctrl+Shift+Alt+Q toggles assist only; Esc/F12 stops. Input starts OFF.", flush=True)
     print(f"Actual physical capture rectangle: {region.bounds} (entire game display)",flush=True)
     wall_started = time.perf_counter()
@@ -234,19 +282,20 @@ def run(args):
         # High-rate diagnostics use a bounded, time/row based flush.  Action
         # logs remain immediate so safety and input state are observable.
         def diagnostic_log(filename, fields):
-            return CsvLog(out/filename, fields, batch_size=64, batch_interval_s=.2)
+            return _NoLog() if no_logs else CsvLog(out/filename, fields, batch_size=64, batch_interval_s=.2)
         event_log = diagnostic_log("live_events.csv", EVENT_FIELDS)
         frame_log = diagnostic_log("live_frames.csv", FRAME_FIELDS)
-        key_log = CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
+        key_log = _NoLog() if no_logs else CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
         decision_log = diagnostic_log("tap_decisions.csv", DECISION_FIELDS)
         shadow_log = diagnostic_log("tap_planner_shadow.csv", SHADOW_FIELDS)
         eta_log = diagnostic_log("tap_eta_comparison.csv", ETA_FIELDS)
         global_eta_log = diagnostic_log("global_tap_timing_shadow.csv", GLOBAL_ETA_FIELDS)
+        global_rescue_log = diagnostic_log("global_rescue_events.csv", GLOBAL_RESCUE_FIELDS)
         pf_gate_shadow_log = diagnostic_log("pf_gate_shadow.csv", PF_GATE_SHADOW_FIELDS)
         intent_log = diagnostic_log("tap_intents.csv", INTENT_FIELDS)
-        input_log = CsvLog(out/"input_actions.csv", ACTION_FIELDS)
+        input_log = _NoLog() if no_logs else CsvLog(out/"input_actions.csv", ACTION_FIELDS)
         for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log,
-                    global_eta_log,
+                    global_eta_log, global_rescue_log,
                     pf_gate_shadow_log, intent_log, input_log):
             stack.callback(log.close)
         if identity_trace is not None:
@@ -264,18 +313,7 @@ def run(args):
         actuator = WindowsActuator(input_mode=live_cfg.get('keyboard_input_mode','scan_code'))
         print(f"Keyboard input: {actuator.input_mode}",flush=True)
         engine_holder={}
-        def log_action(row):
-            key_log.write(row)
-            input_log.write(row)
-            input_actions[row.get("action", "unknown")] += 1
-            if "engine" in engine_holder:
-                engine_holder["engine"].record_scheduler_action(row)
-            if row["action"] in ("armed","disarmed","arm_rejected","arm_requested",
-                                  "arm_waiting_for_fresh_frame","arm_resumed_on_fresh_frame",
-                                  "decision_wait","decision_resumed"):
-                print(f"INPUT {row['action']}: {row['reason']}",flush=True)
-            elif row['action']=='key_down':
-                print(f"{row['note_type'].upper()} sent: {row['key']}",flush=True)
+        log_action = _make_action_logger(key_log, input_log, input_actions, engine_holder)
         scheduler = TapScheduler("assist", actuator, clock=clock, focus_check=focus_check,
                                  modifiers_check=modifier_check, on_log=log_action,
                                  max_age=max_age, duration=config.get("timing", {}).get("tap_duration_ms", 25)/1000,
@@ -286,7 +324,8 @@ def run(args):
                                      if live_cfg.get("speculative_taps",{}).get("enabled") else .04)
         stack.callback(scheduler.close)
         engine = LiveEngine(config, geometry, scheduler, clock,
-                            identity_trace=identity_trace)
+                            identity_trace=identity_trace,
+                            profile_name=assist_meta["profile_name"])
         engine_holder["engine"]=engine
         print(f"Global y-profile ETA Tap assist + PF tracking + visual Hold assist; keys: {','.join(k for k in config['key_map'] if k in engine.known_keys) or 'NONE; taps will abstain'}",flush=True)
         global_cfg = engine.simple_core.global_timing
@@ -367,6 +406,8 @@ def run(args):
                     eta_log.write(row)
                 for row in engine.simple_core.drain_global_rows():
                     global_eta_log.write(row)
+                for row in engine.simple_core.drain_global_rescue_rows():
+                    global_rescue_log.write(row)
                 for row in engine.simple_core.drain_pf_gate_shadow_rows():
                     pf_gate_shadow_log.write(row)
                 info["dropped_total"] = dropped
@@ -437,6 +478,9 @@ def run(args):
                       "policy_fingerprint": policy_fingerprint,
                       "experiment_input_lead_ms": engine.simple_core.global_timing.input_lead_ms,
                       "experiment_allow_earlier_amend": engine.simple_core.intents.allow_earlier_amend,
+                      "hold_start_delay_ms": engine.hold_start_delay_s * 1000,
+                      "guarded_reuse_enabled": engine.simple_core.global_timing.guarded_reuse_enabled,
+                      "guarded_reuse_max_age_ms": engine.simple_core.global_timing.guarded_reuse_max_age_s * 1000,
                       "region": list(region.bounds) if region else None,
                       "normalization_transform": capture_fit.as_dict(),
                       "capture_backend": worker.backend_name,
@@ -485,8 +529,9 @@ def run(args):
                       "recording_index": 'live_video_index.csv' if recorder else None,
                       "recording_error": str(recording_error) if recording_error else None,
                       "accuracy": "UNVERIFIED", "real_game_sessions_validated": 0}
-            _summary(out, result)
-            (out/"run_metrics.json").write_text(json.dumps({
+            if not no_logs:
+                _summary(out, result)
+                (out/"run_metrics.json").write_text(json.dumps({
                 "metric_scope": "diagnostic_funnel; not game accuracy",
                 "tap_lifecycle_transitions": dict(tap_funnel),
                 "input_action_counts": dict(input_actions),
@@ -504,10 +549,13 @@ def run(args):
                 "variant": result["variant"],
                 "experiment_input_lead_ms": result["experiment_input_lead_ms"],
                 "experiment_allow_earlier_amend": result["experiment_allow_earlier_amend"],
+                "hold_start_delay_ms": result["hold_start_delay_ms"],
                 "global_timing_stats": result["global_timing_stats"],
                 "accuracy": "UNVERIFIED"
-            }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
-            print(f"Saved {out}: {engine.frames} frames, {engine.events} events, {scheduler.sent_taps} taps, {scheduler.sent_holds} holds. Accuracy UNVERIFIED.", flush=True)
+                }, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+                print(f"Saved {out}: {engine.frames} frames, {engine.events} events, {scheduler.sent_taps} taps, {scheduler.sent_holds} holds. Accuracy UNVERIFIED.", flush=True)
+            else:
+                print(f"Assist stopped: {engine.frames} frames, {engine.events} events, {scheduler.sent_taps} taps, {scheduler.sent_holds} holds. Diagnostics were not saved.", flush=True)
             if recording_error:
                 raise RuntimeError(str(recording_error))
     return result
@@ -517,8 +565,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--window-title",default=DEFAULT_WINDOW_TITLE,help="Game window title (default: %(default)s)")
     parser.add_argument("--list-windows", action="store_true")
-    parser.add_argument("--profile", choices=("stable", "tap-earlier"), default="tap-earlier",
-                        help="Source-first Tap profile (default: %(default)s)")
+    parser.add_argument("--profile", choices=("stable", "tap-earlier", "stable-global-rescue", "timing-balance"), default="stable",
+                        help="Source-first Assist timing profile (default: %(default)s)")
     parser.add_argument("--config", type=Path, default=None,
                         help="Optional legacy/root JSON override")
     parser.add_argument("--live-config", type=Path, default=None,
@@ -528,10 +576,14 @@ def main():
     parser.add_argument("--backend", choices=("auto", "dxcam", "mss"), default="auto")
     parser.add_argument("--record-overlay", action="store_true",
                         help="Record overlay and clean source asynchronously")
+    parser.add_argument("--no-logs", action="store_true",
+                        help="Disable diagnostic files and recordings; keep Assist behavior active")
     parser.add_argument("--max-frames", type=int)
     args = parser.parse_args()
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("--max-frames must be positive")
+    if args.no_logs and args.record_overlay:
+        parser.error("--record-overlay cannot be used with --no-logs")
     try:
         if args.list_windows:
             from .windows_runtime import enable_dpi_awareness, list_windows

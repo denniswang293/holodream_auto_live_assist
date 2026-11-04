@@ -1,5 +1,5 @@
 {
-  "capture_fps": 120,
+  "capture_fps": 50,
   "keyboard_input_mode": "scan_code",
   "max_frame_age_ms": 60,
   "stale_context_pause_ms": 200,

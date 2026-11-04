@@ -19,13 +19,21 @@ python -m pip install -r requirements-live.txt
 .\tools\launch_assist.cmd
 ```
 
-一般啟動現在使用 `src/` 的 source-first `tap-earlier` profile（60ms、允許合規的較早 deadline amendment），啟動時會顯示 `EXPERIMENTAL / NEEDS_GAME_VALIDATION`。要立即回退到穩定組，使用：
+若不希望 Assist 在磁碟留下診斷檔、snapshot 或錄影，可使用無輸出啟動器；操作與輸入安全設定相同，且不會詢問錄影：
+
+```powershell
+.\tools\launch_assist_clean.cmd
+```
+
+也可在命令列加入 `--no-logs`。此模式不建立 `output/assist/run_*`，並且不能與 `--record-overlay` 同時使用。
+
+一般啟動使用 `stable` profile（60ms，可依新觀測有限度地提早／延後排程；單次最多 40ms、累計 80ms、最後 30ms 凍結）。`launch_assist_stable.cmd` 也使用相同設定：
 
 ```powershell
 .\tools\launch_assist_stable.cmd
 ```
 
-兩個 profile 只差 `allow_earlier_amend`；geometry 仍必須由外部 `config/geometry_live_assist.json` 提供。舊的 `--config`／`--live-config` 仍可明確傳入，會標示為 legacy override。
+`tap-earlier`、`stable-global-rescue`、`timing-balance` 仍可透過 `python -m src.live --profile <名稱> --geometry config/geometry_live_assist.json` 明確選用作診斷。`timing-balance` 在 2026-11-03 的兩次實測中出現更多可見 MISS；一般實戰使用 `stable`。這幾組實驗設定沒有改變安全停止條件。舊的 `--config`／`--live-config` 仍可明確傳入，會標示為 legacy override。
 
 Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次停用；`Esc` 或 `F12` 會停止程式並釋放按住的鍵。失焦、ROI 不合法、影格過期或安全條件失效時，輸入會自動停止。
 
@@ -33,7 +41,7 @@ Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shi
 
 ## 診斷設定
 
-`config.json` 保留安全預設：
+一般啟動的有效設定來自 `src/assist_defaults.py` 與所選 profile；`config.json`、`config/live_assist.json` 只有明確指定舊版覆寫參數時才會載入。安全設定包括：
 
 - `pf_assisted_reassociation.enabled=false`：PF-assisted 只做 Shadow/offline 診斷，不可送鍵。
 - `live.global_tap_timing`：多軌、分高度的 Global 速度輪廓 ETA 為普通 Tap 的 Active 時間來源；`allow_active=true` 只代表通過 Global gate 的 proposal 可送鍵，PF 僅提供空間追蹤與關聯。
@@ -52,6 +60,8 @@ Snapshot 會寫入每次 `output/assist/run_*` 的 `live_trace_snapshots.csv`。
 - `live_trace_snapshots.csv`：可選診斷 snapshot。
 - `global_tap_timing_shadow.csv`：全域 y-profile ETA 的逐 track 診斷；不代表遊戲命中。
 - `live_overlay.mp4`、`live_source.mp4`：只有啟用錄影時才會產生。
+
+選用 `stable-global-rescue` 時另有 `global_rescue_events.csv`；這也是診斷資料，不代表遊戲命中。
 
 沒有遊戲判定來源時，遊戲命中率一律視為 `UNKNOWN`；`FIRED`、`key_down` 或 UID 持續都不能直接解讀為 Perfect、Good 或 Miss。
 
@@ -73,6 +83,6 @@ python -m pytest -q
 - `src/hold_tracker.py`、`src/hold_visual.py`：Hold 視覺追蹤與放鍵。
 - `src/detector.py`、`src/geometry.py`：色塊偵測與六鍵幾何。
 - `src/live_input.py`、`src/windows_runtime.py`：人工啟用與 Windows 輸入安全。
-- `src/assist_defaults.py`、`src/assist_profiles.py`、`src/assist_config.py`：source-first 預設、stable/tap-earlier profile、nested override 與 fail-closed 驗證。
+- `src/assist_defaults.py`、`src/assist_profiles.py`、`src/assist_config.py`：source-first 預設、可回退的 Assist profile、nested override 與 fail-closed 驗證。
 - `tools/launch_assist.cmd`：正式 Assist 啟動器。
 - `docs/`：操作、架構與校正說明。
