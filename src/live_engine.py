@@ -19,7 +19,7 @@ from .live_input import ActionIntent, verified_keys
 from .overlay import render
 from .tracker import Tracker
 from .tap_assignment import AnyCoveredKeyRule
-from .hold_visual import path_runs, nearest_run
+from .hold_visual import path_runs, nearest_run, assign_hold_runs, connected_hold_runs, hold_probe_is_bright, continuous_hold_body
 from .judgment_time import JudgmentTimeEstimator
 from .hold_tracker import HoldTracker, select_hold_heads
 from .simple_core import SimpleAssistCore
@@ -922,11 +922,24 @@ class LiveEngine:
         return (coast['generation'] == self.scheduler.arm_generation and
                 finished <= coast['intent'].hit_at+self.scheduler.max_lateness)
 
-    def _update_held_holds(self, work, now):
+    def _hold_tail_runs(self, work, y, appearance):
+        # Hit flashes leave small green/yellow fragments around the judgment
+        # strip. They can satisfy path_runs' contour minimum and renew a Hold
+        # after its ribbon has passed. A real ribbon in the reviewed capture
+        # spans at least a quarter lane at these rows; keep this gate tied to
+        # lane geometry rather than a screen-pixel constant.
+        minimum_width = .25 / self.geometry.lane_count
+        return [span for span in path_runs(work, self.geometry, y, appearance)
+                if span[1] - span[0] >= minimum_width]
+
+    def _update_held_holds(self, work, now, candidates=()):
         if not self.hold_enabled:
             return
         runs_by_color = {}
-        supported_by_color = {}
+        assigned_by_color = {}
+        assigned_near_by_color = {}
+        near_body_by_color = {}
+        assigned_support_by_color = {}
         current = set()
         holds = [intent for _, intent in self.scheduler.held.values()
                  if intent.note_type == 'hold']
@@ -939,12 +952,12 @@ class LiveEngine:
             if appearance not in runs_by_color:
                 # Observe above the input-lit strip; its green/yellow key
                 # feedback is not evidence that this Hold still exists.
-                runs = path_runs(work,self.geometry,self.hold_probe_y,appearance)
+                runs = self._hold_tail_runs(work,self.hold_probe_y,appearance)
                 # White hit effects can hide the judgment row while the
                 # ribbon is still present. Require matching color on two
                 # adjacent rows above it, rather than extending a blind timer.
                 # This evidence only keeps an already held start key down.
-                above = [path_runs(work, self.geometry,
+                above = [self._hold_tail_runs(work,
                                    self.hold_probe_y-offset*self.pixel_scale_y, appearance)
                          for offset in (12, 24, 36)]
                 supported = []
@@ -955,33 +968,110 @@ class LiveEngine:
                                for other in upper):
                             supported.append(span)
                 runs_by_color[appearance] = runs
-                supported_by_color[appearance] = supported
+                positions = {other.event_id: expected[other.event_id] for other in holds
+                             if (other.path_appearance or 'green_candidate') == appearance}
+                assigned_by_color[appearance] = assign_hold_runs(runs, positions)
+                # A sustained Hold flash can hide y=307 while real ribbon
+                # edges remain at y=303. Require fresh, connected color all
+                # the way through 299 and 295; an upper-only observation
+                # still has its original 250ms limit below.
+                body_rows = [path_runs(work,self.geometry,
+                             self.hold_probe_y-offset*self.pixel_scale_y,appearance)
+                             for offset in range(4,33,4)]
+                minimum = .25/self.geometry.lane_count
+                near = connected_hold_runs(*body_rows[:3], minimum)
+                body_runs = [span for span in near if continuous_hold_body(body_rows,span,minimum)]
+                # A clamp-to-edge point can lag behind a bending ribbon and
+                # attach to a narrow sparkle. Prefer a verified long body,
+                # using the last observed span center for this row only.
+                body_positions = {uid: sum(self.hold_watch.get(uid,{}).get('span',(u,u)))/2
+                                  for uid,u in positions.items()}
+                near_assignments = assign_hold_runs(body_runs,body_positions)
+                weak_assignments = assign_hold_runs(near,positions)
+                for uid,span in weak_assignments.items():
+                    if uid not in near_assignments and not any(
+                            min(span[1],used[1])-max(span[0],used[0]) > 0
+                            for used in near_assignments.values()):
+                        near_assignments[uid] = span
+                assigned_near_by_color[appearance] = near_assignments
+                near_body_by_color[appearance] = {
+                    uid: continuous_hold_body(body_rows,span,minimum)
+                    for uid,span in assigned_near_by_color[appearance].items()}
+                assigned_support_by_color[appearance] = assign_hold_runs(supported, positions)
             current.add(intent.event_id)
             watch = self.hold_watch.setdefault(intent.event_id,
                         {'u':intent.path_u,'start':now,'last_visible':now})
-            run = nearest_run(runs_by_color[appearance],watch['u'],.12)
+            run = assigned_by_color[appearance].get(intent.event_id)
             direct = run is not None
-            # White hit effects can briefly hide this row. Restore the bounded
-            # bridge; only evidence above the input-lit strip can renew it.
+            # Preserve the established physical-row/upper-row match first.
+            # A newly available near-row edge must not replace its geometry.
             if (run is None and
                     now-watch.get('last_direct', watch['start']) <= .25):
-                run = nearest_run(supported_by_color[appearance], watch['u'], .12)
-            if (run is not None and not run[0] <= expected[intent.event_id] <= run[1] and
-                    any(other.event_id != intent.event_id and
-                        (other.path_appearance or 'green_candidate') == appearance and
-                        run[0] <= expected[other.event_id] <= run[1]
-                        for other in holds)):
-                # An adjacent ribbon already contains its own held note.
-                # It cannot keep this disappearing tail alive as well.
-                run = None
+                run = assigned_support_by_color[appearance].get(intent.event_id)
+            near_visible = False
+            if run is None:
+                near = assigned_near_by_color[appearance].get(intent.event_id)
+                competing = False
+                if near is not None:
+                    for other in holds:
+                        if (other.event_id == intent.event_id or
+                                (other.path_appearance or 'green_candidate') != appearance):
+                            continue
+                        old = self.hold_watch.get(other.event_id, {}).get('span')
+                        if old is None:
+                            old = self.hold_spans.get(other.event_id, ((expected[other.event_id],
+                                                                     expected[other.event_id]),0))[0]
+                        if min(near[1],old[1])-max(near[0],old[0]) > 0:
+                            competing = True
+                            break
+                # A connected color cloud can outlive the ribbon. Require a
+                # real detector cap with body below it (a departing tail),
+                # rather than a future head with a long body above it.
+                tail_cap = False
+                body_cap = False
+                if near is not None:
+                    y = self.hold_probe_y-4*self.pixel_scale_y
+                    left, right = self.geometry.bounds(y)
+                    near_left = left+near[0]*(right-left)
+                    near_right = left+near[1]*(right-left)
+                    for candidate in candidates:
+                        if candidate.appearance != appearance or candidate.path_bbox is None:
+                            continue
+                        x, cy, w, h = candidate.bbox
+                        px, py, pw, ph = candidate.path_bbox
+                        overlap = min(near_right,px+pw)-max(near_left,px)
+                        if (self.geometry.top_y <= cy+h <= self.hold_probe_y and
+                                cy-py <= max(12*self.pixel_scale_y,h) and
+                                py+ph-(cy+h) >= 12*self.pixel_scale_y and
+                                candidate.hold_path_px < self.hold_path_px and
+                                overlap >= .5*min(near_right-near_left,pw)):
+                            body_cap = True
+                            if cy+h >= self.hold_probe_y-64*self.pixel_scale_y:
+                                tail_cap = True
+                                break
+                # Mid-body occlusion has no departing tail cap yet. It needs
+                # stronger, uninterrupted body evidence instead of a timer.
+                body_visible = body_cap and near_body_by_color[appearance].get(intent.event_id,False)
+                run = near if near is not None and not competing and (tail_cap or body_visible) and hold_probe_is_bright(
+                    work,self.geometry,self.hold_probe_y,expected[intent.event_id]) else None
+                near_visible = run is not None
             if run is not None:
                 if direct:
                     watch['u'] = min(max(watch['u'],run[0]),run[1])
+                if direct or near_visible:
+                    watch['observation_y'] = self.hold_probe_y-(4*self.pixel_scale_y if near_visible else 0)
+                if direct:
                     watch['last_direct'] = now
                 watch['last_visible'] = now
-                watch['span'] = run
+                # A curve can move sideways between y=303 and y=307. Near
+                # evidence proves visibility, not a new physical-row span;
+                # replacing that span can admit a duplicate tail key-down.
+                if not near_visible:
+                    watch['span'] = run
             elif (now-watch['last_visible'] >= max(self.hold_release_gap_s,
-                    self.hold_pending_coast.get(intent.event_id, {}).get('tail_travel_s', 0.)) and
+                    min(.25, self.hold_pending_coast.get(intent.event_id, {}).get('tail_travel_s', 0.) *
+                        (self.geometry.hit_y-watch.get('observation_y',self.hold_probe_y))/
+                        (self.geometry.hit_y-self.hold_probe_y))) and
                   now-watch['start'] >= self.hold_release_gap_s):
                 color = 'yellow' if appearance=='yellow_bar' else 'green'
                 self.scheduler.release_hold(intent.event_id,f'{color}_tail_left_judgment_row')
@@ -1178,7 +1268,7 @@ class LiveEngine:
         with self.scheduler.lock:
             self.scheduler.update_context(frame.captured_at, state, focused, roi_valid and not stale)
             if state=='PLAYING' and focused and roi_valid and not stale:
-                self._update_held_holds(work,finished)
+                self._update_held_holds(work,finished,candidates)
             ready = []
             retained = {}
             reidentified = {}

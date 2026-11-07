@@ -40,3 +40,20 @@ def test_unsafe_override_fails_closed(tmp_path):
     live.write_text(json.dumps({'max_input_lateness_ms': 100}), encoding='utf-8')
     with pytest.raises(ValueError, match='max_input_lateness_ms'):
         resolve_config(profile='stable', live_config_path=live)
+
+
+def test_reference_yellow_rail_profile_changes_only_detector_flag():
+    stable = resolve_config(profile='stable').config
+    experimental = resolve_config(profile='reference-yellow-rail').config
+    assert stable['detector']['yellow_rail_recovery'] is False
+    assert experimental['detector']['yellow_rail_recovery'] is True
+    stable['detector'].pop('yellow_rail_recovery')
+    experimental['detector'].pop('yellow_rail_recovery')
+    assert stable == experimental
+
+
+def test_yellow_rail_detector_flag_must_be_boolean(tmp_path):
+    live = tmp_path / 'override.json'
+    live.write_text(json.dumps({'detector': {'yellow_rail_recovery': 'true'}}), encoding='utf-8')
+    with pytest.raises(ValueError, match='yellow_rail_recovery must be a boolean'):
+        resolve_config(profile='stable', config_path=live)

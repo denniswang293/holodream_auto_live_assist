@@ -27,11 +27,7 @@ python -m pip install -r requirements-live.txt
 
 也可在命令列加入 `--no-logs`。此模式不建立 `output/assist/run_*`，並且不能與 `--record-overlay` 同時使用。
 
-一般啟動使用 `stable` profile（60ms，可依新觀測有限度地提早／延後排程；單次最多 40ms、累計 80ms、最後 30ms 凍結）。`launch_assist_stable.cmd` 也使用相同設定：
-
-```powershell
-.\tools\launch_assist_stable.cmd
-```
+一般版與純功能版皆使用 `stable` profile（60ms，可依新觀測有限度地提早／延後排程；單次最多 40ms、累計 80ms、最後 30ms 凍結）。
 
 `tap-earlier`、`stable-global-rescue`、`timing-balance` 仍可透過 `python -m src.live --profile <名稱> --geometry config/geometry_live_assist.json` 明確選用作診斷。`timing-balance` 在 2026-11-03 的兩次實測中出現更多可見 MISS；一般實戰使用 `stable`。這幾組實驗設定沒有改變安全停止條件。舊的 `--config`／`--live-config` 仍可明確傳入，會標示為 legacy override。
 
@@ -65,6 +61,16 @@ Snapshot 會寫入每次 `output/assist/run_*` 的 `live_trace_snapshots.csv`。
 
 沒有遊戲判定來源時，遊戲命中率一律視為 `UNKNOWN`；`FIRED`、`key_down` 或 UID 持續都不能直接解讀為 Perfect、Good 或 Miss。
 
+### Tap 短暫遮擋
+
+已通過檢查並成功排程的 Tap，會保存選定按鍵與送鍵期限。後續某幀看不到音符，甚至追蹤 ID 到期移除，都不會單獨取消該排程；到期時仍須通過輸入安全檢查。缺少觀測不會延長期限、產生新動作或繞過去重。這只適用於已排程的 Tap，不會讓尚未確認的候選直接送鍵，也不改變 Hold 的視覺放鍵規則。
+
+## 玩家記錄工具
+
+若要請其他玩家提供手動遊玩的影片與六鍵紀錄，可單獨分享
+[HoloDream_Recorder](HoloDream_Recorder/README.md)。它不依賴 Assist 原始碼，也不會自動送鍵；
+結束後產生包含影片、時間索引和玩家按鍵的 ZIP，供事後分析。
+
 ## 核心測試
 
 ```powershell
@@ -73,6 +79,16 @@ python -m pytest -q
 ```
 
 測試驗證程式安全與演算法行為，不代表實機命中率。
+
+## 人工成功演奏比對
+
+八場來源的時鐘檢查、Mock A/B、真實 Auto 同譜比對與案例圖，見
+[2026-11-07 分析報告](docs/REFERENCE_PERFORMANCE_ANALYSIS_20261107.md)。
+影片名義 FPS 與實際擷取頻率不同，請使用時間索引，不要用影格數除以 FPS 對齊按鍵。
+
+`--profile reference-yellow-rail` 是來源影格支持的黃色頭部恢復實驗，未升為預設。
+它維持 60ms lead 與既有安全限制；正式使用仍預設 `stable`。
+回放與回退指令、已知動作差異都列在報告中。
 
 ## 核心結構
 

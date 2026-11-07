@@ -101,7 +101,10 @@ class HoldTracker:
                 evidence.u_min = candidate.u_min
                 evidence.u_max = candidate.u_max
                 evidence.last_seen = timestamp
-            evidence.observations += 1
+            # Multiple contours from one frame are not independent temporal
+            # evidence. A single frame must not satisfy the two-frame gate.
+            if id(evidence) not in seen:
+                evidence.observations += 1
             evidence.max_path_px = max(evidence.max_path_px, candidate.hold_path_px)
             evidence.continuity_confidence = min(1.0, evidence.observations / self.min_head_observations)
             # A yellow Tap's complete bar can surround a thin edge contour.

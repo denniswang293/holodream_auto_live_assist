@@ -9,7 +9,9 @@ build/
 dist/
 *.egg-info/
 /holodream.mp4
-/output/assist
-/output/analysis_*/
+/output
+!/output/run_*
 /output/run_*/*.mp4
 !/output/README.md
+/HoloDream_Recorder
+/HoloDream_Recorder.zip

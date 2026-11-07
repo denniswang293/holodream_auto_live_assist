@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field as dataclass_field
 import time
+import math
 import cv2
 import numpy as np
 from .geometry import Playfield
@@ -97,7 +98,14 @@ def _merge_body_edges(boxes: list[tuple], playfield: Playfield, sx: float, sy: f
         lane_width = playfield.row_lane_width((y+h/2)/sy)
         if lane_width is None:
             continue
-        max_height = max(9*pixel_scale_y,min(28*pixel_scale_y,lane_width*0.40))*sy
+        # Outer-lane heads have slanted sides and a taller projected outline.
+        # Keep the existing interior limit: raising every head's limit also
+        # merges central judgment-effect edges into false heads.
+        left, right = playfield.bounds((y+h/2)/sy)
+        center_u = ((x+w/2)/sx-left)/(right-left)
+        outer_lane = center_u < 1/lane_count or center_u > 1-1/lane_count
+        height_cap = 32 if outer_lane else 28
+        max_height = max(9*pixel_scale_y,min(height_cap*pixel_scale_y,lane_width*0.40))*sy
         best,best_cost = None,float("inf")
         for i,((xx,yy,ww,hh),count) in enumerate(groups):
             overlap = max(0,min(x+w,xx+ww)-max(x,xx))/max(1,min(w,ww))
@@ -138,6 +146,7 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
     pink_trim_px = float(pink_cfg.get("max_core_trim_px", 8.0))
     trace_cfg = dict(cfg.get("association_diagnostics", {}) or {})
     trace_enabled = bool(trace_cfg.get("enabled", False))
+    yellow_rail_recovery = cfg.get("yellow_rail_recovery", False)
     trace_rows = diagnostics.setdefault("candidate_trace", []) if trace_enabled and diagnostics is not None else None
     trace_limit = int(trace_cfg.get("max_candidate_rows", 2000))
     trace_dropped = 0
@@ -203,6 +212,8 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
     mark("gray_sobel_morphology", started)
     started = section("contours_merge")
     contours,_ = cv2.findContours(bodies,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+    bar_top = getattr(playfield, 'document', {}).get('live_measurement', {}).get('judgment_bar_top_y')
+    rail_occlusions = []
     if diagnostics is not None:
         diagnostics["raw_edge_contours"] = len(contours)
     edges = []
@@ -231,6 +242,9 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             continue
         left,right = row[0],row[-1]
         if y/sy < playfield.top_y+8*rh/404 or bw/sx > (right-left)*.48:
+            if (bar_top is not None and bw/sx > (right-left)*.48 and
+                    y/sy <= bar_top+4*rh/404 and (y+bh)/sy >= bar_top-4*rh/404):
+                rail_occlusions.append(box)
             trace_add(trace_base("raw_contour", raw_id, box, passed=False,
                                  reject_reason="edge_geometry"))
             continue
@@ -264,6 +278,84 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         body_box = box
         x,y,bw,bh = box
         cy = (y+bh/2)/sy
+        recovered_ribbon_depth = 0
+        # A blue hit beam can hide the lower edge of a green head, leaving
+        # only a 1-5px cyan proposal. Recover its visible rectangle only when
+        # a long green ribbon reaches the head and the recovered head itself
+        # still has green pixels. This also handles interior lanes; the
+        # unrelated cyan outer-rail recovery below keeps its original gates.
+        if edge_count >= 2 and bh < 8*sy and cy >= 250*rh/404:
+            green_paths = [p for p in path_boxes['green_candidate']
+                           if p[3]>=40*sy and y-p[1]>=40*sy and _iou(box,p)>0 and
+                           min(x+bw,p[0]+p[2])-max(x,p[0]) >= .5*bw]
+            if green_paths:
+                left,right = playfield.bounds(cy)
+                u = ((x+bw/2)/sx-left)/(right-left)
+                depth = path_depth(frame,playfield,cy,u,'green_candidate',
+                                   mask=path_masks['green_candidate'])
+                if depth >= 40:
+                    end = min(h, int(bar_top*sy) if bar_top is not None else y+bh,
+                              y+round(32*rh/404*sy))
+                    il,ir = x+round(bw*.2),x+bw-round(bw*.2)
+                    colored = (masks['cyan_bar'][y:end,il:ir] |
+                               masks['green_candidate'][y:end,il:ir])
+                    filled = np.count_nonzero(colored,axis=1) >= max(1,(ir-il)*.5)
+                    last,gaps = bh,0
+                    for offset in range(bh,len(filled)):
+                        gaps = 0 if filled[offset] else gaps+1
+                        if gaps >= 2: break
+                        if filled[offset]: last=offset+1
+                    green_fill = cv2.countNonZero(masks['green_candidate'][y:y+last,x:x+bw])/max(1,bw*last)
+                    if last >= 12*sy and green_fill >= cfg.get('min_colored_fraction',.12):
+                        box = x,y,bw,last
+                        bh = last
+                        cy = (y+bh/2)/sy
+                        recovered_ribbon_depth = depth
+                        if diagnostics is not None:
+                            diagnostics['green_head_rectangle_recovered'] = diagnostics.get(
+                                'green_head_rectangle_recovered',0)+1
+        # The judgment rail can connect to a blue head's lower Sobel edge;
+        # that full-width contour is correctly rejected above. Recover only
+        # a paired thin edge with a continuous blue body below it, stopping
+        # strictly above the input-lit strip. Never infer a body from time.
+        rail_below = any(y+bh <= oy <= y+round(32*rh/404*sy) and
+                         max(0, min(x+bw,ox+ow)-max(x,ox)) >= .75*bw
+                         for ox,oy,ow,oh in rail_occlusions)
+        outer = playfield.outer_bounds_at_y(cy)
+        rail_margin = playfield.row_lane_width(cy)*.15
+        touches_outer = outer is not None and (x/sx <= outer[0]+rail_margin or
+                                               (x+bw)/sx >= outer[1]-rail_margin)
+        if edge_count >= 2 and bh < 8*sy and cy >= 250*rh/404 and rail_below and touches_outer:
+            end = min(h, int(bar_top*sy), y+round(32*rh/404*sy))
+            inner_left, inner_right = x+round(bw*.2), x+bw-round(bw*.2)
+            if inner_right > inner_left and end > y+bh:
+                body = masks['cyan_bar'][y:end, inner_left:inner_right]
+                filled = np.count_nonzero(body, axis=1) >= (inner_right-inner_left)*.5
+                last, gaps = bh, 0
+                for offset in range(bh, len(filled)):
+                    gaps = 0 if filled[offset] else gaps+1
+                    if gaps >= 2:
+                        break
+                    if filled[offset]:
+                        last = offset+1
+                if last >= 12*sy:
+                    box = (x,y,bw,last)
+                    x,y,bw,bh = box
+                    cy = (y+bh/2)/sy
+        # A paired cyan head has slanted sides. Its axis-aligned bbox can
+        # overhang the rail at the middle row even when the head follows it.
+        # Trim only a small colored outline, then apply the normal ROI gates.
+        if (edge_count >= 2 and cy >= 250*rh/404 and
+                cv2.countNonZero(masks['cyan_bar'][y:y+bh,x:x+bw]) / max(bw*bh,1)
+                >= cfg.get('min_colored_fraction', .12)):
+            outer = playfield.outer_bounds_at_y(cy)
+            if outer is not None:
+                core_left = max(x, int(np.ceil(outer[0]*sx)))
+                core_right = min(x+bw, int(np.floor(outer[1]*sx)))
+                trim = max(0, core_left-x) + max(0, x+bw-core_right)
+                if 0 < trim <= 8*sx and core_right > core_left:
+                    box = (core_left, y, core_right-core_left, bh)
+                    x,y,bw,bh = box
         # Pink arrow/glow edges may extend a small, measurable fringe beyond
         # the calibrated outer rail. Trim only that pink-rich fringe; the
         # physical ROI and lane gates remain mandatory.
@@ -300,6 +392,88 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
                     for name,mask in masks.items() if name != "neutral_candidate"}
         winner = max(evidence,key=evidence.get)
         appearance = winner if evidence[winner] >= cfg.get("min_colored_fraction",.12) else "neutral_candidate"
+        recovered_yellow_rail = False
+        yellow_rail_evidence = False
+        if yellow_rail_recovery and bar_top is not None:
+            lane_px = playfield.row_lane_width(cy)*sx
+            max_gap = max(8*rh/404*sy, lane_px*.2)
+            yellow_rail_evidence = any(
+                y+bh <= oy <= bar_top*sy+4*rh/404*sy and
+                abs(oy-bar_top*sy) <= 8*rh/404*sy and
+                ow >= 2*lane_px and
+                max(0, max(x-(ox+ow), ox-(x+bw))) <= max_gap
+                for ox,oy,ow,oh in rail_occlusions)
+        # A measured yellow head can lose its lower outline where it meets the
+        # judgment rail. Recover only from a surviving Sobel edge, a separately
+        # measured broad rail contour, and a continuous head-sized yellow body.
+        # Both body boundaries must be visible above the calibrated rail top;
+        # a clipped body has no measured center. Long paths remain Hold evidence.
+        yellow_touches_outer = (outer is not None and
+            (x <= math.ceil((outer[0]+rail_margin)*sx) or
+             x+bw >= math.floor((outer[1]-rail_margin)*sx))) if yellow_rail_recovery else False
+        if (yellow_rail_recovery and appearance == 'yellow_bar' and edge_count >= 1 and
+                yellow_rail_evidence and yellow_touches_outer and
+                cy >= 250*rh/404 and bh < 8*sy and
+                0 <= bar_top*sy-(y+bh) <= 32*rh/404*sy):
+            left,right = playfield.bounds(cy)
+            head_u = ((x+bw/2)/sx-left)/(right-left)
+            yellow_depth = path_depth(frame,playfield,cy,head_u,'yellow_bar',
+                                      mask=path_masks['yellow_bar'])
+            end = min(h,round(bar_top*sy),y+round(32*rh/404*sy))
+            inner_left = x+round(bw*.15)
+            inner_right = x+bw-round(bw*.15)
+            begin = max(0,y-round(32*rh/404*sy))
+            if yellow_depth < 40 and inner_right > inner_left and end>y:
+                yellow_body = masks['yellow_bar'][begin:end,inner_left:inner_right]
+                row_fill = np.count_nonzero(yellow_body,axis=1)
+                filled = row_fill >= .75*(inner_right-inner_left)
+                # White outlines need not pass the yellow mask. Find an
+                # adjacent solid body, but require BOTH measured boundaries:
+                # a head clipped by the rail has an unknown center and must
+                # not contaminate the shared Global velocity profile.
+                boundaries = np.flatnonzero(np.diff(np.r_[False,filled,False].astype(np.int8)))
+                bodies = []
+                for first,last in zip(boundaries[::2],boundaries[1::2]):
+                    top,bottom = begin+int(first),begin+int(last)
+                    gap = max(top-(y+bh),y-bottom,0)
+                    if (top>begin and bottom<end and gap<=3*rh/404*sy and
+                            12*rh/404*sy <= bottom-top <= 32*rh/404*sy):
+                        bodies.append((gap,-(bottom-top),top,bottom))
+                if bodies:
+                    _,_,top,bottom = min(bodies)
+                    proposed_height = bottom-top
+                    proposed_cy = (top+proposed_height/2)/sy
+                    proposed_interval = playfield.safe_bbox_interval(
+                        x/sx,(x+bw)/sx,proposed_cy)
+                    if proposed_interval is not None:
+                        box = (x,top,bw,proposed_height)
+                        y = top
+                        bh = proposed_height
+                        cy = proposed_cy
+                        interval = proposed_interval
+                        recovered_yellow_rail = True
+                        if diagnostics is not None:
+                            diagnostics['yellow_rail_head_recovered'] = diagnostics.get(
+                                'yellow_rail_head_recovered',0)+1
+        tap_edge_count = edge_count + int(recovered_yellow_rail)
+        recovered_green_depth = recovered_ribbon_depth
+        # Blue judgment light can dominate a green Hold head. A sizeable
+        # green part of the head PLUS a connected, independently measured
+        # long green ribbon establishes Hold evidence, not a 25ms cyan Tap.
+        # A cyan Tap merely crossing a green body has no such green head fill.
+        if (appearance == 'cyan_bar' and bh >= 4*sy and
+                evidence.get('green_candidate',0.) >= cfg.get('min_colored_fraction',.12)):
+            green_paths = [p for p in path_boxes.get('green_candidate',())
+                           if p[3] >= 40*sy and y-p[1] >= 40*sy and _iou(box,p)>0 and
+                           min(x+bw,p[0]+p[2])-max(x,p[0]) >= .5*bw]
+            if green_paths and not recovered_green_depth:
+                recovered_green_depth = path_depth(frame,playfield,cy,
+                    sum(interval)/2,'green_candidate',mask=path_masks['green_candidate'])
+            if recovered_green_depth >= 40:
+                appearance = 'green_candidate'
+                if diagnostics is not None:
+                    diagnostics['green_hold_blue_flash_recovered'] = diagnostics.get(
+                        'green_hold_blue_flash_recovered',0)+1
         raw = masks[appearance][y:y+bh,x:x+bw].copy()
         if appearance in ("cyan_bar","yellow_bar"):
             raw |= masks["neutral_candidate"][y:y+bh,x:x+bw]
@@ -332,7 +506,7 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         if appearance in path_boxes:
             paths = [p for p in path_boxes[appearance] if _iou(box,p)>0 and p[3]>bh*1.5]
             path_bbox = max(paths,key=lambda p:p[2]*p[3],default=None)
-        depth = 0
+        depth = recovered_green_depth if appearance == 'green_candidate' else 0
         if path_bbox is None and appearance in path_boxes:
             # A white highlight can disconnect the colored head from its
             # translucent Hold body. Requiring contour intersection then
@@ -352,10 +526,16 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         # Paired horizontal edges plus colored body evidence establish only
         # a provisional conventional tap appearance; track motion must confirm.
         note_type = ("tap" if appearance in ("cyan_bar","yellow_bar","neutral_candidate") and
-                     edge_count>=2 and bh>=4 and path_bbox is None
+                     tap_edge_count>=2 and bh>=4 and path_bbox is None
                      else "tap" if appearance == "pink_candidate" and pink_enabled and
                      edge_count>=2 and bh>=4 and path_bbox is None
                      else "unknown")
+        if (appearance == 'cyan_bar' and cy >= 250*rh/404 and bh < 8*sy and
+                (0 in lanes or len(key_map)-1 in lanes)):
+            # At this depth the full blue head is tall. Its 1–5px internal
+            # highlight is not a second head and must not pull the existing
+            # track onto the bottom edge before the full outline recovers.
+            note_type = 'unknown'
         # Path-depth is the expensive part of candidate classification.  A
         # candidate can only be a Hold when a matching path contour was found;
         # avoid scanning the full frame for ordinary taps (including pink).
@@ -369,7 +549,7 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
                 path_bbox is not None and depth < 40 and
                 y-path_bbox[1] < 40*sy):
             path_bbox, depth = None, 0
-            note_type = 'tap' if edge_count >= 2 and bh >= 4 else 'unknown'
+            note_type = 'tap' if tap_edge_count >= 2 and bh >= 4 else 'unknown'
         candidate = Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
                               body_box,path_bbox,raw,False,depth,
                               diagnostic_id=proposal_id, parent_proposal_id=proposal_id)

@@ -16,6 +16,7 @@ from src.simple_tracker import SimpleTracker
 from src.simple_core import SimpleAssistCore
 from src.tap_intent import TapIntentManager
 from src.tap_planner import TapPlanner, TapProposal
+from src.assist_config import resolve_config
 
 
 def candidate(y, *, u=.40, appearance="cyan_bar", keys=("F",), width=.12):
@@ -860,6 +861,74 @@ def test_existing_intent_does_not_extend_deadline_after_track_loss():
     assert actuator.calls == [("down", "S")]
     assert manager.state_for(proposal.note_uid) == "FIRED"
     scheduler.close()
+
+
+@pytest.mark.parametrize('safety', ['ready', 'focus_lost', 'roi_lost', 'disabled', 'stale'])
+def test_stable_global_pending_tap_survives_missing_observations_but_not_safety_loss(safety):
+    """Use the actual stable Global path, including LiveEngine cleanup."""
+    root = Path(__file__).resolve().parents[1]
+    geometry = CalibratedGeometry(json.loads(
+        (root/'config/geometry_live_assist.json').read_text(encoding='utf-8-sig')))
+    config = resolve_config(profile='stable').config
+    clock, actuator, rows, scheduler = armed_scheduler(1000.)
+    current = []
+    engine = LiveEngine(config, geometry, scheduler, clock=clock,
+                        detector=lambda *args: list(current))
+    engine.gate.update = lambda *args: 'PLAYING'
+    scheduler.on_log = lambda row: (rows.append(row), engine.record_scheduler_action(row))
+    image = np.zeros((404,720,3), np.uint8)
+
+    def process(sequence, timestamp):
+        clock.now = timestamp
+        engine.process(CapturedFrame(sequence,image,timestamp,timestamp))
+
+    try:
+        for i in range(15):
+            t = 1000.+i*.02
+            current[:] = [candidate(210+i*6),
+                          candidate(170+i*6,u=.72,keys=('K',))]
+            process(i,t)
+            if scheduler.pending:
+                break
+        assert engine.simple_core.global_timing.active_enabled
+        assert scheduler.pending
+        event_id, original = min(scheduler.pending.items(),key=lambda pair: pair[1].hit_at)
+        assert engine.simple_core.intents.intents[event_id].timing_source.startswith('global')
+        original_key, original_hit = original.keys, original.hit_at
+        first_missing = clock.now+.02
+        current[:] = []  # Fresh gameplay frames, but no note observation.
+        sequence = i+1
+        t = first_missing
+        while t < original_hit:
+            process(sequence,t)
+            assert scheduler.pending[event_id] is original
+            assert original.keys == original_key and original.hit_at == original_hit
+            scheduler.poll()
+            assert actuator.calls == []
+            t += .02
+            sequence += 1
+        # Entire tracker-ID removal must not revoke the independently owned Tap.
+        assert not engine.simple_core.tracker.tracks
+        if safety == 'stale':
+            scheduler.update_context(original_hit-1.,'PLAYING',True,True)
+        else:
+            scheduler.update_context(original_hit,'PLAYING',safety!='focus_lost',safety!='roi_lost')
+        if safety == 'disabled':
+            scheduler.disarm('hotkey_test')
+        clock.now = original_hit
+        scheduler.poll()
+        scheduler.poll()
+        if safety == 'ready':
+            assert actuator.calls == [('down',original_key[0])]
+            assert engine.simple_core.intents.state_for(event_id) == 'FIRED'
+            clock.now += scheduler.duration+.001
+            scheduler.update_context(clock.now,'PLAYING',True,True)
+            scheduler.poll()
+            assert actuator.calls == [('down',original_key[0]),('up',original_key[0])]
+        else:
+            assert actuator.calls == []
+    finally:
+        scheduler.close()
 
 
 def test_live_engine_particle_core_schedules_tap_once():

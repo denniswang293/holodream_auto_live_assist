@@ -57,6 +57,9 @@ def _number(value, name, *, minimum=None, maximum=None):
 def validate_effective_config(config: dict) -> None:
     if config.get("key_map") != ["S", "D", "F", "J", "K", "L"]:
         raise ValueError("key_map must remain the verified S,D,F,J,K,L mapping")
+    detector = config.get("detector")
+    if not isinstance(detector, dict) or not isinstance(detector.get("yellow_rail_recovery", False), bool):
+        raise ValueError("detector.yellow_rail_recovery must be a boolean")
     live = config.get("live")
     if not isinstance(live, dict):
         raise ValueError("live Assist configuration is missing")

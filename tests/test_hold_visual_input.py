@@ -329,6 +329,17 @@ def test_duplicate_hold_edge_keeps_wide_head_and_path_evidence(make_candidate):
     assert selected[0].hold_path_px == 80
 
 
+def test_multiple_hold_contours_in_one_frame_do_not_confirm(make_candidate):
+    tracker = HoldTracker(min_path_px=40, min_head_observations=2)
+    head = replace(make_candidate(y=278, appearance='green_candidate', keys=['J', 'K']),
+                   path_bbox=(362,164,182,126), hold_path_px=80)
+    fragment = replace(head, bbox=(439,260,96,21), candidate_keys=['K'])
+    assert tracker.observe([head, fragment, head], 1000.) == []
+    assert tracker.evidence[0].observations == 1
+    assert tracker.observe([head], 1000.02) == [head]
+    assert tracker.evidence[0].observations == 2
+
+
 def test_distinct_hold_paths_and_lanes_remain_separate(make_candidate):
     base = replace(make_candidate(y=241, appearance='green_candidate', keys=['J', 'K']),
                    u_min=.49, u_max=.75, path_bbox=(362, 234, 110, 22))
@@ -421,6 +432,36 @@ def test_tail_release_waits_for_travel_to_physical_line():
     scheduler.close()
 
 
+def test_small_judgment_flash_fragments_cannot_renew_a_hold():
+    geometry, frame = scene()
+    frame[:] = 0
+    probe_y = round(geometry.document['live_measurement']['judgment_bar_top_y'] - 6)
+    edges = geometry.lane_bounds_at_y(probe_y)
+    # This is the size of the narrow green fragments present in the run's
+    # post-tail hit flash (about 0.02 normalized playfield width).
+    x0 = round(edges[0] + (edges[-1] - edges[0]) * .54)
+    cv2.rectangle(frame, (x0, probe_y - 2), (x0 + 14, probe_y + 2), (0, 255, 0), -1)
+    clock = SimpleNamespace(now=1000.)
+    actuator = MockActuator()
+    scheduler = TapScheduler('assist', actuator, clock=lambda: clock.now)
+    scheduler.update_context(clock.now, 'PLAYING', True)
+    scheduler.toggle(); scheduler.poll()
+    engine = LiveEngine(resolve_config(profile='stable').config, geometry, scheduler,
+                        clock=lambda: clock.now)
+    assert path_runs(frame, geometry, probe_y, 'green_candidate')
+    assert not engine._hold_tail_runs(frame, probe_y, 'green_candidate')
+    intent = ActionIntent('flash-fragment', ('S',), 1000.01, .001, 'hold', .54,
+                          'green_candidate')
+    assert scheduler.offer(intent)
+    clock.now = 1000.01; scheduler.poll()
+    for t in (1000.01, 1000.05, 1000.10):
+        clock.now = t
+        engine._update_held_holds(frame, t)
+    assert not scheduler.held
+    assert actuator.calls == [('down', 'S'), ('up', 'S')]
+    scheduler.close()
+
+
 @pytest.mark.parametrize('appearance', ['green_candidate', 'yellow_bar'])
 @pytest.mark.parametrize('continuous', [True, False])
 @pytest.mark.parametrize('tail_disappears', [True, False])
@@ -432,7 +473,9 @@ def test_hold_white_hit_flash_requires_continuous_ribbon(appearance, continuous,
         color = (0,255,0) if appearance == 'green_candidate' else (0,255,255)
         cv2.rectangle(frame, (335,299), (384,304), color, -1)
     probe_y = geometry.document['live_measurement']['judgment_bar_top_y']-6
-    cv2.rectangle(frame, (0,round(probe_y)-3), (719,330), (255,255,255), -1)
+    # Hide both direct observation rows. This is genuinely upper-only
+    # evidence and must still expire after the original 250ms bridge.
+    cv2.rectangle(frame, (0,round(probe_y)-7), (719,330), (255,255,255), -1)
     clock = SimpleNamespace(now=1000.)
     actuator = MockActuator()
     scheduler = TapScheduler('assist', actuator, clock=lambda: clock.now)

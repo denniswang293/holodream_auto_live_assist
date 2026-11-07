@@ -15,6 +15,8 @@ PROFILES = {
     "timing-balance": {"allow_earlier_amend": True,
                        "hold_start_delay_ms": 15.0,
                        "description": "bounded earlier Tap amendments and 15ms later Hold start"},
+    "reference-yellow-rail": {"allow_earlier_amend": True,
+                              "description": "stable timing with bounded yellow head recovery at the judgment rail"},
 }
 
 
@@ -36,6 +38,7 @@ def apply_profile(config: dict, name: str) -> dict:
     hold_cfg["start_delay_ms"] = float(PROFILES[name].get("hold_start_delay_ms", 0.0))
     if name == "timing-balance":
         result["live"].setdefault("experiment", {})["experiment_id"] = "hud_combo_timing_balance_20261103"
+    result.setdefault("detector", {})["yellow_rail_recovery"] = name == "reference-yellow-rail"
     return result
 
 

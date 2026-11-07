@@ -15,6 +15,7 @@ import time
 from types import SimpleNamespace
 
 import numpy as np
+import cv2
 
 from .calibration import load_calibration, geometry_hash
 from .assist_config import resolve_config
@@ -212,6 +213,7 @@ def _summary(out, result):
              f"Capture FPS: {result['capture_fps']:.3f}; processing FPS: {result['wall_processing_fps']:.3f}",
              f"Latency P50/P95: {result['latency_p50_ms']:.3f}/{result['latency_p95_ms']:.3f} ms",
              f"Dropped frames: {result['dropped_frames']}; stale frames: {result['stale_frames']}",
+             f"Scheduler stale key releases: {result.get('scheduler_stale_key_releases', 0)} (separate from processing-stage stale frames).",
              f"Events: {result['events']}; abstentions: {result['abstentions']}; key-downs: {result['sent_key_downs']} (Tap {result['sent_taps']}, Hold {result['sent_holds']})",
              f"Tap intent states: {result['simple_intent_states']}",
              f"Abstain reasons: {result['abstain_reasons']}", "",
@@ -228,6 +230,12 @@ def run(args):
     no_logs = bool(getattr(args, "no_logs", False))
     if no_logs and getattr(args, "record_overlay", False):
         raise ValueError("--record-overlay cannot be used with --no-logs")
+    opencv_threads = getattr(args, "opencv_threads", 4)
+    if not isinstance(opencv_threads, int) or opencv_threads < 1:
+        raise ValueError("--opencv-threads must be a positive integer")
+    # Small 720p images run alongside capture, input and encoding workers.
+    # Bound OpenCV's pool to reduce contention; keep an explicit rollback.
+    cv2.setNumThreads(opencv_threads)
     resolved = resolve_config(profile=args.profile, config_path=args.config,
                               live_config_path=args.live_config)
     config = resolved.config
@@ -257,6 +265,7 @@ def run(args):
     capture_fit = normalization_transform((region.width, region.height), geometry.reference_resolution)
     video_fps = live_cfg.get("capture_fps", 120)
     print(f"Capture target: {video_fps:g} FPS | frame age limit: {max_age*1000:.0f} ms", flush=True)
+    print(f"OpenCV worker threads: {cv2.getNumThreads()}", flush=True)
     focus_check, modifier_check = target.focused, modifiers_down
     out = _output_directory(args, no_logs)
     identity_cfg = dict(config.get("diagnostics", {}).get("live_identity_trace", {}) or {})
@@ -455,6 +464,7 @@ def run(args):
                 module_snapshot, ensure_ascii=False, sort_keys=True,
                 separators=(",", ":")).encode("utf-8")).hexdigest()
             result = {"mode": "assist", "predictor_mode": config["predictor"]["mode"],
+                      "opencv_threads": cv2.getNumThreads(),
                       "tap_core": "global_eta_pf_tracking",
                       "tap_timing_source": ("global" if engine.simple_core.global_timing.active_enabled
                                             else "legacy"),
@@ -511,6 +521,7 @@ def run(args):
                       "processed_frames": engine.frames, "acquired_frames": worker.captured,
                       "dropped_frames": worker.buffer.dropped,
                       "stale_frames": engine.stale, "events": engine.events, "abstentions": engine.abstentions,
+                      "scheduler_stale_key_releases": input_actions.get("stale_key_release", 0),
                       "abstain_reasons": dict(reasons), "sent_taps": scheduler.sent_taps,
                       "sent_holds": scheduler.sent_holds, "sent_key_downs": scheduler.sent,
                       "keyboard_backend": "Win32 SendInput",
@@ -579,9 +590,13 @@ def main():
     parser.add_argument("--no-logs", action="store_true",
                         help="Disable diagnostic files and recordings; keep Assist behavior active")
     parser.add_argument("--max-frames", type=int)
+    parser.add_argument("--opencv-threads", type=int, default=4,
+                        help="OpenCV worker limit (default: 4; use 16 to restore the previous pool)")
     args = parser.parse_args()
     if args.max_frames is not None and args.max_frames <= 0:
         parser.error("--max-frames must be positive")
+    if args.opencv_threads < 1:
+        parser.error("--opencv-threads must be positive")
     if args.no_logs and args.record_overlay:
         parser.error("--record-overlay cannot be used with --no-logs")
     try:
