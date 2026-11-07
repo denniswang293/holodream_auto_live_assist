@@ -1,4 +1,4 @@
-"""Resolve source-first Assist configuration with explicit override provenance."""
+"""Resolve the Assist settings with validated optional JSON overrides."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -9,7 +9,6 @@ import math
 from pathlib import Path
 
 from .assist_defaults import DEFAULTS_VERSION, builtin_defaults
-from .assist_profiles import apply_profile
 
 
 @dataclass(frozen=True)
@@ -82,6 +81,24 @@ def validate_effective_config(config: dict) -> None:
     _number(live.get("input_advance_px"), "live.input_advance_px", minimum=0, maximum=30)
     _number(live.get("hold_visual", {}).get("start_delay_ms", 0),
             "live.hold_visual.start_delay_ms", minimum=0, maximum=20)
+    if not isinstance(live.get("hold_visual", {}).get("tail_identity_guard", True), bool):
+        raise ValueError("live.hold_visual.tail_identity_guard must be a boolean")
+    if not isinstance(live.get("hold_visual", {}).get("head_measurement_guard", True), bool):
+        raise ValueError("live.hold_visual.head_measurement_guard must be a boolean")
+    hold_visual = live.get("hold_visual", {})
+    if not isinstance(hold_visual.get("linked_tail_caps", True), bool):
+        raise ValueError("live.hold_visual.linked_tail_caps must be a boolean")
+    if not isinstance(hold_visual.get("robust_tail_timing", True), bool):
+        raise ValueError("live.hold_visual.robust_tail_timing must be a boolean")
+    if not isinstance(hold_visual.get("use_tail_path_evidence", True), bool):
+        raise ValueError("live.hold_visual.use_tail_path_evidence must be a boolean")
+    if not isinstance(hold_visual.get("tail_component_ownership", True), bool):
+        raise ValueError("live.hold_visual.tail_component_ownership must be a boolean")
+    if not isinstance(hold_visual.get("release_on_tail_only", False), bool):
+        raise ValueError("live.hold_visual.release_on_tail_only must be a boolean")
+    if (hold_visual.get("release_on_tail_only", False) and
+            not hold_visual.get("tail_identity_guard", True)):
+        raise ValueError("release_on_tail_only requires tail_identity_guard")
     _number(amend.get("freeze_window_ms"), "live.tap_deadline_amend.freeze_window_ms", minimum=30)
     _number(amend.get("max_amend_step_ms"), "live.tap_deadline_amend.max_amend_step_ms", minimum=0, maximum=40)
     _number(amend.get("max_total_amend_ms"), "live.tap_deadline_amend.max_total_amend_ms", minimum=0, maximum=80)
@@ -97,38 +114,30 @@ def effective_fingerprint(config: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def resolve_config(*, profile="stable", config_path: Path | None = None,
-                   live_config_path: Path | None = None) -> EffectiveConfig:
-    config = apply_profile(builtin_defaults(), profile)
+def resolve_config(*, config_path: Path | None = None) -> EffectiveConfig:
+    config = builtin_defaults()
     source_map = {key: "builtin" for key in config}
-    source_map["profile"] = "profile"
-    legacy_override = False
+    has_override = False
     if config_path is not None:
         config_override = _load(config_path)
         config = _deep_merge(config, config_override)
-        legacy_override = True
+        has_override = True
         for key in config_override:
             source_map[key] = "explicit_override"
-    if live_config_path is not None:
-        live_override = _load(live_config_path)
-        config["live"] = _deep_merge(config.get("live", {}), live_override)
-        legacy_override = True
-        source_map["live"] = "explicit_override"
     validate_effective_config(config)
     live = config["live"]
-    experiment = live.get("experiment", {}) or {}
     label = f"timing-lead-{float(live['global_tap_timing']['input_lead_ms']):g}ms"
     live["global_tap_timing"]["ab_label"] = label
     live.setdefault("diagnostics", {})["timing_ab_label"] = label
     config.setdefault("diagnostics", {})["timing_ab_label"] = label
     metadata = {
-        "profile_name": experiment.get("profile_name", profile),
+        "profile_name": "assist",
         "defaults_version": DEFAULTS_VERSION,
-        "source_mode": "legacy_override" if legacy_override else "source_first",
+        "source_mode": "override" if has_override else "builtin",
         "source_map": source_map,
         "effective_config_sha256": effective_fingerprint(config),
-        "experiment_id": experiment.get("experiment_id", "v7148_tap_earlier_amend_ab"),
-        "variant": experiment.get("variant", profile),
+        "experiment_id": "assist",
+        "variant": "assist",
         "input_lead_ms": live["global_tap_timing"]["input_lead_ms"],
         "allow_earlier_amend": live["tap_deadline_amend"]["allow_earlier_amend"],
         "hold_start_delay_ms": live.get("hold_visual", {}).get("start_delay_ms", 0.0),

@@ -1,15 +1,14 @@
-# HoloDream Live Assist
+# HoloDream Assist
 
-> **警告：目前工具仍處於測試階段，測試結果仍可能不穩定，基本上還不能視為完全可靠的防守使用。**
+> **目前仍有漏按與 Hold 判斷問題，尚不能視為可靠的自動演奏工具。專案已統一為單一 Assist 流程，這不代表遊戲命中率已驗證。**
 
-HoloDream 是 Windows 上的安全優先 Live Assist：使用六鍵軌道偵測、Particle Filter 進行 Tap 空間追蹤，並由 Global y-profile ETA 提供普通 Tap 的唯一送鍵時間；Hold 維持視覺尾端控制。PF 不再決定 Tap ETA 或 hit_at。
+Windows 六鍵節奏遊戲 Assist。擷取遊戲所在顯示器，將畫面轉為 720×404 進行辨識；Tap 使用 Global y-profile ETA，Particle Filter 負責位置追蹤；Hold 按住起點鍵，依可見尾端控制放開。
 
 ## 安裝
 
-需要 Windows 與 Python 3.10+：
+需要 Windows、Python 3.10 以上，遊戲顯示比例接近 16:9。
 
 ```powershell
-python -m pip install -r requirements.txt
 python -m pip install -r requirements-live.txt
 ```
 
@@ -19,86 +18,52 @@ python -m pip install -r requirements-live.txt
 .\tools\launch_assist.cmd
 ```
 
-若不希望 Assist 在磁碟留下診斷檔、snapshot 或錄影，可使用無輸出啟動器；操作與輸入安全設定相同，且不會詢問錄影：
+啟動時選擇是否儲存來源與 Overlay 錄影。若完全不需要紀錄：
 
 ```powershell
 .\tools\launch_assist_clean.cmd
 ```
 
-也可在命令列加入 `--no-logs`。此模式不建立 `output/assist/run_*`，並且不能與 `--record-overlay` 同時使用。
+兩個啟動器使用相同演算法與設定，差別只有是否輸出紀錄。
 
-一般版與純功能版皆使用 `stable` profile（60ms，可依新觀測有限度地提早／延後排程；單次最多 40ms、累計 80ms、最後 30ms 凍結）。
+1. 開啟遊戲 `hololive-Dreams`，將遊戲留在前景。
+2. 遊玩畫面就緒後，按下並放開 `Ctrl+Shift+Alt+Q` 啟用；再按一次停用。
+3. `Esc` 或 `F12` 停止程式並釋放按鍵。
 
-`tap-earlier`、`stable-global-rescue`、`timing-balance` 仍可透過 `python -m src.live --profile <名稱> --geometry config/geometry_live_assist.json` 明確選用作診斷。`timing-balance` 在 2026-11-03 的兩次實測中出現更多可見 MISS；一般實戰使用 `stable`。這幾組實驗設定沒有改變安全停止條件。舊的 `--config`／`--live-config` 仍可明確傳入，會標示為 legacy override。
+每次啟動均為輸入關閉狀態。失焦、遊戲狀態不符、無效畫面或影格過期時，保留安全停止／放鍵機制。合法鍵位只有 `S D F J K L`。
 
-Assist 初始為停用狀態。切回遊戲視窗後，按下並放開 `Ctrl+Shift+Alt+Q` 才會啟用，再按一次停用；`Esc` 或 `F12` 會停止程式並釋放按住的鍵。失焦、ROI 不合法、影格過期或安全條件失效時，輸入會自動停止。
-
-預設使用完整遊戲顯示區、720×404 內部座標、六鍵 `S D F J K L`，視窗標題為 `hololive-Dreams`。Tap 使用 PF 空間追蹤與 Global Fixed-Speed ETA；Hold 使用視覺尾端離開判定區控制放鍵。
-
-## 診斷設定
-
-一般啟動的有效設定來自 `src/assist_defaults.py` 與所選 profile；`config.json`、`config/live_assist.json` 只有明確指定舊版覆寫參數時才會載入。安全設定包括：
-
-- `pf_assisted_reassociation.enabled=false`：PF-assisted 只做 Shadow/offline 診斷，不可送鍵。
-- `live.global_tap_timing`：多軌、分高度的 Global 速度輪廓 ETA 為普通 Tap 的 Active 時間來源；`allow_active=true` 只代表通過 Global gate 的 proposal 可送鍵，PF 僅提供空間追蹤與關聯。
-- `global_tap_timing.timing_reference=physical_calibrated` 時，模型分開記錄 physical crossing 與 press deadline；`input_lead_ms=60ms` 是目前本機體感基準，不代表所有歌曲／設備已完成遊戲校準，不可把 key_down 當成遊戲命中真值。
-- `diagnostics.trace_snapshot.enabled=true`：以有限佇列寫入逐影格追蹤摘要，僅供事後分析，不參與決策。
-- `control.dry_run`、人工啟用、失焦／stale／ESC／F12 停止保護保持不變。
-
-Snapshot 會寫入每次 `output/assist/run_*` 的 `live_trace_snapshots.csv`。它不會建立 synthetic observation、改變 Planner/Scheduler、取得 Hold 所有權或呼叫 Actuator。
-
-## 輸出
-
-每次執行會在 `output/assist/run_*` 建立紀錄。主要檔案包括：
-
-- `live_events.csv`：事件與排程狀態。
-- `live_key_actions.csv`：軟體送鍵動作紀錄；不等於遊戲命中。
-- `live_trace_snapshots.csv`：可選診斷 snapshot。
-- `global_tap_timing_shadow.csv`：全域 y-profile ETA 的逐 track 診斷；不代表遊戲命中。
-- `live_overlay.mp4`、`live_source.mp4`：只有啟用錄影時才會產生。
-
-選用 `stable-global-rescue` 時另有 `global_rescue_events.csv`；這也是診斷資料，不代表遊戲命中。
-
-沒有遊戲判定來源時，遊戲命中率一律視為 `UNKNOWN`；`FIRED`、`key_down` 或 UID 持續都不能直接解讀為 Perfect、Good 或 Miss。
-
-### Tap 短暫遮擋
-
-已通過檢查並成功排程的 Tap，會保存選定按鍵與送鍵期限。後續某幀看不到音符，甚至追蹤 ID 到期移除，都不會單獨取消該排程；到期時仍須通過輸入安全檢查。缺少觀測不會延長期限、產生新動作或繞過去重。這只適用於已排程的 Tap，不會讓尚未確認的候選直接送鍵，也不改變 Hold 的視覺放鍵規則。
-
-## 玩家記錄工具
-
-若要請其他玩家提供手動遊玩的影片與六鍵紀錄，可單獨分享
-[HoloDream_Recorder](HoloDream_Recorder/README.md)。它不依賴 Assist 原始碼，也不會自動送鍵；
-結束後產生包含影片、時間索引和玩家按鍵的 ZIP，供事後分析。
-
-## 核心測試
+命令列啟動方式：
 
 ```powershell
-python -m pip install -r requirements-test.txt
-python -m pytest -q
+python -m src.live
+python -m src.live --record-overlay
+python -m src.live --no-logs
 ```
 
-測試驗證程式安全與演算法行為，不代表實機命中率。
+## 設定
 
-## 人工成功演奏比對
+- `src/assist_defaults.py`：唯一內建設定，包含黃色軌道補辨識、Hold 尾端放鍵、60ms Tap lead 與 60ms 畫面新鮮度限制。
+- `config/geometry_live_assist.json`：共用軌道幾何。
+- `--config <JSON>`：選用設定覆寫；仍必須通過設定安全檢查。
 
-八場來源的時鐘檢查、Mock A/B、真實 Auto 同譜比對與案例圖，見
-[2026-11-07 分析報告](docs/REFERENCE_PERFORMANCE_ANALYSIS_20261107.md)。
-影片名義 FPS 與實際擷取頻率不同，請使用時間索引，不要用影格數除以 FPS 對齊按鍵。
+不再提供舊版 profile 或回退設定選單。這次整理保留了目前核心的延遲改善與演算法。
 
-`--profile reference-yellow-rail` 是來源影格支持的黃色頭部恢復實驗，未升為預設。
-它維持 60ms lead 與既有安全限制；正式使用仍預設 `stable`。
-回放與回退指令、已知動作差異都列在報告中。
+## 執行紀錄
 
-## 核心結構
+一般啟動在 `output/assist/run_*/` 建立紀錄；錄影時另有 `live_source.mp4`、`live_overlay.mp4`、`live_video_index.csv`。
 
-- `src/live.py`、`src/live_engine.py`：Assist 執行、安全停止與流程整合。
-- `src/simple_tracker.py`、`src/particle_predictor.py`：Tap 空間追蹤、關聯與 PF 品質。
-- `src/global_tap_timing.py`：普通 Tap 唯一 Global y-profile ETA / hit_at 模型。
-- `src/tap_planner.py`、`src/tap_intent.py`：Tap 意圖與排程。
-- `src/hold_tracker.py`、`src/hold_visual.py`：Hold 視覺追蹤與放鍵。
-- `src/detector.py`、`src/geometry.py`：色塊偵測與六鍵幾何。
-- `src/live_input.py`、`src/windows_runtime.py`：人工啟用與 Windows 輸入安全。
-- `src/assist_defaults.py`、`src/assist_profiles.py`、`src/assist_config.py`：source-first 預設、可回退的 Assist profile、nested override 與 fail-closed 驗證。
-- `tools/launch_assist.cmd`：正式 Assist 啟動器。
-- `docs/`：操作、架構與校正說明。
+CSV、Overlay 繪製與影片編碼採背景處理。`live_run.json` 記錄診斷資料丟失數、輸出錯誤與錄影階段耗時；分析前須確認資料完整。關鍵按鍵紀錄失敗會安全停用輸入。`--no-logs` 不建立紀錄目錄，且不能同時錄影。
+
+原有人工錄製資料保留於 `output/recording/`。`key_down`、候選數或 Tracker UID 都不等於遊戲命中；缺乏遊戲判定資料時，命中率為 `UNKNOWN`。
+
+## 專案結構
+
+```text
+config/       軌道幾何
+docs/         架構、操作與設定說明
+src/          Assist 核心與執行入口
+tools/        一般與無紀錄啟動器
+output/       本機實機紀錄與人工錄影
+```
+
+詳見 [操作手冊](docs/OPERATOR_GUIDE.md)、[架構](docs/ARCHITECTURE.md)及[設定與資料](docs/DATA_AND_CALIBRATION.md)。

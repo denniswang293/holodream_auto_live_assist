@@ -29,6 +29,9 @@ class Candidate:
     hold_path_px: int = 0
     diagnostic_id: str = ""
     parent_proposal_id: str = ""
+    # Keep visual body evidence for releasing an already held note, even when
+    # Tap classification deliberately drops a short/ambiguous path contour.
+    visual_path_bbox: tuple[int, int, int, int] | None = None
 
 
 def _playfield_mask(shape: tuple[int, int], playfield: Playfield,
@@ -124,7 +127,7 @@ def _merge_body_edges(boxes: list[tuple], playfield: Playfield, sx: float, sy: f
 
 def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dict,
            diagnostics: dict | None = None, profile: dict | None = None,
-           frame_index: int | None = None) -> list[Candidate]:
+           frame_index: int | None = None, *, frame_hsv: np.ndarray | None = None) -> list[Candidate]:
     profile_started = time.perf_counter() if profile is not None else None
     profile_marks = {}
     def mark(name, started):
@@ -169,7 +172,9 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
             diagnostics.setdefault("rejections",[]).append({"bbox":box,"reason":reason})
     sx,sy = w/rw,h/rh
     started = section("hsv_roi")
-    hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV)
+    if frame_hsv is not None and (frame_hsv.shape != frame.shape or frame_hsv.dtype != np.uint8):
+        raise ValueError('Shared HSV must match the current BGR frame shape and uint8 type')
+    hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV) if frame_hsv is None else frame_hsv
     cache_enabled = bool(cfg.get("cache_enabled", True))
     if not cache_enabled:
         _MORPH_KERNEL_CACHE.clear()
@@ -545,14 +550,17 @@ def detect(frame: np.ndarray, playfield: Playfield, key_map: list[str], cfg: dic
         # A yellow head/arrow joined to its glow can have a tall contour,
         # without a ribbon extending behind the head. Near the input line,
         # do not let that contour divert a normal bar away from Tap tracking.
+        visual_path_bbox = None
         if (appearance == 'yellow_bar' and cy >= 250*rh/404 and
                 path_bbox is not None and depth < 40 and
                 y-path_bbox[1] < 40*sy):
+            visual_path_bbox = path_bbox
             path_bbox, depth = None, 0
             note_type = 'tap' if tap_edge_count >= 2 and bh >= 4 else 'unknown'
         candidate = Candidate(box,appearance,score,u0,u1,[key_map[i] for i in lanes],note_type,
                               body_box,path_bbox,raw,False,depth,
-                              diagnostic_id=proposal_id, parent_proposal_id=proposal_id)
+                              diagnostic_id=proposal_id, parent_proposal_id=proposal_id,
+                              visual_path_bbox=visual_path_bbox)
         candidates.append(candidate)
         trace_add(trace_base("candidate", proposal_id, body_box, passed=True,
                              parent_proposal_id=proposal_id, core_bbox=box,

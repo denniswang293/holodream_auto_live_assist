@@ -1,15 +1,14 @@
-"""Source-first defaults for the HoloDream Assist runtime.
+"""Canonical settings for the single HoloDream Assist runtime.
 
-These values mirror the currently validated JSON defaults.  Geometry remains
-an external calibration asset because its y coordinates are still pending
-manual validation.
+Geometry remains an external calibration asset. Current gameplay reliability
+and physical calibration are not independently verified.
 """
 from __future__ import annotations
 
 from copy import deepcopy
 
 
-DEFAULTS_VERSION = "v7148.1"
+DEFAULTS_VERSION = "assist"
 
 CORE_DEFAULTS = {
     "reference_resolution": [720, 404],
@@ -31,6 +30,7 @@ CORE_DEFAULTS = {
         "preserve_hard_gates": True, "min_score_margin": 0.5,
     },
     "detector": {
+        "yellow_rail_recovery": True,
         "edge_threshold": 65, "min_area": 55, "min_aspect": 2.0,
         "min_score": 0.42, "min_lane_width": 0.7, "min_colored_fraction": 0.12,
         "lane_min_overlap_fraction": 0.15,
@@ -74,7 +74,7 @@ LIVE_DEFAULTS = {
     "stale_context_pause_ms": 200, "max_input_lateness_ms": 15, "input_advance_px": 30,
     "tap_deadline_amend": {"enabled": True, "freeze_window_ms": 30,
                             "max_amend_step_ms": 40, "max_total_amend_ms": 80,
-                            "allow_earlier_amend": False},
+                            "allow_earlier_amend": True},
     "simplified_tap_planner": {"enabled": False, "mode": "shadow",
                                 "reason": "Keep legacy gates until paired replay confirms no false-positive increase"},
     "linear_timing": {"enabled": False, "mode": "shadow", "window": 5,
@@ -96,7 +96,11 @@ LIVE_DEFAULTS = {
     "hold_visual": {"enabled": True, "path_appearances": ["green_candidate", "yellow_bar"],
                      "control_rule": "hold_start_key_to_visible_tail", "confirmed_by": "user",
                      "confirmation": "按住起點鍵直到尾端，滑動中不換鍵", "min_path_px": 40,
-                     "release_gap_ms": 80, "max_hold_s": 6.0, "start_delay_ms": 0.0},
+                     "release_gap_ms": 80, "max_hold_s": 6.0, "start_delay_ms": 0.0,
+                     "tail_identity_guard": True, "head_measurement_guard": True,
+                     "release_on_tail_only": True, "linked_tail_caps": True,
+                     "robust_tail_timing": True, "use_tail_path_evidence": True,
+                     "tail_component_ownership": True},
     "tap_rule": {"rule": "any_covered_key", "commit_horizon_ms": 100,
                   "geometry_sha256": "e2b28c79ccea59f743ae39a7fe886e17f9d13b9e095c1544426dcb230ab94cd4",
                   "key_order": ["S", "D", "F", "J", "K", "L"], "confirmed_by": "user",

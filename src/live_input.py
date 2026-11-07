@@ -16,17 +16,6 @@ class NoInputActuator:
         raise AssertionError("SHADOW MODE MUST NOT SEND INPUT")
 
 
-class MockActuator:
-    def __init__(self):
-        self.calls = []
-
-    def key_down(self, key):
-        self.calls.append(("down", key))
-
-    def key_up(self, key):
-        self.calls.append(("up", key))
-
-
 @dataclass(frozen=True)
 class ActionIntent:
     event_id: str
@@ -91,6 +80,7 @@ class TapScheduler:
         self.waiting_for_arm_frame = False
         self.arm_frame_wait_started_at = None
         self.pending, self.held = {}, {}
+        self.hold_releases = deque()
         # LiveEngine may pause a pending action during a visual dropout. It
         # must explicitly resume or withdraw the frozen key/deadline; the
         # scheduler never invents a replacement action.
@@ -176,18 +166,27 @@ class TapScheduler:
             self._log("arm_requested", self.last_reason)
             return True
 
-    def _release(self, key, now):
+    def _release(self, key, now, reason="key_up"):
         _, intent = self.held[key]
         self.actuator.key_up(key)
         del self.held[key]
+        if intent.note_type == 'hold':
+            self.hold_releases.append((intent.event_id, reason))
         self._log("key_up", intent=intent, key=key)
+
+    def drain_hold_releases(self):
+        """Transfer terminal Hold state to the engine on its own thread."""
+        with self.lock:
+            rows = list(self.hold_releases)
+            self.hold_releases.clear()
+            return rows
 
     def release_hold(self, event_id, reason="visible_tail_end"):
         with self.lock:
             for key, (_, intent) in list(self.held.items()):
                 if intent.event_id == event_id and intent.note_type == 'hold':
                     self._log('hold_end',reason,intent,key)
-                    self._release(key,self.clock())
+                    self._release(key,self.clock(),reason)
                     return True
             return False
 
@@ -210,7 +209,7 @@ class TapScheduler:
             self.pending_reservations.clear()
             for key in list(self.held):
                 try:
-                    self._release(key, self.clock())
+                    self._release(key, self.clock(),reason)
                 except Exception as error:
                     # Attempt EVERY held key even if one release fails. Keep
                     # failed keys for another shutdown release attempt.
@@ -447,11 +446,14 @@ class TapScheduler:
             if now >= release_at:
                 if intent.note_type == 'hold':
                     self._log('hold_end','max_hold_timeout',intent,key)
-                self._release(key, now)
+                self._release(key, now, 'max_hold_timeout' if intent.note_type=='hold' else 'tap_duration')
 
     def poll(self):
         with self.lock:
             now = self.clock()
+            if self.error:
+                self.disarm('scheduler_error')
+                return
             failure = self._readiness_failure(now)
             if failure:
                 captured, state, focused, roi = self.context
@@ -477,7 +479,7 @@ class TapScheduler:
                     for key in list(self.held):
                         self._log('stale_key_release', 'validated_capture_expired',
                                   self.held[key][1], key)
-                        self._release(key, now)
+                        self._release(key, now, 'validated_capture_expired')
                     if not self.held:
                         if not self.waiting_for_decision:
                             self.waiting_for_decision = True
@@ -505,7 +507,7 @@ class TapScheduler:
                 for event_id in list(self.pending):
                     self.withdraw(event_id, "physical_modifier_held")
                 for key in list(self.held):
-                    self._release(key, now)
+                    self._release(key, now, 'physical_modifier_held')
                 return
             if self.arm_requested:
                 self.arm_requested, self.armed = False, True
@@ -543,6 +545,9 @@ class TapScheduler:
                 if intent.note_type=='hold':self.sent_holds += 1
                 else:self.sent_taps += 1
                 self._log("key_down", intent=intent, key=key)
+                if self.error:
+                    self.disarm('scheduler_error')
+                    return
 
     def start(self):
         def run():

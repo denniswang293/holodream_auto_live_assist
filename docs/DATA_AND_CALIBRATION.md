@@ -1,17 +1,30 @@
-# Assist 設定與資料
+# 設定與資料
 
-## 目前使用設定
+## 設定來源
 
-- `src/assist_defaults.py` 與 `src/assist_profiles.py`：一般啟動實際使用的六鍵、偵測、追蹤與時序設定；`control.dry_run` 維持 `true`。
-- `config/geometry_live_assist.json`：Assist 共用幾何，參考座標為 720×404，目前狀態是 `pending_calibration`。
-- `config.json`、`config/live_assist.json`：僅在明確指定 `--config` 或 `--live-config` 時作為舊版覆寫來源，不是一般啟動的預設來源。
+`src/assist_defaults.py` 是唯一內建 Assist 設定。`src/assist_config.py` 負責載入與安全驗證，可透過 `--config` 指定完整結構的局部 JSON 覆寫。
 
-幾何未完成獨立驗證，因此不能宣稱軌道或命中率已校準。修改幾何會改變其 hash；既有操作 profile 綁定 hash，避免錯用於不同幾何。
+```json
+{
+  "live": {
+    "capture_fps": 120
+  }
+}
+```
 
-## 執行產物
+沒有舊 profile、`--profile` 或 `--live-config` 選項。錄影和無紀錄使用同一組核心設定。
 
-`output/assist/` 儲存新的 Assist run、CSV 診斷資料，以及使用者選擇錄影時的來源／overlay 影片。大型輸出屬本機執行產物，不是程式來源。舊人工標註、評估資料和 Shadow run 不屬於目前保留的 Assist 工作流程，也不會被載入或覆寫。
+## 幾何
 
-## 指標解讀
+共用幾何在 `config/geometry_live_assist.json`，六鍵參考座標為 720×404。Detector、Tracker 與 Overlay 共用此模型。
 
-Assist 可記錄處理 FPS、延遲、stale frames、事件、送鍵與取消數。以上都是執行指標，不能換算成音符精確率、召回率、錯鍵率或遊戲命中率。這些準確度目前未經獨立驗證。
+目前幾何狀態仍是 `pending_calibration`，不能因專案結構整理而宣稱已完成獨立校準。鍵位證據綁定幾何 hash；修改幾何後需重新確認，不能繞過既有檢查。
+
+## 資料
+
+- `output/assist/`：保留的實機場次及後續新紀錄。
+- `output/recording/`：原有人工演奏來源，不由 Assist 覆寫。
+
+這些是本機執行資料，不是原始碼。測試套件、離線比對工具、開發報告及舊分析產物已移除。
+
+CSV 可能因有界診斷佇列而缺列；先查看 `diagnostic_rows_dropped`、`diagnostic_errors` 與錄影丟失數。一般記錄不能直接換算遊戲命中率；未有遊戲判定真值時為 `UNKNOWN`。

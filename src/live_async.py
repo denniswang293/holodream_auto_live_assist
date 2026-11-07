@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import threading
 import time
+import queue
+import copy
 
 import cv2
 
@@ -57,6 +59,10 @@ class EncoderWorker:
     def offer(self,job,image):
         return self.slot.put((job,image,time.perf_counter()))
 
+    def offer_overlay(self, job, snapshot, render):
+        """Queue copied inputs; rendering and encoding both happen on this worker."""
+        return self.slot.put((job, (snapshot, render), time.perf_counter()))
+
     def _run(self):
         overlay = source = None
         try:
@@ -69,6 +75,11 @@ class EncoderWorker:
                 begin = time.perf_counter()
                 wait = begin-queued
                 self.profiler.record("encoder_backlog",wait,state)
+                if isinstance(image, tuple) and len(image) == 2 and callable(image[1]):
+                    snapshot, render = image
+                    image = render(snapshot)
+                    self.profiler.record("overlay_draw",time.perf_counter()-begin,state)
+                begin = time.perf_counter()
                 if overlay is None:
                     codec = cv2.VideoWriter_fourcc(*"mp4v")
                     overlay = self.writer_factory(str(self.directory/self.overlay_filename),codec,self.fps,(image.shape[1],image.shape[0]))
@@ -100,5 +111,89 @@ class EncoderWorker:
         self.thread.join(timeout=10)
         if self.thread.is_alive() or self.error:
             raise RuntimeError(f"Encoder shutdown failed: {self.error}")
+
+
+class BoundedCsvLog:
+    """Bounded nonblocking CSV handoff; critical loss records a fail-closed error."""
+    _STOP = object()
+
+    def __init__(self, logger, capacity=512, *, critical=False, close_timeout_s=1.0):
+        self.logger = logger
+        self.critical = critical
+        self.close_timeout_s = max(0.05, float(close_timeout_s))
+        self.rows_dropped = 0
+        self.error = None
+        self._closed = False
+        self.queue = queue.Queue(maxsize=max(1, int(capacity)))
+        self.thread = threading.Thread(target=self._run, name="holodream-csv", daemon=True)
+        self.thread.start()
+
+    def _check(self):
+        if self.error:
+            raise RuntimeError(f"CSV writer failed: {self.error}") from self.error
+
+    def write(self, row):
+        # Copy so callers can safely reuse or mutate their row after submission.
+        try:
+            item = copy.deepcopy(row)
+        except Exception as error:
+            self.rows_dropped += 1
+            if self.error is None:
+                self.error = error
+            return False
+        if self.error is not None or self._closed:
+            self.rows_dropped += 1
+            if self.critical and self.error is None:
+                self.error = RuntimeError("critical action log submitted after close")
+            return False
+        try:
+            self.queue.put_nowait(item)
+            return True
+        except queue.Full:
+            self.rows_dropped += 1
+            if self.critical and self.error is None:
+                self.error = BufferError("critical action log queue overflow; Assist must disarm")
+            return False
+
+    def _run(self):
+        try:
+            while True:
+                item = self.queue.get()
+                try:
+                    if item is self._STOP:
+                        return
+                    self.logger.write(item)
+                finally:
+                    self.queue.task_done()
+        except Exception as error:
+            self.error = error
+            while True:
+                try:
+                    self.queue.get_nowait()
+                except queue.Empty:
+                    break
+                else:
+                    self.queue.task_done()
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        if self.thread.is_alive():
+            deadline = time.monotonic() + self.close_timeout_s
+            while self.thread.is_alive() and time.monotonic() < deadline:
+                try:
+                    self.queue.put(self._STOP, timeout=.02)
+                    break
+                except queue.Full:
+                    continue
+            self.thread.join(max(0, deadline - time.monotonic()))
+        if self.thread.is_alive():
+            self.error = self.error or TimeoutError("CSV writer did not stop before shutdown timeout")
+            raise RuntimeError(f"CSV writer shutdown failed: {self.error}") from self.error
+        try:
+            self.logger.close()
+        finally:
+            self._check()
 
 

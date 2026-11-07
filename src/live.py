@@ -5,6 +5,7 @@ import argparse
 from collections import Counter
 from contextlib import ExitStack
 import csv
+import copy
 from datetime import datetime, timezone
 import json
 import hashlib
@@ -150,11 +151,18 @@ def _output_directory(args, no_logs):
 
 def _make_action_logger(key_log, input_log, input_actions, engine_holder):
     def log_action(row):
-        key_log.write(row)
-        input_log.write(row)
-        input_actions[row.get("action", "unknown")] += 1
         if "engine" in engine_holder:
             engine_holder["engine"].record_scheduler_action(row)
+        # Scheduler and engine state observe safety actions before diagnostics.
+        key_log.write(row)
+        input_log.write(row)
+        # Never wait for disk under the scheduler lock. Mark fatal action-log
+        # failures so the scheduler releases keys before another key-down.
+        errors = [getattr(log, 'error', None) for log in (key_log,input_log)]
+        if any(error is not None for error in errors) and 'engine' in engine_holder:
+            engine_holder['engine'].scheduler.error = RuntimeError(
+                'Action diagnostics failed: '+ '; '.join(str(e) for e in errors if e is not None))
+        input_actions[row.get("action", "unknown")] += 1
         if row["action"] in ("armed", "disarmed", "arm_rejected", "arm_requested",
                               "arm_waiting_for_fresh_frame", "arm_resumed_on_fresh_frame",
                               "decision_wait", "decision_resumed"):
@@ -164,11 +172,69 @@ def _make_action_logger(key_log, input_log, input_actions, engine_holder):
     return log_action
 
 
-def _render_overlay_if_recording(recorder, work, tracks, info, engine, dropped):
-    """Render only when an encoder is active; decision logic is unaffected."""
-    if recorder is None:
-        return None
-    return draw_live_overlay(work, tracks, info, engine, dropped)
+def _overlay_snapshot(work, tracks, info, engine, dropped):
+    """Copy the renderer's inputs so the encoder never reads a live engine."""
+    with engine.scheduler.lock:
+        held_rows = [(key, release_at, intent.note_type, intent.event_id)
+                     for key, (release_at, intent) in engine.scheduler.held.items()]
+        scheduler = SimpleNamespace(
+            armed=engine.scheduler.armed,
+            held={key: (release_at, SimpleNamespace(note_type=note_type, event_id=event_id))
+                  for key, release_at, note_type, event_id in held_rows},
+            sent=engine.scheduler.sent,
+            sent_taps=getattr(engine.scheduler, "sent_taps", engine.scheduler.sent),
+            sent_holds=getattr(engine.scheduler, "sent_holds", 0),
+            last_reason=engine.scheduler.last_reason,
+        )
+    display_tracks = []
+    track_ids = set()
+    for track in tracks:
+        track_ids.add(track.track_id)
+        candidate = track.candidate
+        eta = track.eta()
+        display_tracks.append(SimpleNamespace(
+            track_id=track.track_id,
+            bbox=tuple(track.bbox), status=track.status, missed=track.missed,
+            reason=track.reason, stable_keys=tuple(track.stable_keys),
+            candidate=SimpleNamespace(
+                bbox=tuple(candidate.bbox), path_bbox=(tuple(candidate.path_bbox) if candidate.path_bbox else None),
+                appearance=candidate.appearance, note_type=candidate.note_type,
+                suspected_overlap=candidate.suspected_overlap),
+            prediction=SimpleNamespace(hit_time=track.prediction.hit_time,
+                                       uncertainty=track.prediction.uncertainty),
+            eta=lambda value=eta: value,
+            confirmed_note_type=track.confirmed_note_type, kind=track.kind,
+        ))
+    simple_core = None
+    if engine.simple_core:
+        session_id = engine.simple_core.session_id
+        wanted = {f"{session_id}:simple:{track_id}" for track_id in track_ids}
+        intent_map = engine.simple_core.intents.intents
+        intents = {key: SimpleNamespace(state=intent_map[key].state, key=intent_map[key].key)
+                   for key in wanted if key in intent_map}
+        simple_core = SimpleNamespace(note_uid=lambda track_id: f"{session_id}:simple:{track_id}",
+                                      intents=SimpleNamespace(intents=intents))
+    held_event_ids = {event_id for _, _, note_type, event_id in held_rows if note_type == "hold"}
+    relevant_hold_ids = {f"{engine.session_id}:{track_id}" for track_id in track_ids}
+    engine_view = SimpleNamespace(
+        scheduler=scheduler, geometry=engine.geometry,
+        gate=SimpleNamespace(evidence=dict(engine.gate.evidence)),
+        config={"key_map": copy.deepcopy(engine.config["key_map"])}, input_advance_px=engine.input_advance_px,
+        trigger_y=engine.trigger_y, pixel_scale_y=engine.pixel_scale_y,
+        geometry_hash=engine.geometry_hash,
+        hold_watch={key: dict(engine.hold_watch[key]) for key in held_event_ids
+                    if key in engine.hold_watch},
+        events=engine.events, abstentions=engine.abstentions,
+        last_decisions={key: engine.last_decisions[key] for key in track_ids
+                        if key in engine.last_decisions},
+        simple_core=simple_core, session_id=engine.session_id,
+        hold_ids=engine.hold_ids.intersection(relevant_hold_ids),
+    )
+    return (work.copy(), display_tracks, dict(info), engine_view, dropped)
+
+
+def _render_overlay_snapshot(snapshot):
+    return draw_live_overlay(snapshot[0], snapshot[1], snapshot[2], snapshot[3], snapshot[4])
 
 
 def actual_timing_ab_label(input_lead_ms):
@@ -205,7 +271,7 @@ def _summary(out, result):
     (out/"live_run.json").write_text(json.dumps(result, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
     lines = ["# HoloDream Assist diagnostics", "", f"Stop: {result['stop_reason']}",
              f"Source: {result['source_kind']} | geometry: {result['geometry_status']} ({result['geometry_sha256']})", "",
-             f"Experiment: {result.get('experiment_id', 'none')} | variant: {result.get('variant', 'baseline')}",
+             "Mode: Assist",
              f"Input prediction target: y={result['input_trigger_y']:.1f}; physical track completion: y={result['tracking_completion_y']:.1f}.",
              f"Tap timing source: {result.get('tap_timing_source', 'legacy')}; Global model: {result.get('global_timing_mode', 'disabled')}.",
              f"Hold start delay: {result.get('hold_start_delay_ms', 0):g} ms.",
@@ -236,8 +302,7 @@ def run(args):
     # Small 720p images run alongside capture, input and encoding workers.
     # Bound OpenCV's pool to reduce contention; keep an explicit rollback.
     cv2.setNumThreads(opencv_threads)
-    resolved = resolve_config(profile=args.profile, config_path=args.config,
-                              live_config_path=args.live_config)
+    resolved = resolve_config(config_path=args.config)
     config = resolved.config
     assist_meta = resolved.metadata
     config.setdefault("predictor", {})
@@ -277,24 +342,23 @@ def run(args):
     identity_trace = (LiveIdentityTraceWriter(out, out.name, identity_cfg)
                       if not no_logs and identity_cfg.get("enabled", False) else None)
     output_status = "diagnostic output disabled" if no_logs else f"output: {out}"
-    print(f"Assist | profile {assist_meta['profile_name']} | source {assist_meta['source_mode']} | geometry {geometry.status} | predictor {config['predictor']['mode']} | {output_status}", flush=True)
-    if assist_meta["profile_name"] == "tap-earlier":
-        print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: tap-earlier is user-selectable and reversible.", flush=True)
-    elif assist_meta["profile_name"] == "stable-global-rescue":
-        print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: guarded last-good Global ETA reuse (max 80ms).", flush=True)
-    elif assist_meta["profile_name"] == "timing-balance":
-        print("EXPERIMENTAL / NEEDS_GAME_VALIDATION: bounded earlier Tap amendments; Hold starts 15ms later.", flush=True)
+    print(f"Assist | source {assist_meta['source_mode']} | geometry {geometry.status} | {output_status}", flush=True)
     print("Ctrl+Shift+Alt+Q toggles assist only; Esc/F12 stops. Input starts OFF.", flush=True)
     print(f"Actual physical capture rectangle: {region.bounds} (entire game display)",flush=True)
     wall_started = time.perf_counter()
     with ExitStack() as stack:
         # High-rate diagnostics use a bounded, time/row based flush.  Action
         # logs remain immediate so safety and input state are observable.
+        from .live_async import BoundedCsvLog
         def diagnostic_log(filename, fields):
-            return _NoLog() if no_logs else CsvLog(out/filename, fields, batch_size=64, batch_interval_s=.2)
+            if no_logs:
+                return _NoLog()
+            return BoundedCsvLog(CsvLog(out/filename, fields, batch_size=64, batch_interval_s=.2),
+                                 capacity=256)
         event_log = diagnostic_log("live_events.csv", EVENT_FIELDS)
         frame_log = diagnostic_log("live_frames.csv", FRAME_FIELDS)
-        key_log = _NoLog() if no_logs else CsvLog(out/"live_key_actions.csv", ACTION_FIELDS)
+        key_log = (_NoLog() if no_logs else BoundedCsvLog(
+            CsvLog(out/"live_key_actions.csv", ACTION_FIELDS), capacity=256, critical=True))
         decision_log = diagnostic_log("tap_decisions.csv", DECISION_FIELDS)
         shadow_log = diagnostic_log("tap_planner_shadow.csv", SHADOW_FIELDS)
         eta_log = diagnostic_log("tap_eta_comparison.csv", ETA_FIELDS)
@@ -302,7 +366,8 @@ def run(args):
         global_rescue_log = diagnostic_log("global_rescue_events.csv", GLOBAL_RESCUE_FIELDS)
         pf_gate_shadow_log = diagnostic_log("pf_gate_shadow.csv", PF_GATE_SHADOW_FIELDS)
         intent_log = diagnostic_log("tap_intents.csv", INTENT_FIELDS)
-        input_log = _NoLog() if no_logs else CsvLog(out/"input_actions.csv", ACTION_FIELDS)
+        input_log = (_NoLog() if no_logs else BoundedCsvLog(
+            CsvLog(out/"input_actions.csv", ACTION_FIELDS), capacity=256, critical=True))
         for log in (event_log, frame_log, key_log, decision_log, shadow_log, eta_log,
                     global_eta_log, global_rescue_log,
                     pf_gate_shadow_log, intent_log, input_log):
@@ -349,8 +414,14 @@ def run(args):
         scheduler.start()
         worker = CaptureWorker(lambda: AutoCapture(region, args.backend), video_fps).start()
         stack.callback(worker.close)
+        async_logs = (event_log, frame_log, key_log, decision_log, shadow_log, eta_log,
+                      global_eta_log, global_rescue_log, pf_gate_shadow_log, intent_log, input_log)
         try:
             while not stopped.is_set():
+                failed_logs = [log for log in async_logs if getattr(log, "error", None)]
+                if failed_logs:
+                    details = "; ".join(str(log.error) for log in failed_logs)
+                    raise RuntimeError(f"Asynchronous diagnostics failed: {details}")
                 if recorder and recorder.error:
                     raise RuntimeError(f'Recording encoder failed: {recorder.error}')
                 if scheduler.error:
@@ -422,9 +493,9 @@ def run(args):
                 info["dropped_total"] = dropped
                 info["video_frame"] = ""
                 if recorder:
-                    image = _render_overlay_if_recording(recorder, work, tracks, info, engine, dropped)
                     job = SimpleNamespace(work=work,info=dict(info),event_ids='|'.join(e['event_id'] for e in events))
-                    recorder.offer(job,image)
+                    snapshot = _overlay_snapshot(work, tracks, info, engine, dropped)
+                    recorder.offer_overlay(job, snapshot, _render_overlay_snapshot)
                 frame_log.write(info)
                 last_info = info
                 latencies.append(info["latency_ms"])
@@ -449,6 +520,21 @@ def run(args):
             scheduler.close()
             if worker:
                 worker.close()
+            csv_errors = {}
+            for name, log in (("events", event_log), ("frames", frame_log),
+                              ("key_actions", key_log), ("tap_decisions", decision_log),
+                              ("planner_shadow", shadow_log), ("eta", eta_log),
+                              ("global_eta", global_eta_log), ("global_rescue", global_rescue_log),
+                              ("pf_gate_shadow", pf_gate_shadow_log), ("intents", intent_log),
+                              ("input_actions", input_log)):
+                if isinstance(log, _NoLog):
+                    continue
+                try:
+                    log.close()
+                except Exception as error:
+                    csv_errors[name] = str(error)
+            if csv_errors and stop_reason == "stopped":
+                stop_reason = "error: asynchronous diagnostics failed"
             recording_error = None
             if recorder:
                 try:
@@ -533,12 +619,23 @@ def run(args):
                       "latency_p95_ms": float(np.percentile(latencies,95)) if latencies else 0,
                       "stop_reason": stop_reason, "wall_elapsed_s": wall_elapsed,
                       "recording_async": recorder is not None,
+                      "recording_stage_performance": recorder.profiler.rows() if recorder else [],
                       "recording_encoded_frames": recorder.encoded if recorder else 0,
                       "recording_dropped_frames": recorder.slot.dropped if recorder else 0,
                       "recording_clean_source": recorder is not None,
                       "recording_nominal_fps": min(video_fps,60) if recorder else video_fps if args.record_overlay else None,
                       "recording_index": 'live_video_index.csv' if recorder else None,
                       "recording_error": str(recording_error) if recording_error else None,
+                      "diagnostic_errors": csv_errors,
+                      "diagnostic_rows_dropped": {
+                          name: getattr(log, "rows_dropped", 0)
+                          for name, log in (("events", event_log), ("frames", frame_log),
+                                            ("key_actions", key_log), ("input_actions", input_log),
+                                            ("tap_decisions", decision_log), ("planner_shadow", shadow_log),
+                                            ("eta", eta_log), ("global_eta", global_eta_log),
+                                            ("global_rescue", global_rescue_log),
+                                            ("pf_gate_shadow", pf_gate_shadow_log),
+                                            ("intents", intent_log))},
                       "accuracy": "UNVERIFIED", "real_game_sessions_validated": 0}
             if not no_logs:
                 _summary(out, result)
@@ -576,12 +673,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--window-title",default=DEFAULT_WINDOW_TITLE,help="Game window title (default: %(default)s)")
     parser.add_argument("--list-windows", action="store_true")
-    parser.add_argument("--profile", choices=("stable", "tap-earlier", "stable-global-rescue", "timing-balance"), default="stable",
-                        help="Source-first Assist timing profile (default: %(default)s)")
     parser.add_argument("--config", type=Path, default=None,
-                        help="Optional legacy/root JSON override")
-    parser.add_argument("--live-config", type=Path, default=None,
-                        help="Optional explicit live JSON override")
+                        help="Optional JSON configuration override")
     parser.add_argument("--geometry", type=Path, default=Path("config/geometry_live_assist.json"))
     parser.add_argument("--out", type=Path, default=Path("output/assist"))
     parser.add_argument("--backend", choices=("auto", "dxcam", "mss"), default="auto")

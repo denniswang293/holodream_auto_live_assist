@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 
-def select_hold_heads(candidates):
+def select_hold_heads(candidates, *, head_measurement_guard=False, scale_y=1.0):
     """Keep one moving head for duplicate contours of the same visible path.
 
     A Hold's wide head and thin colored edge can share a path bbox in one
@@ -18,6 +18,13 @@ def select_hold_heads(candidates):
     """
     selected = []
     for candidate in candidates:
+        # Near the line a 1--6 px yellow highlight is an edge of the tall head,
+        # not its center. Alternating between it and the full head injects
+        # a false velocity jump (and can create a second early reservation).
+        # Green curves still need their fragment continuity: the eight-player
+        # reference replay showed regressions when this was applied to green.
+        # Keep distant thin heads and all original contours for visual tail
+        # control; this function only selects motion measurements for starts.
         duplicate = None
         if candidate.path_bbox is not None:
             for index, prior in enumerate(selected):
@@ -46,6 +53,12 @@ def select_hold_heads(candidates):
         head = max((prior, candidate), key=lambda item: item.bbox[2]*item.bbox[3])
         selected[duplicate] = replace(
             head, hold_path_px=max(prior.hold_path_px, candidate.hold_path_px))
+    if head_measurement_guard:
+        # Merge first so an edge's independently measured path depth remains
+        # available to the full head, even though its position is discarded.
+        selected = [c for c in selected if not (c.appearance == 'yellow_bar' and
+                    c.bbox[3] <= 6 * scale_y and
+                    c.bbox[1] + c.bbox[3] / 2 >= 250 * scale_y)]
     return selected
 
 

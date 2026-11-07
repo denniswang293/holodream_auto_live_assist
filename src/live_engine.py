@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import time
 import uuid
@@ -18,6 +18,7 @@ from .live_capture import normalize_frame
 from .live_input import ActionIntent, verified_keys
 from .overlay import render
 from .tracker import Tracker
+from .predictor import Predictor
 from .tap_assignment import AnyCoveredKeyRule
 from .hold_visual import path_runs, nearest_run, assign_hold_runs, connected_hold_runs, hold_probe_is_bright, continuous_hold_body
 from .judgment_time import JudgmentTimeEstimator
@@ -233,6 +234,7 @@ class LiveEngine:
         self.hold_path_px = int(hold_cfg.get('min_path_px',40*self.pixel_scale_y))
         self.hold_release_gap_s = float(hold_cfg.get('release_gap_ms',120))/1000
         self.hold_start_delay_s = float(hold_cfg.get('start_delay_ms',0.0))/1000
+        self.hold_tail_only = bool(hold_cfg.get('release_on_tail_only',False))
         if not (32*self.pixel_scale_y<=self.hold_path_px<=100*self.pixel_scale_y and .06<=self.hold_release_gap_s<=.25):
             raise ValueError('Hold path and release limits are outside supported range')
         if not 0<=self.hold_start_delay_s<=.020:
@@ -300,6 +302,9 @@ class LiveEngine:
         self.tracker = Tracker(hold_tracker_cfg,self.trigger_y,predictor_cfg,
                                predictor_mode=hold_predictor_mode,particle_cfg=particle_cfg,
                                physical_hit_y=geometry.hit_y)
+        self.hold_robust_tail_timing = bool(hold_cfg.get('robust_tail_timing',True))
+        self.hold_tail_predictor = Predictor({**predictor_cfg, 'min_observations':3,
+            'max_uncertainty_s':float(global_clock.get('max_uncertainty_s',.04))})
         self.collector = EventCollector({**config.get("events", {}), "reference_height": geometry.reference_resolution[1]})
         self.diagnostic_sink = None
         self._identity_transition_offsets = {}
@@ -357,6 +362,7 @@ class LiveEngine:
 
     def invalidate(self, reason="invalid_frame"):
         self.scheduler.disarm(reason)
+        self._sync_released_holds()
         self.edge_fragment_commits.clear()
         self.tap_edge_evidence.clear()
         self.provisional_tap_losses.clear()
@@ -370,6 +376,27 @@ class LiveEngine:
         self.hold_pending_coast.clear()
         if self.hold_tracker_v2:
             self.hold_tracker_v2.reset()
+
+    def _sync_released_holds(self):
+        """Retire visual/pending Hold state after a real successful key-up.
+
+        The scheduler owns physical input. Consume its notifications on the
+        processing thread rather than mutating engine dictionaries inside an
+        input-thread callback. Keep consumed/seen IDs so a fresh frame cannot
+        blindly restart an interrupted Hold.
+        """
+        for event_id, _reason in self.scheduler.drain_hold_releases():
+            for mapping in (self.hold_watch, self.hold_spans, self.hold_pending_coast,
+                            self.occlusion_commits, self.dropout_commits,
+                            self.tap_edge_evidence,
+                            self.provisional_tap_losses):
+                mapping.pop(event_id, None)
+            self.edge_fragment_commits.discard(event_id)
+            if event_id.startswith(self.session_id+':'):
+                try:
+                    self.input_eligible_ids.pop(int(event_id.rsplit(':',1)[1]),None)
+                except ValueError:
+                    pass
 
     def _commit_still_valid(self,tr,commit,now):
         """A committed deadline uses its validated fit, not a noisy new fit.
@@ -932,6 +959,173 @@ class LiveEngine:
         return [span for span in path_runs(work, self.geometry, y, appearance)
                 if span[1] - span[0] >= minimum_width]
 
+    def _observe_departing_hold_tail(self, watch, appearance, candidates, now, positions, owner):
+        """Keep a measured tail's identity when a later ribbon shares its color.
+
+        A departing cap has body BELOW it; a future start head has body above.
+        Three distinct capture observations and a conservative measured speed
+        bound are required. This never creates input or changes the start key.
+        """
+        measured_at = self.last_capture
+        if not math.isfinite(measured_at):
+            measured_at = now
+        elif not 0 <= now-measured_at <= self.scheduler.max_age:
+            return False
+        history = watch.setdefault('tail_history', [])
+        if history and measured_at <= history[-1][0]:
+            return False
+        history_expired = bool(history and
+            measured_at-watch.get('tail_seen_at',history[-1][0]) > .25)
+        # Never extend an established end time by attaching to a later cap.
+        # Without an end time, however, a stale history must not permanently
+        # disable all subsequent real observations after a visual occlusion.
+        if history_expired and 'tail_deadline' in watch:
+            return False
+        span = watch.get('span', (watch['u'], watch['u']))
+        options = []
+        for c in candidates:
+            linked_cap = False
+            visual_path = getattr(c,'visual_path_bbox',None)
+            if (c.appearance == appearance and c.path_bbox is None and visual_path is not None and
+                    self.config.get('live', {}).get('hold_visual', {}).get('use_tail_path_evidence',True)):
+                bx, by, bw, bh = visual_path
+                left, right = self.geometry.bounds(self.hold_probe_y)
+                owners = [uid for uid,u in positions.items()
+                          if bx <= left+u*(right-left) <= bx+bw]
+                if owners == [owner] and bh >= self.hold_path_px and by+bh >= self.hold_probe_y:
+                    # This does not promote a Tap to Hold or modify its raw
+                    # candidate. Only restore measured geometry to the release
+                    # observer, where the existing tail-direction gates apply.
+                    # Detector only supplies this field after measuring less
+                    # than 40px of continuous ribbon ABOVE the cap. Its bbox
+                    # can include hit sparks above it; those are not the tail.
+                    cap_y = c.bbox[1]
+                    c = replace(c,path_bbox=(bx,cap_y,bw,by+bh-cap_y))
+            if (appearance == 'green_candidate' and c.appearance == 'yellow_bar' and
+                    c.path_bbox is None and self.config.get('live', {}).get(
+                        'hold_visual', {}).get('linked_tail_caps', True)):
+                # A yellow end cap can sit on the top of a green ribbon. It
+                # remains a yellow candidate for Tap processing; only this
+                # held-Hold observer may associate it with the green body.
+                x, y, width, height = c.bbox
+                left, right = self.geometry.bounds(self.hold_probe_y)
+                bodies = set()
+                for body in candidates:
+                    if body.appearance != appearance or body.path_bbox is None:
+                        continue
+                    bx, by, bw, bh = body.path_bbox
+                    owners = [uid for uid, u in positions.items()
+                              if bx <= left+u*(right-left) <= bx+bw]
+                    if (owners == [owner] and bh >= self.hold_path_px and
+                            by+bh >= self.hold_probe_y and
+                            abs(by-(y+height)) <= 6*self.pixel_scale_y and
+                            min(x+width,bx+bw)-max(x,bx) >= .75*width):
+                        bodies.add(body.path_bbox)
+                if len(bodies) == 1:
+                    bx, by, bw, bh = next(iter(bodies))
+                    c = replace(c, appearance=appearance, hold_path_px=0,
+                                path_bbox=(bx,y,bw,by+bh-y))
+                    linked_cap = True
+            if c.appearance != appearance or c.path_bbox is None:
+                continue
+            _, y, _, height = c.bbox
+            px, top, pw, depth = c.path_bbox
+            left, right = self.geometry.bounds(self.hold_probe_y)
+            body_owners = [uid for uid,u in positions.items()
+                           if px <= left+u*(right-left) <= px+pw]
+            component_owned = (self.config.get('live',{}).get('hold_visual',{}).get('tail_component_ownership',True) and
+                               depth >= self.hold_path_px and top+depth >= self.hold_probe_y and
+                               body_owners == [owner])
+            overlap = min(span[1],c.u_max)-max(span[0],c.u_min)
+            center = (c.u_min+c.u_max)/2
+            if not (linked_cap or component_owned) and min(positions, key=lambda uid: (abs(positions[uid]-center),uid)) != owner:
+                continue
+            same_span = (overlap >= .5*min(span[1]-span[0],c.u_max-c.u_min)
+                         if span[1] > span[0] else c.u_min <= watch['u'] <= c.u_max)
+            if (8*self.pixel_scale_y <= height <= 32*self.pixel_scale_y and
+                    (linked_cap or component_owned or y+height >= self.hold_probe_y-64*self.pixel_scale_y) and y <= self.hold_probe_y and
+                    0 <= y-top <= max(12*self.pixel_scale_y,height) and
+                    top+depth-(y+height) >= 12*self.pixel_scale_y and
+                    c.hold_path_px < self.hold_path_px and
+                    (linked_cap or component_owned or same_span) and
+                    (not history or y >= history[-1][1])):
+                options.append((y, linked_cap))
+        if not options:
+            return False
+        if history_expired:
+            # Only a candidate that passed the original color, body-direction,
+            # ownership, span and forward-motion gates can start a fresh fit.
+            # Do not mix points from opposite sides of the occlusion gap.
+            history.clear()
+        # Use the upper edge of the cap: the entire tail must clear the line.
+        y, linked_cap = min(options)
+        watch['tail_seen_at'] = measured_at
+        if history and y == history[-1][1]:
+            return True
+        history.append((measured_at,y))
+        history[:] = [point for point in history if measured_at-point[0] <= .25]
+        del history[:-8]
+        if self.hold_robust_tail_timing:
+            # Fit the observed tail before hit effects hide it. Waiting for
+            # y267 and then requiring <=250ms travel discarded valid short
+            # Holds even with five measured tail positions (human REF8 K12).
+            # Reuse the existing robust motion fit, without changing Tap ETA.
+            prediction = self.hold_tail_predictor.predict(
+                [(t, cap_y, 0.) for t, cap_y in history], self.geometry.hit_y)
+            watch['tail_timing_reason'] = prediction.reason or 'ready'
+            if prediction.hit_time is not None:
+                crossing, uncertainty = prediction.hit_time, prediction.uncertainty or 0.
+                timing = self.simple_core.global_timing
+                model = timing.model
+                # v(y) changes with perspective. A ready, fresh shared motion
+                # profile can integrate the remaining physical travel without
+                # making the tail train the model or involving PF in ETA.
+                profile_age = measured_at-timing._capture_timestamp
+                if (model.ready and model.source == 'global_profile' and
+                        0 <= profile_age <= self.scheduler.max_age and model.profile_edges and
+                        model.profile_edges[0] <= y < self.geometry.hit_y <= model.profile_edges[-1]):
+                    profile = timing._profile_eta(y,self.geometry.hit_y)
+                    segment = timing._profile_segment(y,model.profile_edges)
+                    local_speed = (model.profile_speeds[segment] if segment is not None and
+                                   segment < len(model.profile_speeds) else float('nan'))
+                    consistent = (math.isfinite(local_speed) and local_speed > 0 and
+                                  abs(prediction.velocity-local_speed) <=
+                                  timing.max_speed_dispersion*local_speed)
+                    if profile is not None and consistent:
+                        travel, sigma, _ = profile
+                        sigma = math.hypot(sigma, timing.measurement_noise_px /
+                                           max(prediction.velocity,timing.min_velocity))
+                        if (0 < travel <= self.hold_tail_predictor.cfg.get('lookahead_s',1.5) and
+                                sigma <= timing.max_uncertainty_s):
+                            crossing, uncertainty = measured_at+travel, sigma
+                            watch['tail_timing_model'] = 'global_y_profile'
+                if crossing == prediction.hit_time:
+                    watch['tail_timing_model'] = 'local_robust_fallback'
+                watch['tail_cross_at'] = crossing
+                watch['tail_deadline'] = crossing + uncertainty + self.hold_release_gap_s
+                watch['tail_source'] = ('yellow_cap_green_body' if linked_cap else 'same_color_cap')
+            return True
+        if len(history) < 3 or (not linked_cap and y < self.hold_probe_y-self.hold_path_px):
+            return True
+        dt = measured_at-history[0][0]
+        timing_config = self.config['live']['global_tap_timing']
+        noise = float(timing_config['measurement_noise_px'])
+        # Subtract position error before converting the observed travel to a
+        # speed. A slower bound releases later, rather than ahead of the cap.
+        velocity = (y-history[0][1]-2*noise)/dt if dt > 0 else 0.
+        travel = (self.geometry.hit_y-y)/velocity if velocity > 0 else math.inf
+        # The linked cap establishes the actual top of the connected ribbon.
+        # Fit it before the hit flash hides it, using the existing predictor
+        # lookahead bound rather than requiring it to remain visible at y267.
+        max_travel = (float(self.tracker.predictor.cfg.get('lookahead_s',1.5))
+                      if linked_cap else .25)
+        if (0 < dt <= .25 and 0 <= travel <= max_travel and
+                timing_config['min_velocity'] <= velocity <= timing_config['max_velocity']):
+            watch['tail_cross_at'] = measured_at+travel
+            watch['tail_deadline'] = measured_at+travel+self.hold_release_gap_s
+            watch['tail_source'] = 'yellow_cap_green_body' if linked_cap else 'same_color_cap'
+        return True
+
     def _update_held_holds(self, work, now, candidates=()):
         if not self.hold_enabled:
             return
@@ -1001,6 +1195,23 @@ class LiveEngine:
             current.add(intent.event_id)
             watch = self.hold_watch.setdefault(intent.event_id,
                         {'u':intent.path_u,'start':now,'last_visible':now})
+            if self.config.get('live', {}).get('hold_visual', {}).get('tail_identity_guard', True):
+                expired = now >= watch.get('tail_deadline', math.inf)
+                positions = {other.event_id: expected[other.event_id] for other in holds
+                             if (other.path_appearance or 'green_candidate') == appearance}
+                tail_visible = self._observe_departing_hold_tail(
+                    watch, appearance, candidates, now, positions, intent.event_id)
+                if expired:
+                    if tail_visible:
+                        # A real, still-visible cap overrides an extrapolation
+                        # (for example a scroll pause). Refit after it moves;
+                        # never let prediction alone release a visible tail.
+                        watch.pop('tail_deadline',None)
+                        watch.pop('tail_cross_at',None)
+                        watch['tail_history'] = watch['tail_history'][-1:]
+                    else:
+                        self.scheduler.release_hold(intent.event_id,'measured_tail_crossed_physical_line')
+                        continue
             run = assigned_by_color[appearance].get(intent.event_id)
             direct = run is not None
             # Preserve the established physical-row/upper-row match first.
@@ -1068,7 +1279,13 @@ class LiveEngine:
                 # replacing that span can admit a duplicate tail key-down.
                 if not near_visible:
                     watch['span'] = run
-            elif (now-watch['last_visible'] >= max(self.hold_release_gap_s,
+            # Occlusion does not establish that the tail has passed. In the
+            # opt-in mode retain the original key until the measured tail's
+            # crossing deadline above, or an unchanged scheduler safety stop.
+            # The color-gap path stays available as the established fallback.
+            elif (not self.hold_tail_only and
+                  not (self.hold_robust_tail_timing and 'tail_deadline' in watch) and
+                  now-watch['last_visible'] >= max(self.hold_release_gap_s,
                     min(.25, self.hold_pending_coast.get(intent.event_id, {}).get('tail_travel_s', 0.) *
                         (self.geometry.hit_y-watch.get('observation_y',self.hold_probe_y))/
                         (self.geometry.hit_y-self.hold_probe_y))) and
@@ -1101,6 +1318,20 @@ class LiveEngine:
                 not self.geometry.hit_y-80*self.pixel_scale_y <= y <=
                     self.geometry.hit_y-12*self.pixel_scale_y):
             return False
+        if (f"{self.session_id}:{getattr(track,'track_id',None)}" not in self.scheduler.pending and
+                c.path_bbox is not None and c.hold_path_px < self.hold_path_px and
+                self.config.get('live',{}).get('hold_visual',{}).get('tail_component_ownership',True)):
+            # REF8 D42: an edge of the existing S ribbon acquired a fresh ID
+            # and scheduled D. It may remain a tracking observation, but a
+            # uniquely owned component must not start a second Hold.
+            px, py, pw, ph = c.path_bbox
+            left, right = self.geometry.bounds(self.hold_probe_y)
+            owners = [uid for uid in held_ids
+                      if self.hold_colors.get(uid) == c.appearance and
+                      (watch := self.hold_watch.get(uid)) is not None and
+                      px <= left+watch['u']*(right-left) <= px+pw]
+            if len(owners) == 1 and ph >= self.hold_path_px and py+ph >= self.hold_probe_y:
+                return True
         span = c.u_min, c.u_max
         for event_id in held_ids:
             if self.hold_colors.get(event_id) != c.appearance:
@@ -1174,6 +1405,7 @@ class LiveEngine:
 
     def process(self, frame, focused=True, roi_valid=True):
         wall_begin = time.perf_counter()
+        self._sync_released_holds()
         self._identity_trace_frame = None
         measured = dict.fromkeys(("normalization","state_detector","note_detector","tracking","prediction",
                                   "unknown_association","tracker_matching","diagnostic_write","decision"),0.0)
@@ -1203,12 +1435,15 @@ class LiveEngine:
             state, tracks, candidates = ("STALE" if stale else "ROI_BLOCKED" if not roi_valid else "FOCUS_LOST"), [], []
         else:
             phase = time.perf_counter()
+            self.gate.last_hsv = None
             state = self.gate.update(work)
             measured["state_detector"] = time.perf_counter()-phase
             phase = time.perf_counter()
             self.last_detector_diagnostics = {}
             detector_kwargs = ({"frame_index": frame.sequence}
                                if self.identity_trace_enabled else {})
+            if self.detector is detect and self.gate.last_hsv is not None:
+                detector_kwargs['frame_hsv'] = self.gate.last_hsv
             candidates = (self.detector(work, self.geometry, self.config["key_map"], self.dc,
                                         self.last_detector_diagnostics, **detector_kwargs)
                           if state == "PLAYING" else [])
@@ -1220,7 +1455,10 @@ class LiveEngine:
             if self.hold_enabled and state == "PLAYING":
                 raw_holds = [c for c in candidates if c.appearance in self.hold_path_colors and
                              (c.hold_path_px > 0 or c.path_bbox is not None)]
-                raw_holds = select_hold_heads(raw_holds)
+                raw_holds = select_hold_heads(raw_holds,
+                    head_measurement_guard=self.config.get('live', {}).get(
+                        'hold_visual', {}).get('head_measurement_guard', True),
+                    scale_y=self.pixel_scale_y)
                 hold_candidates = (self.hold_tracker_v2.observe(raw_holds, frame.captured_at)
                                    if self.hold_tracker_v2 else
                                    [c for c in raw_holds if c.hold_path_px >= self.hold_path_px])
@@ -1616,10 +1854,14 @@ class LiveEngine:
                             continue
                         span = tr.candidate.u_min,tr.candidate.u_max
                         hit = self._hold_press_at(tr)
+                        distinct_head = (self.config.get('live',{}).get('hold_visual',{}).get(
+                            'tail_component_ownership',True) and
+                            tr.candidate.bbox[3] >= 8*self.pixel_scale_y and
+                            tr.candidate.hold_path_px >= self.hold_path_px)
                         duplicate = any(
                             other_id != event_id and
                             self.hold_colors.get(other_id, tr.candidate.appearance) == tr.candidate.appearance and
-                            (held or abs(hit-other_hit)<=.15) and
+                            (abs(hit-other_hit)<=.15 or (held and not distinct_head)) and
                             max(0.,min(span[1],old[1])-max(span[0],old[0])) >=
                                 .75*min(span[1]-span[0],old[1]-old[0])
                             for old,other_hit,held,other_id in prior)
@@ -1940,6 +2182,7 @@ class LiveEngine:
             scheduler_poll_at = self.clock()
             self.scheduler.poll()
             scheduler_poll_at = self.clock()
+            self._sync_released_holds()
             measured["scheduler_update"]=time.perf_counter()-scheduler_started
             live_holds = set(self.scheduler.pending) | {intent.event_id for _,intent in self.scheduler.held.values()}
             self.hold_spans = {event_id:value for event_id,value in self.hold_spans.items()
@@ -2117,6 +2360,17 @@ def draw_live_overlay(work, tracks, info, engine, dropped=0):
     held_holds = [key for key,(_,intent) in engine.scheduler.held.items() if intent.note_type=='hold']
     if held_holds:
         lines.append(f"holding: {','.join(held_holds)}")
+        for key, (_, intent) in list(engine.scheduler.held.items()):
+            if intent.note_type != 'hold':
+                continue
+            watch = engine.hold_watch.get(intent.event_id, {})
+            deadline = watch.get('tail_deadline')
+            if deadline is None:
+                lines.append(f"Hold {key}: tail crossing NOT ESTABLISHED")
+            else:
+                remaining = deadline-info['processing_timestamp']
+                lines.append(f"Hold {key}: predicted release {remaining:+.3f}s")
+                lines.append(f"  tail source: {watch.get('tail_source','same_color_cap')}")
     lines += [f"capture FPS: {info['capture_fps']:.1f} | process FPS: {info['processing_fps']:.1f}",
              f"age: {info['frame_age_ms']:.1f}ms | latency: {info['latency_ms']:.1f}ms",
              f"latency P50/P95: {info['latency_p50_ms']:.1f}/{info['latency_p95_ms']:.1f}ms",

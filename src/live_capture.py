@@ -175,11 +175,13 @@ class AutoCapture:
 
 
 class CaptureWorker:
-    def __init__(self, factory, fps=120, clock=time.perf_counter, on_capture=None):
+    def __init__(self, factory, fps=120, clock=time.perf_counter, on_capture=None,
+                 sleeper=time.sleep):
         if not math.isfinite(fps) or fps <= 0:
             raise ValueError("Capture FPS must be positive")
         self.factory, self.fps, self.clock = factory, fps, clock
         self.on_capture = on_capture
+        self.sleeper = sleeper
         self.buffer = LatestFrameBuffer()
         self.stop_event = threading.Event()
         self.thread = None
@@ -200,6 +202,17 @@ class CaptureWorker:
         self.thread.start()
         return self
 
+    def _wait_until(self, deadline):
+        # On Windows Event.wait(8ms) can wake at the coarse ~15.6ms timer
+        # boundary. Python's sleep uses the high-resolution waitable timer.
+        # Bound each sleep so low capture rates still stop promptly, without
+        # a busy wait or changing the process-wide timer resolution.
+        while not self.stop_event.is_set():
+            remaining = deadline-self.clock()
+            if remaining <= 0:
+                return
+            self.sleeper(min(remaining, .01))
+
     def _run(self):
         backend = None
         try:
@@ -219,7 +232,7 @@ class CaptureWorker:
                     self.buffer.put(packet)
                     if self.on_capture:
                         self.on_capture(packet)
-                self.stop_event.wait(max(0, 1/self.fps-(end-begin)))
+                self._wait_until(begin+1/self.fps)
         except Exception as error:
             self.error = error
         finally:

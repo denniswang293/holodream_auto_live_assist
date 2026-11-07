@@ -11,11 +11,13 @@ class GameplayGate:
         self.streak = 0
         self.state = "UNCERTAIN"
         self.evidence: dict[str, float] = {}
+        self.last_hsv = None
 
     def update(self, frame: np.ndarray) -> str:
         h, w = frame.shape[:2]
         rw, rh = self.reference_resolution
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        self.last_hsv = hsv
         cyan = cv2.inRange(hsv, np.array(self.cfg.get("hsv_lower", [78,65,170])),
                            np.array(self.cfg.get("hsv_upper", [104,255,255])))
         regions = self.cfg.get("hud_regions", {

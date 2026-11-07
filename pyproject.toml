@@ -15,12 +15,7 @@ live = [
   "mss>=9.0; sys_platform == 'win32'",
   "dxcam>=0.0.5; sys_platform == 'win32'",
 ]
-test = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]
 include = ["src*"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-addopts = "-ra"

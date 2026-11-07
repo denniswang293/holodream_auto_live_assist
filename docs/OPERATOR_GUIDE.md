@@ -1,23 +1,30 @@
 # Assist 操作手冊
 
-## 啟動
+## 一般啟動
 
-1. 確認 Windows 遊戲視窗標題是 `hololive-Dreams`，遊戲解析度接近 16:9。
-2. 執行 `tools/launch_assist.cmd`。
-3. 等待即時畫面狀態進入 PLAYING，並將遊戲視窗留在前景。
-4. 按 `Ctrl+Shift+Alt+Q` 並放開以啟用 Assist；再按一次可關閉。
-5. 按 `Esc` 或 `F12` 停止 Assist 並釋放程式按住的鍵。
+1. 在 Windows 開啟 `hololive-Dreams`，使用接近 16:9 的完整遊戲顯示區。
+2. 執行 `tools/launch_assist.cmd`，選擇是否錄影。
+3. 切回遊戲，等待正在遊玩的畫面就緒。
+4. 按下並放開 `Ctrl+Shift+Alt+Q` 啟用；再按一次停用。
+5. `Esc` 或 `F12` 停止並放開程式持有的鍵。
 
-輸入鎖在每次啟動時都是關閉狀態。Assist 解除後不會自動重新啟用。
+無紀錄版本使用 `tools/launch_assist_clean.cmd`，演算法與一般版一致。
 
 ## 擷取與座標
 
-Assist 擷取遊戲所在顯示器的完整畫面，不提供 ROI 或辨識解析度選擇。影格依比例映射到 720×404，不會以 1920 座標進行辨識。全螢幕擷取使用 headless，避免程式 overlay 被再次擷取。接近 16:9 以外的畫面會被拒絕，避免拉伸變形。
+擷取遊戲所在顯示器的完整畫面，依比例轉換為 720×404。沒有 ROI 選取或 1920 辨識模式。視窗標題預設為 `hololive-Dreams`，可使用 `--window-title` 指定其他標題。
 
-## 啟用失敗或中途停止
+## 啟用與停止訊息
 
-`hotkey_rejected_not_ready` 表示快捷鍵有收到，但遊戲尚未符合啟用條件。確認遊戲在前景、正在遊玩，並查看最新 run 的 `live_key_actions.csv` 與 `live_diagnostics.md`，其中會記錄失焦、遊戲狀態或影格逾時等原因。恢復後需再次手動按快捷鍵。
+- `hotkey_rejected_not_ready`：快捷鍵收到，但遊戲狀態、焦點或畫面尚未符合啟用條件。
+- `validated_capture_expired`：最後可安全使用的畫面超過新鮮度限制；持有鍵會安全釋放。
+- `stale_context_timeout`：新鮮畫面遲遲未恢復，已解除啟用。
+- `game_state_or_focus_or_roi_loss`：遊戲狀態、前景焦點或有效擷取條件失效。
 
-## 輸出
+解除啟用後需要再次手動啟用。短暫安全放鍵不會盲目重新按住原 Hold。
 
-每次執行在 `output/assist/run_*/` 建立新目錄。`live_run.json`、`live_events.csv`、`live_frames.csv`、`live_key_actions.csv` 和 `live_diagnostics.md` 記錄執行狀態。啟動時選擇錄影後，另會產生來源、overlay 與 `live_video_index.csv`。這些檔案是執行診斷紀錄，不是人工真值或命中率證明。
+## 錄影與排查
+
+一般紀錄位於 `output/assist/run_*/`。錄影和日誌必須使用同一場次的 `live_video_index.csv` 對應時間，不能直接用影格編號除以名義 FPS。
+
+檢查 `live_diagnostics.md`、`live_key_actions.csv` 與 `live_run.json`；先看輸出錯誤、資料丟失及安全放鍵，再與 MISS／Combo／生命及畫面核對。軟體送鍵不代表遊戲成功命中。
