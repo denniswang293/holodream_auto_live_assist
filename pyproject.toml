@@ -19,3 +19,7 @@ live = [
 [tool.setuptools.packages.find]
 include = ["src*"]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+

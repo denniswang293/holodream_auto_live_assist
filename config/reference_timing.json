@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "kind": "reference_success_timing",
+  "model": "log",
+  "geometry_sha256": "7462e360c96e8ae5e4016699e42a0414ddbc9d4a2847f5249735f99b362db35a",
+  "input_offset_s": -0.01653579416665707,
+  "input_offset_p10_p50_p90_s": [
+    -0.034845038351772925,
+    -0.01653579416665707,
+    0.004434984270574207
+  ],
+  "visual_error_bands": [
+    {
+      "from_y": 190,
+      "p90_absolute_s": 0.09099122502634602,
+      "samples": 475
+    },
+    {
+      "from_y": 230,
+      "p90_absolute_s": 0.05076550718995349,
+      "samples": 499
+    },
+    {
+      "from_y": 270,
+      "p90_absolute_s": 0.03291683684574309,
+      "samples": 521
+    },
+    {
+      "from_y": 290,
+      "p90_absolute_s": 0.02388590001046396,
+      "samples": 545
+    },
+    {
+      "from_y": 300,
+      "p90_absolute_s": 0.02223828702335595,
+      "samples": 561
+    },
+    {
+      "from_y": 310,
+      "p90_absolute_s": 0.019524564328321503,
+      "samples": 569
+    }
+  ],
+  "release_guard_s": 0.0,
+  "release_guard_samples": 0,
+  "reviewed_head_samples": 20,
+  "development_runs": [
+    "run_20261106T164049_800126Z",
+    "run_20261106T164704_064294Z",
+    "run_20261106T164959_579760Z",
+    "run_20261106T170057_932173Z"
+  ],
+  "validation_used_for_training": false,
+  "interpretation": "Empirical successful-operation offset from visible plate leading edge; NOT game ideal judgment center",
+  "release_interpretation": "Partial visible-tail sample; uncertainty added at runtime; game accuracy UNVERIFIED"
+}
