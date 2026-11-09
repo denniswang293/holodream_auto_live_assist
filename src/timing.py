@@ -37,7 +37,17 @@ class Timing:
                 raise ValueError('Input calibration outside supported range')
 
     def predict(self,samples,capture_timestamp,*,kind='tap'):
-        points=np.asarray(list(samples)[-12:],float)
+        history=list(samples)
+        points=np.asarray(history[-12:],float)
+        # At >137.5 FPS twelve observations span less than the existing
+        # 80ms minimum, so the old sample-count cap made ETA unavailable.
+        # Extend only that short window using already-observed history;
+        # ordinary frame rates keep exactly the same fitting window.
+        if len(points)>=4 and points[-1,0]-points[0,0]<.08 and len(history)>12:
+            available=np.asarray(history,float)
+            starts=np.flatnonzero((points[-1,0]-available[:,0]>=.08)&
+                                 (points[-1,0]-available[:,0]<=.30))
+            if len(starts):points=available[starts[-1]:]
         if len(points):
             points=points[points[:,0]>=points[-1,0]-.30]
             if len(points)>8:

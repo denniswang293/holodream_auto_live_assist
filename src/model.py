@@ -81,6 +81,8 @@ class Detection:
     above: float = 0.
     below: float = 0.
     plane_width: int = 360
+    tap_marker: bool = False
+    recovery_only: bool = False
 
     @property
     def y(self):return self.bbox[1]+self.bbox[3]/2
@@ -95,7 +97,7 @@ class Note:
     color: str
     detection: Detection
     origin_y: float | None = None
-    head: deque = field(default_factory=lambda:deque(maxlen=12))
+    head: deque = field(default_factory=lambda:deque(maxlen=32))
     tail: deque = field(default_factory=lambda:deque(maxlen=12))
     observations: int = 0
     missed: int = 0
@@ -108,9 +110,16 @@ class Note:
     uncertainty: float | None = None
     reason: str = 'insufficient_observations'
     tail_uid: str = ''
+    tail_last_kind: str = ''
     aliases: list[str] = field(default_factory=list)
     body_span: tuple[float,float] | None = None
     body_seen_at: float = float('-inf')
+    full_head_observations: int = 0
+    last_full_head_at: float = float('-inf')
+    last_full_tap_at: float = float('-inf')
+    tap_marker: bool = False
+    tap_marker_observations: int = 0
+    last_tap_marker_at: float = float('-inf')
 
     @property
     def last_seen(self):return self.head[-1][0] if self.head else float('-inf')

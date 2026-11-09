@@ -27,19 +27,8 @@ No reviewed Hold has an independently observed, reliable tail bracket suitable f
 
 The four development recordings supplied all 20 timing-review samples. The final four recordings were not used to fit the timing reference. However, all eight recordings were inspected during debugging, so the final four are not a blind holdout. These recordings also do not establish chart-disjoint validation.
 
-## Reproduction
+## Current reference material
 
-From the repository root, the frozen extractor snapshot is optional and reproduces the visual reference version used for timing and comparison:
+The extraction/calibration commands used during the rebuild have been retired. Generated `output/analysis_reference/` datasets and frozen extractor copies are no longer included. The original eight recordings remain in `output/recording/`; the runtime uses `config/reference_timing.json` and does not require generated analysis outputs.
 
-```powershell
-python tools/audit_recordings.py
-python tools/build_reference.py --extractor-snapshot output/analysis_reference/reference_extractor_v1
-python tools/match_reference.py
-python tools/select_timing_model.py
-python tools/calibrate_reference.py
-```
-
-Omitting `--extractor-snapshot` builds a separately versioned extraction using the current detector. Keep existing reviewed sheets and labels; after a new extraction, remap them by stable action ID. Do not retrain the timing reference on the last four recordings to improve their reported statistics.
-
-For dataset schema and recording integrity details, see [data audit](REBUILD_DATA_AUDIT.md). For architecture and operational limits, see [runtime architecture](REBUILD_ARCHITECTURE.md).
-
+Regression examples and their frame/timestamp provenance are stored in `tests/fixtures/`. For recording integrity details, see [data audit](REBUILD_DATA_AUDIT.md); for the running system, see [architecture](REBUILD_ARCHITECTURE.md).

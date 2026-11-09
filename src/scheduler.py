@@ -250,6 +250,31 @@ class Scheduler:
         self._flush()
         return result
 
+    def correct_hold_to_tap(self,uid):
+        """Positive visual type correction; same down/key/deadline, shorter up.
+
+        This cannot create an action, extend one, or restart a consumed UID.
+        Ordinary offer() still freezes pending key/kind changes.
+        """
+        with self.lock:
+            now=self.clock();failure=self._valid_context(now,allow_inflight=True)
+            pair=next(((k,a) for k,a in self.held.items() if a.uid==uid and a.kind=='hold'),None)
+            action=pair[1] if pair else self.pending.get(uid)
+            if not self.armed or failure:result=Result(False,failure or 'disarmed',uid)
+            elif action is None or action.kind!='hold':result=Result(False,'hold_not_found',uid)
+            elif pair and now-self._down_at.get(uid,action.press_at)>.12:
+                result=Result(False,'type_correction_too_late',uid)
+            else:
+                corrected=replace(action,kind='tap',release_at=None)
+                if pair:self.held[pair[0]]=corrected
+                else:self.pending[uid]=corrected
+                self._updates.pop(uid,None)
+                self._event('type_corrected',uid=uid,key=action.key,kind='tap',
+                            scheduled_press=action.press_at,reason='verified_tap_chevron')
+                result=Result(True,'corrected_to_tap',uid)
+        self._flush()
+        return result
+
     def update_release(self, uid, release_at):
         with self.lock:
             now = self.clock()

@@ -129,10 +129,18 @@ class Diagnostics:
                         for note in notes:
                             box = note.get("bbox")
                             fresh=note.get('last_observation',capture_time)==capture_time
-                            if box and len(box) == 4 and fresh:
+                            late_fragment=(note.get('detection_kind')=='plate_fragment' and
+                                           note.get('state')=='TRACKING' and hit_y is not None and
+                                           note.get('origin_y') is not None and note['origin_y']>hit_y-45)
+                            if box and len(box) == 4 and fresh and not late_fragment:
                                 x, y, w, h = map(int, box)
                                 cv2.rectangle(canvas, (x, y), (x+w, y+h), (0, 255, 255), 1)
-                                label=f"{note.get('note_uid','')} {note.get('kind','')} {note.get('key','')}"
+                                label_kind=note.get('kind','')
+                                if label_kind=='tap' and (note.get('reason')=='tap_face_not_visible' or
+                                        (note.get('state')=='TRACKING' and (note.get('detection_kind')=='plate_fragment' or
+                                         (h<8 and note.get('last_full_tap_at') is None)))):
+                                    label_kind='fragment'
+                                label=f"{note.get('note_uid','')} {label_kind} {note.get('key','')}"
                                 cv2.putText(canvas,label,(x,max(35,y-3)),cv2.FONT_HERSHEY_SIMPLEX,.35,(0,255,255),1)
                             tail_box=note.get('tail_bbox')
                             if tail_box and note.get('tail_last_observation')==capture_time:

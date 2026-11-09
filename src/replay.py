@@ -254,5 +254,5 @@ def write_replay(result, out_dir):
                ["run_id", "note_uid", "tracker", "track_id", "kind", "color", "key_candidates", "first_observed", "last_observed", "history"])
     _write_csv(out / "frame_decisions.csv", result["frame_decisions"],
                ["run_id", "source_frame", "sequence", "capture_timestamp", "note_uid", "kind", "color", "bbox", "keys", "state", "reason", "key", "crossing_at", "press_at", "release_at", "uncertainty", "tail_uid", "tail_observations",
-                "tail_last_observation","tail_bbox","tail_y","tail_prediction_reason","tail_crossing_at","tail_uncertainty","release_update_reason","aliases"])
+                "tail_last_observation","tail_bbox","tail_y","tail_prediction_reason","tail_crossing_at","tail_uncertainty","release_update_reason","aliases","detection_kind","detection_color","detection_component","origin_y","full_head_observations","tail_detection_kind","tail_detection_color","tail_terminal_owner","last_full_tap_at","tail_last_kind"])
     (out / "replay_summary.json").write_text(json.dumps(result["summary"], indent=2), encoding="utf-8")

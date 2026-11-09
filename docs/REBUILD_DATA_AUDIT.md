@@ -22,9 +22,9 @@ The indexed reader decodes in encoded/index order and preserves capture/acquired
 
 ## Reference artifacts and limits
 
-`output/analysis_reference/` contains the normalized sessions, player actions, indexed frame timeline, clock anomalies, data-quality report, visual hypotheses and supported action associations. There are 26,259 indexed frames, 17,090 visual hypotheses, 1,770 supported action associations (including 36 Holds), and 1,066 human actions left unassociated as UNKNOWN. These counts do not claim complete per-note truth or actual game accuracy.
+The original rebuild generated normalized sessions, player actions, indexed frame timelines, clock anomalies, data-quality reports, visual hypotheses and supported action associations. These generated analysis datasets have since been removed; the source recordings are retained. There are 26,259 indexed frames, 17,090 visual hypotheses, 1,770 supported action associations (including 36 Holds), and 1,066 human actions left unassociated as UNKNOWN. These counts do not claim complete per-note truth or actual game accuracy.
 
-The frozen `reference_extractor_v1` snapshot is optional and reproduces the extractor version used to build timing/comparison labels. Current extraction code may produce a separately versioned dataset. Reviewed material should be remapped by stable action ID after extraction; integer tracker IDs are not cross-version identities. See [ground truth](REBUILD_GROUND_TRUTH.md) for timing provenance and reproduction commands.
+The historical extractor snapshots and command-line analysis utilities have been retired. Current regression examples are self-contained under `tests/fixtures/`. See [ground truth](REBUILD_GROUND_TRUTH.md) for the retained timing-reference provenance.
 
 The capture-to-acquired interval is typically 18–20 ms. The files do not show the exact display exposure time within that interval. Live-backend transfer and downstream device/game timing remain unverified.
 

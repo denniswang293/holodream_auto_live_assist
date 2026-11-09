@@ -47,6 +47,32 @@ def ribbon_depth(mask,bbox,direction,row_cache=None):
     return float(depth)
 
 
+def tap_chevron(path,bbox):
+    """The detached upward arrow above a yellow Tap is not a Hold ribbon."""
+    x,y,w,h=bbox
+    top=max(0,y-48);left=max(0,int(x-w*.2));right=min(path.shape[1],int(x+w*1.2))
+    roi=path[top:max(top,y-3),left:right]
+    if roi.size==0:return False
+    contours,_=cv2.findContours(roi,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+    for contour in contours:
+        a,b,c,d=cv2.boundingRect(contour)
+        if not (18<=c<=w*1.2 and 7<=d<=44 and b>=2 and b+d<roi.shape[0]):continue
+        if not x-w*.1<=left+a+c/2<=x+w*1.1:continue
+        shape=np.zeros((d,c),np.uint8)
+        points=contour.copy();points[:,:,0]-=a;points[:,:,1]-=b
+        cv2.drawContours(shape,[points],-1,255,-1)
+        # Two low arms and an empty lower centre distinguish a chevron from
+        # a filled Hold band, a triangle, or a vertical hit-effect streak.
+        if np.mean(shape[round(d*.7):,round(c*.4):max(round(c*.6),round(c*.4)+1)]>0)>.2:continue
+        columns=np.flatnonzero(np.any(shape,axis=0))
+        tops=np.argmax(shape[:,columns]>0,axis=0)
+        middle=tops[(columns>=c*.4)&(columns<=c*.6)]
+        l=tops[columns<c*.25];r=tops[columns>c*.75]
+        if len(middle) and len(l) and len(r) and min(np.median(l),np.median(r))-np.median(middle)>=3:
+            return True
+    return False
+
+
 class Perception:
     def __init__(self,geometry):
         self.geometry=geometry
@@ -75,15 +101,17 @@ class Perception:
         # The same rows are queried by many head/tail hypotheses. Compute the
         # 3-of-5 vertical color support once, instead of recropping every row
         # for every endpoint and direction.
-        binary=(path>0).astype(np.uint8)
-        sums=cv2.boxFilter(binary,cv2.CV_16U,(1,5),normalize=False,borderType=cv2.BORDER_CONSTANT)
-        supported=sums>=3
-        changes=np.diff(np.pad(supported,((0,0),(1,1))).astype(np.int8),axis=1)
-        row_cache={}
-        rows,starts=np.nonzero(changes>0);_,ends=np.nonzero(changes<0)
-        valid=(ends-starts>=round(18*scale))&(rows>=2)&(rows<path.shape[0]-2)
-        for row,a,b in zip(rows[valid],starts[valid],ends[valid]):
-            row_cache.setdefault(int(row),[]).append((int(a),int(b)))
+        def cache_rows(mask):
+            binary=(mask>0).astype(np.uint8)
+            sums=cv2.boxFilter(binary,cv2.CV_16U,(1,5),normalize=False,borderType=cv2.BORDER_CONSTANT)
+            changes=np.diff(np.pad(sums>=3,((0,0),(1,1))).astype(np.int8),axis=1)
+            cache={}
+            rows,starts=np.nonzero(changes>0);_,ends=np.nonzero(changes<0)
+            valid=(ends-starts>=round(18*scale))&(rows>=2)&(rows<mask.shape[0]-2)
+            for row,a,b in zip(rows[valid],starts[valid],ends[valid]):
+                cache.setdefault(int(row),[]).append((int(a),int(b)))
+            return cache
+        row_cache=cache_rows(path)
         _,labels=cv2.connectedComponents(cv2.morphologyEx(path,cv2.MORPH_CLOSE,np.ones((3,3),np.uint8)))
         self.last_labels=labels
         detected=[]
@@ -122,6 +150,33 @@ class Perception:
                            if min(bx+bw,(i+1)*self.geometry.lane_pixels)-max(bx,i*self.geometry.lane_pixels)>=30*scale)
                 if not keys:continue
                 detected.append(Detection(box,color,'tap',keys,float(score),plane_width=self.geometry.plane_width))
+        # Judgment text can cut a real green plate's white border into
+        # pieces shorter than the edge-pair minimum. Recover its visible
+        # bright colored face, with a real attached ribbon. This does not
+        # invent a head from a predicted position or from missing pixels.
+        recovery_faces=[]
+        for face_color in ('green','yellow'):
+            face_mask=masks[face_color].copy()
+            face_mask[hsv[:,:,2]<170]=0
+            face_mask[:round(self.geometry.top_y)+2]=0
+            face_mask[round(self.geometry.hit_y)+5:]=0
+            contours,_=cv2.findContours(face_mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                box=cv2.boundingRect(contour);x,y,w,h=box
+                if not (self.geometry.hit_y-150<=y and w>=38*scale and 6<=h<=30 and w/h>=1.8):continue
+                fill=cv2.contourArea(contour)/(w*h)
+                if fill<.5:continue
+                if any(d.color==face_color and
+                       max(0,min(x+w,d.bbox[0]+d.bbox[2])-max(x,d.bbox[0]))*
+                       max(0,min(y+h,d.bbox[1]+d.bbox[3])-max(y,d.bbox[1]))>=.5*w*h for d in detected):continue
+                above=ribbon_depth(path,box,-1,row_cache);below=ribbon_depth(path,box,1,row_cache)
+                ribbon_face=max(above,below)>=16 and abs(above-below)>=12
+                broad_yellow_face=face_color=='yellow' and w/h>=3 and fill>=.65
+                if not (ribbon_face or broad_yellow_face):continue
+                keys=tuple(key for i,key in enumerate(KEYS)
+                           if min(x+w,(i+1)*self.geometry.lane_pixels)-max(x,i*self.geometry.lane_pixels)>=30*scale)
+                if keys:recovery_faces.append(Detection(box,face_color,'tap',keys,float(fill),
+                                                       plane_width=self.geometry.plane_width,recovery_only=True))
         # Rejoin a face split horizontally by its white symbol. The gap must
         # contain bright face pixels; a dark separation between chord notes
         # is not bridged, even at exactly the same height.
@@ -156,9 +211,15 @@ class Perception:
                 if ix>=.72*min(w,cw) and iy>=.45*min(h,ch):duplicate=True;break
                 gap=max(y-(b+ch),b-(y+h),0)
                 compatible=c.color==other.color or 'neutral' in (c.color,other.color)
+                touching_face=False
+                if (c.color==other.color=='green' and gap<=1 and max(h,ch)>=8 and
+                        max(y+h,b+ch)-min(y,b)<=30 and ix>=.8*max(w,cw)):
+                    seam=max(y,b)
+                    strip=hsv[max(0,seam-1):seam+2,max(x,a):min(x+w,a+cw),2]
+                    touching_face=strip.size>0 and np.mean(strip>=135)>=.8
                 # The narrow dark band between a face and its bevel is part
                 # of the plate shadow, unlike a horizontal inter-note gap.
-                if compatible and ix>=.60*min(w,cw) and gap<=4 and min(h,ch)<=.35*max(h,ch):
+                if compatible and ix>=.60*min(w,cw) and gap<=4 and (min(h,ch)<=.35*max(h,ch) or touching_face):
                     left,top=min(x,a),min(y,b);right,bottom=max(x+w,a+cw),max(y+h,b+ch)
                     kept[index]=replace(other,bbox=(left,top,right-left,bottom-top),
                                         color=c.color if other.color=='neutral' else other.color)
@@ -178,12 +239,25 @@ class Perception:
                 if ix>=.8*w and iy>=.8*h:contained=True;break
             if not contained:consolidated.append(c)
         result=[]
-        for c in consolidated:
+        for c in consolidated+recovery_faces:
             bx,by,bw,bh=c.bbox
             above=below=0.;kind='tap';component=0
             if c.color in ('green','yellow'):
                 above=ribbon_depth(path,c.bbox,-1,row_cache);below=ribbon_depth(path,c.bbox,1,row_cache)
-                if above>=16 and above>=below+12:kind='hold_head'
+                # Yellow also has ordinary Tap faces. A partial bevel can
+                # see 16--28 pixels of its OWN face as an apparent ribbon.
+                # Require support beyond the face-pairing gap (28px), plus
+                # two sampled rows, before calling it a yellow Hold HEAD.
+                # Tail/body evidence keeps its existing rules: weakening it
+                # here would break already established Hold-tail continuity.
+                ribbon_min=36 if c.color=='yellow' else 16
+                attached=True
+                if c.color=='yellow' and above>=ribbon_min:
+                    strip=path[max(0,by-12):by,max(0,bx):min(path.shape[1],bx+bw)]
+                    support=np.count_nonzero(strip,axis=1)>=max(3,bw*.2)
+                    attached=(len(support)==12 and np.mean(support)>=.7 and
+                              not np.any((~support[:-1])&(~support[1:])))
+                if attached and above>=ribbon_min and above>=below+12:kind='hold_head'
                 elif below>=16 and below>=above+12:kind='hold_tail'
                 elif above>=16 and below>=16:kind='body'
                 elif c.color=='green':kind='ambiguous'
@@ -191,5 +265,25 @@ class Perception:
                 labs=labels[sample_y,max(0,bx):min(self.geometry.plane_width,bx+bw)]
                 labs=labs[labs>0]
                 if len(labs):component=int(np.bincount(labs).argmax())
-            result.append(replace(c,kind=kind,component=component,above=above,below=below))
+            marker=c.color=='yellow' and tap_chevron(path,c.bbox)
+            # A flick-marked END of an established ribbon is still a tail;
+            # do not manufacture a second input at the end of a Hold.
+            if marker and not (kind=='hold_tail' and below>=36):kind='tap'
+            # At the lower track a 3--7px edge pair is a connector/bevel,
+            # not independent evidence of a complete tappable plate. Keep it
+            # available for an existing Tap, without creating a new note.
+            if kind=='tap' and by>=180 and bh<8:kind='plate_fragment'
+            result.append(replace(c,kind=kind,component=component,above=above,below=below,
+                                  tap_marker=marker))
+        # A lit ribbon/text strip immediately above a separately visible
+        # complete head is not a second head. Keep the complete lower face.
+        # Ribbon depth alone is insufficient: effects can also surround a
+        # genuine isolated head, so require actual same-frame face evidence.
+        complete=[d for d in result if d.color=='green' and d.kind=='hold_head' and d.below<12]
+        for i,c in enumerate(result):
+            if c.color!='green' or c.kind!='hold_head' or c.above<36 or c.below<20:continue
+            x,y,w,h=c.bbox
+            if any(0<=d.bbox[1]-(y+h)<=4 and
+                   min(x+w,d.bbox[0]+d.bbox[2])-max(x,d.bbox[0])>=.7*min(w,d.bbox[2])
+                   for d in complete):result[i]=replace(c,kind='body')
         return sorted(result,key=lambda c:(c.y,c.bbox[0],c.color))
