@@ -155,7 +155,7 @@ class Perception:
         # bright colored face, with a real attached ribbon. This does not
         # invent a head from a predicted position or from missing pixels.
         recovery_faces=[]
-        for face_color in ('green','yellow'):
+        for face_color in ('green','yellow','cyan'):
             face_mask=masks[face_color].copy()
             face_mask[hsv[:,:,2]<170]=0
             face_mask[:round(self.geometry.top_y)+2]=0
@@ -171,8 +171,8 @@ class Perception:
                        max(0,min(y+h,d.bbox[1]+d.bbox[3])-max(y,d.bbox[1]))>=.5*w*h for d in detected):continue
                 above=ribbon_depth(path,box,-1,row_cache);below=ribbon_depth(path,box,1,row_cache)
                 ribbon_face=max(above,below)>=16 and abs(above-below)>=12
-                broad_yellow_face=face_color=='yellow' and w/h>=3 and fill>=.65
-                if not (ribbon_face or broad_yellow_face):continue
+                broad_tap_face=face_color in ('yellow','cyan') and w/h>=3 and fill>=.65
+                if not ((face_color!='cyan' and ribbon_face) or broad_tap_face):continue
                 keys=tuple(key for i,key in enumerate(KEYS)
                            if min(x+w,(i+1)*self.geometry.lane_pixels)-max(x,i*self.geometry.lane_pixels)>=30*scale)
                 if keys:recovery_faces.append(Detection(box,face_color,'tap',keys,float(fill),

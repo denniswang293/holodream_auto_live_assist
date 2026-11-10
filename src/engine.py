@@ -195,6 +195,31 @@ class Engine:
                         (not old.confirmed or old.full_head_observations<2)) or old.state=='DONE' or old.kind!='hold' or
                         old.color!=young.color or
                         t-old.last_seen>.24):continue
+                # A late ID can start on a stray bevel OUTSIDE the head,
+                # then recover that same complete moving face. Do not let
+                # its one bad birth sample veto all later image evidence.
+                # Require an older verified endpoint plus three subsequent
+                # whole-span views and the old head's projected edge inside
+                # the current face. A nearby independent head is insufficient.
+                endpoint=self.tracker.caps.get(old.tail_uid)
+                if (old.confirmed and old.origin_y<180 and young.origin_y>=self.geometry.hit_y-100 and
+                        not young.tail_uid and endpoint is not None and endpoint.full_tail_observations>=2 and
+                        endpoint.connection_owner_uid==old.uid and
+                        old.full_head_observations>=4 and 8<=young.detection.bbox[3]<=30):
+                    lo,hi=young.detection.span
+                    prior=[p for p in old.head if p[0]<first[0] and
+                           p[3]-p[2]>=.9*(hi-lo) and
+                           min(p[3],hi)-max(p[2],lo)>=.85*(hi-lo)]
+                    if len(prior)>=3 and prior[-1][0]-prior[0][0]>=.08:
+                        a,b=prior[-1][2:4];width=b-a
+                        recovered=[p for p in motion[1:] if p[3]-p[2]>=.8*width and
+                                   p[2]>=a-.02 and p[3]<=b+.02]
+                        if len(recovered)>=3 and recovered[-1][0]-recovered[0][0]>=.04 and recovered[-1][1]-recovered[0][1]>=5:
+                            slopes=[(q[1]-p[1])/(q[0]-p[0]) for i,p in enumerate(prior) for q in prior[i+1:]]
+                            speed=median(slopes);edge=prior[-1][1]+speed*(t-prior[-1][0])
+                            _,top,_,height=young.detection.bbox
+                            if 20<speed<1400 and top-3<=edge<=top+height+3:
+                                proof.append(old);continue
                 if t-old.last_seen<=.06 and not (old.tail_uid and young.tail_uid and old.tail_uid!=young.tail_uid):
                     x,y,w,h=young.detection.bbox;a,b,c,d=old.detection.bbox
                     ix=max(0,min(x+w,a+c)-max(x,a));iy=max(0,min(y+h,b+d)-max(y,b))
@@ -367,7 +392,7 @@ class Engine:
             note=self.tracker.notes.get(uid)
             if note:note.state='DONE';note.reason=reason
         for note in self.tracker.notes.values():
-            if (note.kind=='hold' and note.color=='yellow' and note.tap_marker_observations>=2 and
+            if (not note.kind_locked and note.kind=='hold' and note.color=='yellow' and note.tap_marker_observations>=2 and
                     frame.captured_at-note.last_tap_marker_at<.06 and not note.tail_uid):
                 if s.correct_hold_to_tap(note.uid):note.kind='tap'
         self._consolidate_tap_identity(frame)
@@ -378,7 +403,7 @@ class Engine:
         self.decisions=[]
         for n in sorted(observation['notes'],key=lambda n:(-n.head[-1][1],n.uid)):
             row=dict(sequence=frame.sequence,capture_timestamp=frame.captured_at,note_uid=n.uid,
-                     kind=n.kind,color=n.color,bbox=list(self.geometry.native_bbox(n.detection.bbox)),
+                     kind=n.kind,kind_locked=n.kind_locked,color=n.color,bbox=list(self.geometry.native_bbox(n.detection.bbox)),
                      keys='|'.join(n.detection.keys),last_observation=n.last_seen,observations=n.observations,
                      state=n.state,reason=n.reason,crossing_at='',press_at='',release_at='',uncertainty='',
                      detection_kind=n.detection.kind,detection_color=n.detection.color,

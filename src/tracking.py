@@ -1,7 +1,7 @@
 """Causal one-to-one plate tracks; Hold tails are endpoints, never new heads."""
 from __future__ import annotations
 from collections import deque
-from dataclasses import dataclass,field
+from dataclasses import dataclass,field,replace
 import math
 from statistics import median
 import numpy as np
@@ -34,6 +34,20 @@ class Tracker:
 
     def reset(self):
         self.caps.clear();self.notes.clear();self.last_timestamp=float('-inf')
+
+    def _complete_tap_in_effect(self,cap,c):
+        """Keep an established Tap face when yellow judgment light looks like ribbon.
+
+        This is only a semantic correction AFTER the ordinary one-to-one
+        spatial/motion gates. It cannot create a candidate or revive a lost
+        track. Early real Hold-head evidence always vetoes it.
+        """
+        n=self.notes.get(cap.note_uid)
+        return (n is not None and n.kind=='tap' and n.confirmed and n.color==c.color=='yellow' and
+                not n.tail_uid and not n.full_head_observations and cap.votes.get('tap',0)>=4 and
+                (n.origin_y<180 or n.tap_marker_observations>=2) and
+                c.bbox[1]>=180 and c.bbox[3]>=8 and
+                c.kind in ('body','hold_head','hold_tail'))
 
     def ribbon_owners(self,detection,path_mask,timestamp,eligible,*,allow_near=False):
         """Follow real color BELOW a plate to a unique held ribbon.
@@ -101,7 +115,8 @@ class Tracker:
                              len(cap.samples)>=4 and dt<=.06 and velocity>20 and
                              c.bbox[1]>=y-2 and overlap((lo,hi),c.span)>.55)
                 if (not compatible or (role and c.kind=='hold_head' and not moving_tail) or
-                        (not role and c.kind=='hold_tail' and cap.note_uid)):continue
+                        (not role and c.kind=='hold_tail' and cap.note_uid and
+                         not self._complete_tap_in_effect(cap,c))):continue
                 cy=c.bbox[1] if role else c.bbox[1]+c.bbox[3]
                 if (role and cap.tail_locked and uid in active_tails and c.kind in ('tap','plate_fragment') and
                         c.color in ('cyan','pink') and cy<y-2):continue
@@ -142,6 +157,7 @@ class Tracker:
         return list(self.notes.values())
 
     def _observe(self,cap,c,t):
+        if self._complete_tap_in_effect(cap,c):c=replace(c,kind='tap')
         if cap.samples and t-cap.samples[-1][0]>.14:
             # update() already accepted this REAL observation through the
             # unchanged <=240ms association/motion gates. A brief occlusion
@@ -168,6 +184,12 @@ class Tracker:
         cap.samples.append((t,float(y),*c.span))
         if is_tail:return
         if not cap.note_uid and c.kind not in ('tap','hold_head','plate_fragment'):return
+        # A newly visible lower-track yellow bevel is not a physical note
+        # head. Keep its cap available for association, but do not give that
+        # thin fragment an early origin from which a later piece can confirm
+        # and fire beside its still-visible, already established Tap owner.
+        # Existing notes (and early spawn-area plates) keep their histories.
+        if not cap.note_uid and c.color=='yellow' and c.bbox[1]>=180 and c.bbox[3]<8:return
         if not cap.note_uid:
             cap.note_uid=f'note:{cap.uid.split(":")[-1]}'
             # Yellow has both Tap and Hold appearances. A weak first bevel
@@ -178,13 +200,14 @@ class Tracker:
         if note.origin_y is None:note.origin_y=float(y)
         note.detection=c;note.head.append((t,float(y),*c.span));note.observations+=1;note.missed=0
         if c.kind=='tap' and c.bbox[3]>=8:note.last_full_tap_at=t
-        if c.tap_marker:
+        if c.tap_marker and not (note.kind_locked and note.kind=='hold'):
             note.tap_marker=True;note.tap_marker_observations+=1;note.last_tap_marker_at=t
         minimum_face=10 if c.bbox[1]>=180 else 6
         early_yellow=(note.color!='yellow' or note.kind=='hold' or c.bbox[1]<180)
-        if evidence_kind=='hold_head' and c.bbox[3]>=minimum_face and early_yellow:
+        if (evidence_kind=='hold_head' and c.bbox[3]>=minimum_face and early_yellow and
+                not (note.kind_locked and note.kind=='tap')):
             note.full_head_observations+=1;note.last_full_head_at=t
-        if not c.recovery_only and note.state not in ('SCHEDULED','HELD','PRESSED','DONE'):
+        if not note.kind_locked and not c.recovery_only and note.state not in ('SCHEDULED','HELD','PRESSED','DONE'):
             if note.tap_marker:note.kind='tap'
             elif note.color=='green' and cap.votes.get('hold_head',0)>=2:note.kind='hold'
             elif note.color=='yellow' and note.full_head_observations>=2:note.kind='hold'
@@ -193,6 +216,16 @@ class Tracker:
         note.confirmed=bool(note.confirmed or (len(points)>=3 and points[-1][0]-points[0][0]>=.045 and span>=5 and
                         note.origin_y<=self.geometry.hit_y-45 and
                         np.mean(np.diff([p[1] for p in points])>=-2)>=.8))
+        # Lock only after repeated real face evidence in the existing clean
+        # observation region. A late first sighting or mere motion confirmation
+        # is insufficient. Keep raw detections for visibility/motion gates;
+        # this lock grants no new association, prediction or input permission.
+        if note.confirmed and not c.recovery_only and c.bbox[1]<180:
+            if note.kind=='hold' and note.full_head_observations>=2 and not note.tap_marker:
+                note.kind_locked=True
+            elif (note.kind=='tap' and cap.votes.get('tap',0)>=4 and
+                  note.full_head_observations==0 and c.kind=='tap' and c.bbox[3]>=6):
+                note.kind_locked=True
         note.reason='confirmed' if note.confirmed else 'insufficient_real_motion'
 
     def _link_tails(self,t,path_mask):
@@ -218,7 +251,16 @@ class Tracker:
             used_notes=set();used_runs=set()
             for _,_,_,uid,i in sorted(body_offers):
                 if uid in used_notes or i in used_runs:continue
-                n=self.notes[uid];n.body_span=runs[i];n.body_seen_at=t
+                n=self.notes[uid]
+                expected=n.body_span or n.detection.span
+                # A white judgment flash can leave just a narrow colored
+                # sliver of the same ribbon. That is current support, not
+                # evidence that the whole ribbon shrank to a few pixels.
+                # Collapsing the anchor onto that sliver made subsequent
+                # real tails impossible to associate after the flash moved.
+                partial=(n.state=='HELD' and n.full_head_observations>=2 and
+                         runs[i][1]-runs[i][0]<.5*(expected[1]-expected[0]))
+                n.body_span=expected if partial else runs[i];n.body_seen_at=t
                 used_notes.add(uid);used_runs.add(i)
         # A cap already owns a HEAD identity. Historical tail votes cannot
         # also assign that same plate as another note's tail.
@@ -293,7 +335,12 @@ class Tracker:
                         n.full_head_observations<4 or n.origin_y is None or n.origin_y>=180 or
                         n.tail_last_kind!='hold_tail'):continue
             offers=[]
+            if n.full_head_observations<2:continue
             for cap in tails:
+                # Thin interior ribbon edges must never reserve an endpoint
+                # or steal it for a late, unverified head fragment. An
+                # established real terminal face needs repeated full views.
+                if cap.full_tail_observations<2 or cap.detection.bbox[3]<6:continue
                 previous=claims.get(cap.uid,[])
                 transfer=bool(previous)
                 if transfer and (n.state not in ('HELD','SCHEDULED') or

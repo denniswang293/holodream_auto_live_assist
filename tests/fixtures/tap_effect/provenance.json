@@ -1,0 +1,26 @@
+[
+  {
+    "file": "frame_3460.png",
+    "run": "run_20261109T125822_972619Z",
+    "encoded_frame": 3460,
+    "capture_timestamp": 753485.1969078
+  },
+  {
+    "file": "frame_3474.png",
+    "run": "run_20261109T125822_972619Z",
+    "encoded_frame": 3474,
+    "capture_timestamp": 753485.406882
+  },
+  {
+    "file": "frame_6287.png",
+    "run": "run_20261109T125822_972619Z",
+    "encoded_frame": 6287,
+    "capture_timestamp": 753530.4808043
+  },
+  {
+    "file": "frame_6294.png",
+    "run": "run_20261109T125822_972619Z",
+    "encoded_frame": 6294,
+    "capture_timestamp": 753530.6347218
+  }
+]

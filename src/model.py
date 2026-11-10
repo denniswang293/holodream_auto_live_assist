@@ -102,6 +102,7 @@ class Note:
     observations: int = 0
     missed: int = 0
     confirmed: bool = False
+    kind_locked: bool = False
     state: str = 'TRACKING'
     key: str = ''
     press_at: float | None = None
