@@ -105,7 +105,7 @@ class CaptureWorker:
 
     def start(self):
         if self.thread is not None: raise RuntimeError("CaptureWorker already started")
-        self.thread = threading.Thread(target=self._run, name="rebuild-capture", daemon=False)
+        self.thread = threading.Thread(target=self._run, name="assist-capture", daemon=False)
         self.thread.start()
         return self
 

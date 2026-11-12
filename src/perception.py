@@ -96,6 +96,7 @@ class Perception:
         masks={k:cv2.inRange(hsv,np.array(lo),np.array(hi)) for k,(lo,hi) in COLORS.items()}
         masks['pink']|=cv2.inRange(hsv,np.array((0,65,110)),np.array((8,255,255)))
         path=cv2.inRange(hsv,np.array((16,45,75)),np.array((83,255,255)))
+        yellow_path=cv2.inRange(hsv,np.array((16,45,75)),np.array((43,255,255)))
         path[round(self.geometry.hit_y)+2:]=0
         self.last_path=path
         # The same rows are queried by many head/tail hypotheses. Compute the
@@ -253,8 +254,17 @@ class Perception:
                 ribbon_min=36 if c.color=='yellow' else 16
                 attached=True
                 if c.color=='yellow' and above>=ribbon_min:
-                    strip=path[max(0,by-12):by,max(0,bx):min(path.shape[1],bx+bw)]
-                    support=np.count_nonzero(strip,axis=1)>=max(3,bw*.2)
+                    shared=path[max(0,by-12):by,max(0,bx):min(path.shape[1],bx+bw)]
+                    support=np.count_nonzero(shared,axis=1)>=max(3,bw*.2)
+                    if by<180:
+                        # Only the clean upper region may establish a new
+                        # yellow Hold type. A narrow foreign green ribbon is
+                        # not proof; accept yellow attachment or a broad mixed
+                        # body. At judgment keep existing raw face recovery:
+                        # Tracker's type/commit guards govern its meaning.
+                        strip=yellow_path[max(0,by-12):by,max(0,bx):min(path.shape[1],bx+bw)]
+                        support=((np.count_nonzero(strip,axis=1)>=max(3,bw*.2)) |
+                                 (np.count_nonzero(shared,axis=1)>=max(3,bw*.5)))
                     attached=(len(support)==12 and np.mean(support)>=.7 and
                               not np.any((~support[:-1])&(~support[1:])))
                 if attached and above>=ribbon_min and above>=below+12:kind='hold_head'

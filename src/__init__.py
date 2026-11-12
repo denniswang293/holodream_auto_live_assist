@@ -1,1 +1,1 @@
-"""HoloDream: one causal six-key Assist runtime and indexed replay core."""
+"""HoloDream: six-key live Assist with manual activation."""

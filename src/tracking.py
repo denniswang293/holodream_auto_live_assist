@@ -82,10 +82,11 @@ class Tracker:
         active_tails={n.tail_uid for n in self.notes.values() if n.state in ('HELD','SCHEDULED')}
         live={uid:c for uid,c in self.caps.items() if timestamp-c.samples[-1][0]<=.24}
         for uid,cap in live.items():
-            t,y,lo,hi=cap.samples[-1];dt=timestamp-t
+            history=cap.samples
+            t,y,lo,hi=history[-1];dt=timestamp-t
             velocity=0.
-            if len(cap.samples)>=2:
-                recent=list(cap.samples)[-6:]
+            if len(history)>=2:
+                recent=list(history)[-6:]
                 slopes=[(b[1]-a[1])/(b[0]-a[0]) for i,a in enumerate(recent) for b in recent[i+1:] if b[0]>a[0]]
                 velocity=float(min(1400,max(0,median(slopes))))
             predicted=y+velocity*dt
@@ -97,14 +98,17 @@ class Tracker:
                 if c.recovery_only:
                     if owner is None:
                         owners=[n for n in self.notes.values() if n.tail_uid==uid and n.state in ('HELD','SCHEDULED')]
-                        if not (cap.tail_locked and cap.full_tail_observations>=2 and len(owners)==1):continue
+                        if not (cap.tail_locked and cap.full_tail_observations>=2 and len(owners)==1):
+                            continue
                     else:
                         tail=self.caps.get(owner.tail_uid)
                         if (not owner.confirmed or (owner.kind=='hold' and
-                                (owner.full_head_observations<2 or tail is None or tail.full_tail_observations<2))):continue
+                                (owner.full_head_observations<2 or tail is None or tail.full_tail_observations<2))):
+                            continue
                 if owner is not None and owner.color!='neutral' and c.color not in (owner.color,'neutral'):
                     compatible=False
-                if c.kind=='plate_fragment' and owner is not None and owner.kind=='hold':continue
+                if c.kind=='plate_fragment' and owner is not None and owner.kind=='hold':
+                    continue
                 role=not cap.note_uid and (cap.tail_locked or cap.votes.get('hold_tail',0)>max(cap.votes.get('hold_head',0),
                         cap.votes.get('tap',0) if cap.detection.color=='yellow' else 0))
                 # An endpoint cannot become a new head just because effects
@@ -116,12 +120,14 @@ class Tracker:
                              c.bbox[1]>=y-2 and overlap((lo,hi),c.span)>.55)
                 if (not compatible or (role and c.kind=='hold_head' and not moving_tail) or
                         (not role and c.kind=='hold_tail' and cap.note_uid and
-                         not self._complete_tap_in_effect(cap,c))):continue
+                         not self._complete_tap_in_effect(cap,c))):
+                    continue
                 cy=c.bbox[1] if role else c.bbox[1]+c.bbox[3]
                 if (role and cap.tail_locked and uid in active_tails and c.kind in ('tap','plate_fragment') and
-                        c.color in ('cyan','pink') and cy<y-2):continue
-                if len(cap.samples)>=5:
-                    recent=list(cap.samples)[-5:]
+                        c.color in ('cyan','pink') and cy<y-2):
+                    continue
+                if len(history)>=5:
+                    recent=list(history)[-5:]
                     if max(p[1] for p in recent)-min(p[1] for p in recent)<=2 and abs(cy-y)>2:
                         continue
                 error=abs(cy-predicted);iou=overlap((lo,hi),c.span)
@@ -130,8 +136,6 @@ class Tracker:
                 cost=error/gate+.8*(1-min(iou,1))+.8*center_gap
                 offers.append((cost,uid,j))
         assigned={};used=set()
-        # Global sorted competition, with explicit one-to-one constraints.
-        # Ambiguous alternatives remain observable rather than spawning aliases.
         for cost,uid,j in sorted(offers):
             if uid in assigned or j in used:continue
             assigned[uid]=j;used.add(j)
@@ -208,9 +212,9 @@ class Tracker:
                 not (note.kind_locked and note.kind=='tap')):
             note.full_head_observations+=1;note.last_full_head_at=t
         if not note.kind_locked and not c.recovery_only and note.state not in ('SCHEDULED','HELD','PRESSED','DONE'):
-            if note.tap_marker:note.kind='tap'
+            if note.color=='yellow' and note.full_head_observations>=2:note.kind='hold'
+            elif note.tap_marker:note.kind='tap'
             elif note.color=='green' and cap.votes.get('hold_head',0)>=2:note.kind='hold'
-            elif note.color=='yellow' and note.full_head_observations>=2:note.kind='hold'
         points=list(note.head)
         span=max(p[1] for p in points)-min(p[1] for p in points)
         note.confirmed=bool(note.confirmed or (len(points)>=3 and points[-1][0]-points[0][0]>=.045 and span>=5 and
@@ -221,10 +225,18 @@ class Tracker:
         # is insufficient. Keep raw detections for visibility/motion gates;
         # this lock grants no new association, prediction or input permission.
         if note.confirmed and not c.recovery_only and c.bbox[1]<180:
-            if note.kind=='hold' and note.full_head_observations>=2 and not note.tap_marker:
+            if (note.kind=='hold' and note.full_head_observations>=2 and
+                    (not note.tap_marker or note.color=='yellow')):
                 note.kind_locked=True
             elif (note.kind=='tap' and cap.votes.get('tap',0)>=4 and
-                  note.full_head_observations==0 and c.kind=='tap' and c.bbox[3]>=6):
+                  note.full_head_observations==0 and c.kind=='tap' and c.bbox[3]>=6 and
+                  note.color!='yellow'):
+                # A yellow Hold initially shows only its small front plate;
+                # absence of visible ribbon is not positive Tap evidence.
+                # Even a nearby chevron can belong to another note or tail.
+                # Yellow keeps classifying in the clean upper region; the
+                # existing lower-region effect guards and reserved-action
+                # kind freeze still protect genuine Taps near judgment.
                 note.kind_locked=True
         note.reason='confirmed' if note.confirmed else 'insufficient_real_motion'
 

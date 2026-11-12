@@ -1,8 +1,7 @@
-"""Windows live runtime for the independent rebuild pipeline.
+"""Windows live Assist with manual activation and safe keyboard release.
 
 Input starts disarmed. Ctrl+Shift+Alt+Q requests an arm after the modifier keys
-are released; Esc or F12 stops the process. Nothing in this module imports or
-calls the legacy assist runtime.
+are released; Esc or F12 stops the process.
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from pathlib import Path
 import cv2
 
 from .capture import CaptureWorker
-from .diagnostics import Diagnostics
+from .diagnostics import Diagnostics,raw_identity_trace
 from .engine import Engine
 from .model import Geometry, Frame
 from .scheduler import Scheduler
@@ -36,6 +35,7 @@ def _parser():
     parser.add_argument("--out", default="output/assist", help="parent directory for a fresh diagnostics run")
     parser.add_argument("--record-overlay", action="store_true")
     parser.add_argument("--no-logs", action="store_true", help="disable all output files")
+    parser.add_argument('--identity-trace',action='store_true',help='record raw candidates/ribbon for offline association analysis (requires logs)')
     parser.add_argument("--max-frames", type=int, default=0, help="stop after N processed frames (0 runs until Esc/F12)")
     return parser
 
@@ -172,6 +172,8 @@ def run_live(args):
                                frame.acquired_at, focused, roi_valid)
             observation = engine.observe(live_frame)
             info, notes = engine.decide(observation)
+            raw_trace=(raw_identity_trace(engine,observation) if
+                       args.identity_trace and diagnostics.out is not None and observation['playing'] else None)
             info['capture_rectangle']=list(region.bounds)
             info["captured_at"] = frame.captured_at
             info["acquired_at"] = frame.acquired_at
@@ -184,7 +186,7 @@ def run_live(args):
             if scheduler.error:
                 raise RuntimeError(f"Scheduler failed closed: {scheduler.error}")
             if diagnostics.out is not None:
-                if not diagnostics.frame(observation["image"], info, notes):
+                if not diagnostics.frame(observation["image"], info, notes,raw_trace=raw_trace):
                     scheduler.disarm("diagnostics_frame_rejected")
                     raise RuntimeError("Diagnostics rejected a frame")
                 if diagnostics.error:
@@ -231,6 +233,8 @@ def run_live(args):
                     client = last_client
                     metadata.update({
                         "game_title": args.window_title,
+                        "identity_trace_enabled": bool(args.identity_trace and not args.no_logs),
+                        "identity_trace_encoding": "background_lossless" if args.identity_trace and not args.no_logs else None,
                         "geometry_config": _config_provenance(args.geometry),
                         "timing_config": _config_provenance(calibration),
                         "capture_rectangle": list(region.bounds),

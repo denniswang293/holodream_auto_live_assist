@@ -1,4 +1,4 @@
-"""One causal perception-to-action path shared by replay and Windows live."""
+"""Causal perception, tracking, timing and action planning for live Assist."""
 from __future__ import annotations
 from collections import Counter,deque
 import math,time

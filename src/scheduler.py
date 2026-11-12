@@ -356,6 +356,27 @@ class Scheduler:
     def drain_events(self):
         with self.lock: rows, self.events = self.events, []
         return rows
+    def _pause_stale_locked(self,now):
+        """Same 60ms stop/200ms latch policy for every stale check boundary."""
+        # Staleness must not hide an independently detectable focus loss.
+        try:focused=self.focus_check()
+        except Exception:self._disarm_locked('focus_check_error');return
+        if not focused:self._disarm_locked('focus_lost');return
+        if self.paused_since is None:
+            self.paused_since=now
+            self._event('input_paused',reason='stale_capture',
+                        decision_age_ms=(now-self.context[0])*1000 if self.context[0] is not None else None)
+        for key in list(self.held):self._up_locked(key,'stale_capture')
+        for uid,action in list(self.pending.items()):
+            if now>action.press_at+self.max_lateness:
+                self.pending.pop(uid);self.consumed.add(uid)
+                self._event('rejected',uid=uid,reason='expired_while_stale')
+        if now-self.paused_since>=.2:self._disarm_locked('stale_timeout')
+
+    def _stop_failed_commit_locked(self,failure):
+        if failure=='stale_capture':self._pause_stale_locked(self.clock())
+        else:self._disarm_locked(failure)
+
     def poll(self):
         with self.lock:
             now = self.clock()
@@ -368,13 +389,7 @@ class Scheduler:
                 # Stop physical input at 60ms immediately. Retain only the
                 # user's latch for the same bounded 200ms recovery used by
                 # the previous runtime; released Holds remain consumed.
-                if self.paused_since is None:self.paused_since=now
-                for key in list(self.held):self._up_locked(key,'stale_capture')
-                for uid,action in list(self.pending.items()):
-                    if now>action.press_at+self.max_lateness:
-                        self.pending.pop(uid);self.consumed.add(uid)
-                        self._event('rejected',uid=uid,reason='expired_while_stale')
-                if now-self.paused_since>=.2:self._disarm_locked('stale_timeout')
+                self._pause_stale_locked(now)
             elif failure and (self.armed or self.held or self.pending): self._disarm_locked(failure)
             else:
                 self.paused_since=None
@@ -397,16 +412,16 @@ class Scheduler:
                     for uid, action in list(self.pending.items()):
                         if not can_press: break
                         if now < action.press_at: continue
-                        self.pending.pop(uid); self.consumed.add(uid)
                         failure = self._valid_context(self.clock())
                         if failure:
-                            self._disarm_locked(failure); break
+                            self._stop_failed_commit_locked(failure); break
                         try: modifiers = self.modifiers_check()
                         except Exception: modifiers = True
                         checked_at = self.clock()
                         failure = self._valid_context(checked_at)
                         if failure or modifiers:
-                            self._disarm_locked(failure or "modifiers_held"); break
+                            self._stop_failed_commit_locked("modifiers_held" if modifiers else failure); break
+                        self.pending.pop(uid); self.consumed.add(uid)
                         if checked_at-action.press_at > self.max_lateness:
                             self._event("rejected", uid=uid, reason="late"); continue
                         if action.key in self.held:
@@ -439,7 +454,7 @@ class Scheduler:
                             self.error = self.error or exc
                             self._disarm_locked("scheduler_error")
                         self._flush()
-        self.thread = threading.Thread(target=run, name="rebuild-scheduler", daemon=True)
+        self.thread = threading.Thread(target=run, name="assist-scheduler", daemon=True)
         self.thread.start(); return self
     def close(self):
         self.stop_event.set()
