@@ -413,6 +413,12 @@ class Engine:
         snapshot=s.snapshot();held={a.uid:a for a in snapshot['held'].values()}
         self.decisions=[]
         for n in sorted(observation['notes'],key=lambda n:(-n.head[-1][1],n.uid)):
+            if n.uid in snapshot['fired'] or n.uid in snapshot['consumed'] or n.state=='DONE':
+                n.identity_state='CONSUMED'
+            elif n.uid in snapshot['pending'] or n.uid in held:
+                n.identity_state='COMMITTED'
+            else:
+                n.identity_state=n.visibility_state
             row=dict(sequence=frame.sequence,capture_timestamp=frame.captured_at,note_uid=n.uid,
                      kind=n.kind,kind_locked=n.kind_locked,color=n.color,bbox=list(self.geometry.native_bbox(n.detection.bbox)),
                      keys='|'.join(n.detection.keys),last_observation=n.last_seen,observations=n.observations,
@@ -421,7 +427,20 @@ class Engine:
                      detection_component=n.detection.component,origin_y=n.origin_y,
                      confirmed=n.confirmed,
                      full_head_observations=n.full_head_observations,
-                     last_full_tap_at=n.last_full_tap_at if math.isfinite(n.last_full_tap_at) else None)
+                     last_full_tap_at=n.last_full_tap_at if math.isfinite(n.last_full_tap_at) else None,
+                     identity_state=n.identity_state,visibility_state=n.visibility_state,
+                     visibility_reason=n.visibility_reason,occluded_since=n.occluded_since,
+                     birth_at=n.birth_info.captured_at if n.birth_info else None,
+                     birth_bbox=list(n.birth_info.bbox) if n.birth_info else None,
+                     birth_lane_span=list(n.birth_info.lane_span) if n.birth_info else None,
+                     birth_type_hint=n.birth_info.type_hint if n.birth_info else None,
+                     birth_evidence='|'.join(n.birth_info.evidence) if n.birth_info else '',
+                     birth_face_quality=n.birth_info.face_quality if n.birth_info else None,
+                     birth_full_face=n.birth_info.full_face if n.birth_info else None,
+                     last_verified_full_face_at=(n.last_verified_full_face_at
+                         if math.isfinite(n.last_verified_full_face_at) else None),
+                     semantic_evidence='|'.join(n.semantic_evidence))
+            row.update(tap_occlusion_authorized=False,tap_visibility_reason='not_an_occlusion_action')
             cap=self.tracker.caps.get(n.tail_uid)
             row.update(tail_last_kind=n.tail_last_kind,tail_last_observation=n.tail[-1][0] if n.tail else None,
                        tail_bbox=list(self.geometry.native_bbox(cap.detection.bbox)) if cap else None,
@@ -435,19 +454,29 @@ class Engine:
             elif n.uid in held:
                 n.state='HELD'
                 tail=self.timing.predict(n.tail,frame.captured_at,kind='tail')
+                tail_age=(frame.captured_at-n.tail[-1][0]) if n.tail else float('inf')
+                unique_tail_owner=bool(cap and cap.terminal_owner_uid==n.uid and
+                    sum(other.tail_uid==cap.uid for other in self.tracker.notes.values())==1)
+                tail_fresh=bool(cap and n.tail and tail_age<=.06 and unique_tail_owner)
+                tail_visible_now=bool(cap and cap.samples and cap.samples[-1][0]==frame.captured_at and
+                    unique_tail_owner)
+                row['tail_visibility_state']=('CONFIRMED_VISIBLE' if tail_visible_now else 'TAIL_OCCLUDED')
+                row['tail_visibility_reason']=('current_owned_endpoint_pixels' if tail_visible_now else
+                    'no_current_owned_endpoint_pixels;last_reliable_tail_age_ms='+
+                    (f'{tail_age*1000:.1f}' if math.isfinite(tail_age) else 'unknown'))
                 row.update(tail_prediction_reason=tail.reason,tail_crossing_at=tail.crossing_at,
                            tail_uncertainty=tail.uncertainty)
-                full_tail=(cap is not None and cap.detection.bbox[3]>=6 and cap.samples[-1][0]==frame.captured_at)
+                full_tail=(cap is not None and cap.detection.bbox[3]>=6 and tail_visible_now and
+                           cap.full_tail_observations>=2)
                 if len(n.tail)>=4 and full_tail and n.tail[-1][1]>=self.geometry.hit_y:
                     result=s.release_hold(n.uid)
                     row['release_update_reason']=result.reason
                     if result:n.release_at=now
                     n.reason='tail_observed_crossing' if result else result.reason
-                elif tail.reason=='ready' or (
+                elif tail_fresh and (tail.reason=='ready' or (
                         tail.reason=='motion_uncertainty' and cap is not None and
                         n.release_at is None and
-                        cap.terminal_owner_uid==n.uid and frame.captured_at-cap.samples[-1][0]<.06 and
-                        tail.eta_s is not None and 0<tail.eta_s<=.5):
+                        tail.eta_s is not None and 0<tail.eta_s<=.5)):
                     # This only ends an existing Hold. Never use this bound
                     # to schedule a new down or to relax Tap uncertainty.
                     # The measured endpoint's uncertainty DELAYS release;
@@ -457,15 +486,19 @@ class Engine:
                     row['release_update_reason']=result.reason
                     if result:n.release_at=end
                     n.reason=('tail_prediction' if tail.reason=='ready' else 'verified_terminal_upper_bound') if result else result.reason
-                else:n.reason='holding_until_measured_tail:'+tail.reason
+                else:
+                    n.reason=('holding_until_measured_tail:tail_occluded' if not tail_fresh else
+                              'holding_until_measured_tail:'+tail.reason)
             elif n.uid in snapshot['consumed']:
                 n.state='DONE'
+            elif n.kind=='pending':
+                n.reason='type_pending'
             elif not n.confirmed:
                 n.reason='insufficient_motion_or_late_origin'
             elif (n.kind=='tap' and n.uid not in snapshot['pending'] and
-                  n.detection.kind!='tap' and not (n.detection.kind=='plate_fragment' and
-                      0<=frame.captured_at-n.last_full_tap_at<=.14)):
-                n.reason='tap_face_not_visible'
+                  self._tap_identity_gate(n,frame.captured_at)):
+                n.reason='confirmed_tap_observation_lost' if n.last_seen<frame.captured_at else 'tap_face_not_visible'
+                row['tap_occlusion_authorized']=False
             elif not observation['playing']:
                 n.reason='not_playing'
             elif (n.kind=='hold' and n.uid not in snapshot['pending'] and
@@ -479,6 +512,9 @@ class Engine:
                 # or establish a real tail before reserving a long press.
                 n.reason='late_hold_head_without_identity'
             else:
+                if n.kind=='tap' and n.last_seen<frame.captured_at:
+                    row['tap_occlusion_authorized']=True
+                    row['tap_visibility_reason']='confirmed_identity_short_occlusion_within_120ms'
                 estimate=self.timing.predict(n.head,frame.captured_at,kind=n.kind)
                 n.crossing_at=estimate.crossing_at;n.uncertainty=estimate.uncertainty
                 n.reason=estimate.reason
@@ -517,6 +553,13 @@ class Engine:
             row.update(state=n.state,reason=n.reason,key=n.key,crossing_at=n.crossing_at,
                        press_at=n.press_at,release_at=n.release_at,uncertainty=n.uncertainty,
                        tail_uid=n.tail_uid,tail_observations=len(n.tail),aliases='|'.join(n.aliases))
+            latest_snapshot=s.snapshot()
+            if n.uid in latest_snapshot['fired'] or n.uid in latest_snapshot['consumed'] or n.state=='DONE':
+                n.identity_state='CONSUMED'
+            elif n.uid in latest_snapshot['pending'] or n.uid in latest_snapshot['held']:
+                n.identity_state='COMMITTED'
+            else:n.identity_state=n.visibility_state
+            row['identity_state']=n.identity_state
             self.decisions.append(row)
         s.poll()
         info=dict(sequence=frame.sequence,captured_at=frame.captured_at,acquired_at=frame.acquired_at,
@@ -526,3 +569,20 @@ class Engine:
                   detections=len(observation['detections']),tracks=len(observation['notes']),
                   armed=s.armed,status=('INPUT PAUSED' if s.snapshot()['paused'] else 'ASSIST ARMED') if s.armed else 'INPUT OFF')
         return info,self.decisions
+
+    @staticmethod
+    def _tap_identity_gate(note, captured_at):
+        """Keep Legacy behavior; permit only short, proven V85 face occlusion."""
+        v85=bool(note.birth_info and 'v85_early_provider' in note.birth_info.evidence)
+        if not v85:
+            return (note.detection.kind!='tap' and not
+                    (note.detection.kind=='plate_fragment' and
+                     0<=captured_at-note.last_full_tap_at<=.14))
+        observed_now=note.last_seen==captured_at and note.detection.kind=='tap'
+        if observed_now:return False
+        age=captured_at-note.last_seen
+        face_age=captured_at-note.last_verified_full_face_at
+        return not (note.confirmed and note.kind_locked and
+                    note.visibility_state=='CONFIRMED_OCCLUDED' and
+                    0<=age<=.12 and 0<=face_age<=.12 and
+                    note.birth_info.birth_zone and math.isfinite(note.last_verified_full_face_at))

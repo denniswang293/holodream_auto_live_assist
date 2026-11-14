@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from pathlib import Path
 
 from src.lane_segmentation import LanePixelSegmenter
 from src.model import Geometry
@@ -72,10 +73,10 @@ def test_uncertain_thin_fragment_and_hit_effect_are_not_promoted_to_notes():
 def test_extracted_hold_frames_keep_green_ribbon_pixels_separate():
     g = geometry()
     segmenter = LanePixelSegmenter()
-    base = "output/analysis_lane_filter_v84_rework/annotations/review_frames"
-    for index, timestamp, minimum in ((360, "6.0s", 5000), (294, "4.9s", 1)):
-        path = f"{base}/frame_{index:06d}_{timestamp}_source.png"
-        source = cv2.imread(path)
+    base = Path(__file__).parent / "fixtures" / "v85"
+    for filename, index, minimum in (("assist_6_0s_frame_360.png", 360, 5000),
+                                     ("assist_4_9s_frame_294.png", 294, 1)):
+        source = cv2.imread(str(base / filename))
         assert source is not None
         rectified = g.rectify(g.normalize(source))
         result = segmenter.segment(rectified, g, frame_index=index)
@@ -96,14 +97,9 @@ def test_recorded_connected_hold_emits_observed_head_plate():
     # face attached to a curved ribbon. The earlier width-only endpoint rule
     # labeled the ribbon as body but emitted no Hold head, so Tracker could
     # never confirm that note. The source run is read-only.
-    source_path = "output/recording/run_20261106T164049_800126Z/live_source.mp4"
-    cap = cv2.VideoCapture(source_path)
-    try:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 77)
-        ok, source = cap.read()
-    finally:
-        cap.release()
-    assert ok and source is not None
+    source_path = Path(__file__).parent / "fixtures" / "v85" / "recording_hold_frame_77.png"
+    source = cv2.imread(str(source_path))
+    assert source is not None
     g = geometry()
     rectified = g.rectify(g.normalize(source))
     result = LanePixelSegmenter().segment(rectified, g, frame_index=77)
@@ -133,3 +129,51 @@ def test_tap_face_survives_thin_connection_without_filling_pixels():
     assert result["tap_face"][287,250]==255
     assert result["tap_face"][287,100]==0
     assert np.all(result["tap_face"][image[:,:,0]==0]==0)
+
+
+def test_yellow_hold_keeps_connected_head_body_and_tail_separate():
+    g=geometry();image=np.zeros((g.height,g.plane_width,3),np.uint8);yellow=color(27)
+    curve=np.array([[110,70],[112,110],[116,150],[121,190],[125,230]],np.int32)
+    cv2.polylines(image,[curve],False,yellow,9)
+    cv2.rectangle(image,(108,220),(145,238),yellow,-1)  # moving head
+    cv2.rectangle(image,(99,61),(137,80),yellow,-1)     # observed tail
+    result=LanePixelSegmenter().segment(image,g,frame_index=12)
+    assert np.count_nonzero(result['hold_head'])>100
+    assert np.count_nonzero(result['hold_body'])>100
+    assert np.count_nonzero(result['hold_tail'])>100
+    hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
+    observed_yellow=(hsv[:,:,0]>=16)&(hsv[:,:,0]<40)&(hsv[:,:,1]>=65)&(hsv[:,:,2]>=125)
+    for name in ('hold_head','hold_body','hold_tail'):
+        assert np.all(result[name][~observed_yellow]==0)
+
+
+def test_neutral_panel_is_evidence_but_remains_unknown():
+    g=geometry();image=np.zeros((g.height,g.plane_width,3),np.uint8)
+    neutral=color(0,0,210);cv2.rectangle(image,(180,90),(254,106),neutral,-1)
+    result=LanePixelSegmenter().segment(image,g,frame_index=33)
+    candidates=[c for c in result.components if 'neutral_full_face_candidate' in c.positive]
+    assert len(candidates)==1
+    assert candidates[0].role=='unknown'
+    assert np.count_nonzero(result['unknown'])>=candidates[0].area
+    assert np.count_nonzero(result['tap_face'])==0
+
+
+def test_two_holds_and_adjacent_tap_keep_independent_pixel_ownership():
+    g=geometry();image=np.zeros((g.height,g.plane_width,3),np.uint8)
+    green=color(62);cyan=color(96,220,230)
+    for x,shift in ((72,0),(238,8)):
+        cv2.line(image,(x,85),(x+shift,224),green,9)
+        cv2.rectangle(image,(x-15,216),(x+shift+19,238),green,-1)
+    cv2.rectangle(image,(155,270),(215,286),cyan,-1)
+    result=LanePixelSegmenter().segment(image,g,frame_index=410)
+    bodies=[c for c in result.components if c.role=='hold_body' and c.color=='green']
+    heads=[c for c in result.components if c.role=='hold_head' and c.color=='green']
+    assert len(bodies)==2 and len(heads)==2
+    assert np.count_nonzero(result['tap_face'])>100
+    assert all(c.frame_index==410 for c in bodies+heads)
+    assert np.count_nonzero(result['hold_body'][:, :130])>0
+    assert np.count_nonzero(result['hold_body'][:, 220:])>0
+    assert np.count_nonzero(result['hold_body'][:,130:220])==0
+    hsv=cv2.cvtColor(image,cv2.COLOR_BGR2HSV)
+    observed_green=(hsv[:,:,0]>=40)&(hsv[:,:,0]<=83)&(hsv[:,:,1]>=55)&(hsv[:,:,2]>=105)
+    assert np.all(result['hold_body'][~observed_green]==0)

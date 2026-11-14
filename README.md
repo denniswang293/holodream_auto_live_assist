@@ -85,3 +85,14 @@ python -B -m pytest -q -p no:cacheprovider
 ```
 
 測試使用 Mock 輸入及小型真實影格 fixture，不會操作遊戲，也不依賴 `output/` 中的歷史資料。
+
+## V8.5 離線候選評估
+
+V8.5 EarlyPixelProvider 僅供離線實驗，Live 預設仍使用 Legacy Perception。完整結果、未知案例與限制見 `docs/V85_IMPLEMENTATION_RESULT.md` 和 `docs/V85_EVALUATION.md`。固定模擬延遲與實測即時處理是兩個不同實驗：
+
+```powershell
+python tools/replay_lane_filter.py --run-dir output/recording/run_20261106T164049_800126Z --out output/analysis_v85_early_identity/fixed_14ms --mode compare --latency-ms 14 --simulated-arm-window 1 124 --birth-zone-end-y 176.75
+python tools/replay_lane_filter_measured.py --run-dir output/recording/run_20261106T164049_800126Z --out output/analysis_v85_early_identity/measured_realtime --mode compare --simulated-arm-window 1 124 --birth-zone-end-y 176.75
+```
+
+候選影片與遮罩只保存像素結果；`review_queue.csv` 尚未由真人審核的標籤均為 UNKNOWN。80ms 人工按鍵鄰近度僅為事後輔助診斷，不是遊戲命中率或物理音符召回率。

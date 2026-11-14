@@ -14,6 +14,7 @@ import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from src.engine import Engine  # noqa:E402
+from src.early_perception import EarlyPixelProvider  # noqa:E402
 from src.lane_filter import LaneFilter  # noqa:E402
 from src.model import Detection, Frame, Geometry, KEYS  # noqa:E402
 from src.perception import Perception  # noqa:E402
@@ -105,23 +106,24 @@ def poll_to(state,target,*,inclusive=True):
     state["next_poll"]=next_poll;now[0]=target
 
 
-def make_state(provider,geometry,calibration,start_time):
+def make_state(provider,geometry,calibration,start_time,*,birth_zone_end_y=None):
     now=[start_time];actuator=MockActuator();event_log=[]
     scheduler=Scheduler(actuator,clock=lambda:now[0],focus_check=lambda:True,
                         modifiers_check=lambda:False,on_event=lambda event:event_log.append(dict(event)))
     engine=Engine(geometry,scheduler,calibration)
     if provider=="segmented":engine.perception=SegmentedProvider(geometry)
+    elif provider=="v85":engine.perception=EarlyPixelProvider(geometry,birth_zone_end_y=birth_zone_end_y)
     return {"provider":provider,"now":now,"scheduler":scheduler,"actuator":actuator,"engine":engine,
             "next_poll":start_time+.002,"arm_triggered":False,"arm_ended":False,
             "actions":[],"event_log":event_log,"decisions":[],"summary":[],"candidate_trace":[],
             "wall_ms":[],"compute_wall_ms":[],"profile":[]}
 
 
-def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limit_frames=None):
+def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limit_frames=None,*,birth_zone_end_y=None):
     index=read_index(run_dir/"live_video_index.csv")
     caps=cv2.VideoCapture(str(run_dir/"live_source.mp4"))
     if not caps.isOpened():raise RuntimeError(f"cannot open {run_dir/'live_source.mp4'}")
-    states=[make_state(provider,Geometry(geometry.path),calibration,0.) for provider in providers]
+    states=[make_state(provider,Geometry(geometry.path),calibration,0.,birth_zone_end_y=birth_zone_end_y) for provider in providers]
     decoded=0;first_capture=None;last_capture=None
     while True:
         ok,frame=caps.read()
@@ -252,13 +254,16 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run-dir",type=Path,required=True)
     ap.add_argument("--out",type=Path,default=ROOT/"output/analysis_lane_filter_v84_rework")
-    ap.add_argument("--mode",choices=("baseline","segmented","compare"),default="compare")
+    ap.add_argument("--mode",choices=("baseline","segmented","v85","compare"),default="compare")
     ap.add_argument("--latency-ms",type=float,nargs="+",default=[8,14,18,25,40])
     ap.add_argument("--simulated-arm-window",type=float,nargs=2,metavar=("START_S","END_S"),default=None)
     ap.add_argument("--reference-tolerance-ms",type=float,default=80.)
+    ap.add_argument("--birth-zone-end-y",type=float,default=None,
+                    help="V8.5 audit-derived rectified y boundary; defaults to provisional geometry midpoint")
     ap.add_argument("--limit-frames",type=int)
     args=ap.parse_args();run_dir=args.run_dir.resolve();out=args.out.resolve()/run_dir.name;out.mkdir(parents=True,exist_ok=True)
-    requested=("legacy","segmented") if args.mode=="compare" else (("legacy",) if args.mode=="baseline" else ("segmented",))
+    requested=("legacy","segmented","v85") if args.mode=="compare" else (
+        ("legacy",) if args.mode=="baseline" else (args.mode,))
     # `run_latency` always compares both providers; for a single-provider CLI mode
     # the unused provider's records are discarded from output.
     index=read_index(run_dir/"live_video_index.csv");reference=[]
@@ -270,7 +275,8 @@ def main():
     for latency_ms in args.latency_ms:
         if not 0<=latency_ms<=200:ap.error("latency values must be between 0 and 200 ms")
         states,decoded=run_latency(run_dir,latency_ms/1000,args.simulated_arm_window,
-            Geometry(ROOT/"config/geometry_live_assist.json"),ROOT/"config/reference_timing.json",requested,args.limit_frames)
+            Geometry(ROOT/"config/geometry_live_assist.json"),ROOT/"config/reference_timing.json",requested,args.limit_frames,
+            birth_zone_end_y=args.birth_zone_end_y)
         decoded_total=decoded
         for state in states:
             if state["provider"] not in requested:continue
@@ -320,6 +326,8 @@ def main():
         "configured_latency_is_measured_compute":False,
         "geometry_config_sha256":Geometry(ROOT/"config/geometry_live_assist.json").sha256,
         "timing_calibration_sha256":__import__("hashlib").sha256((ROOT/"config/reference_timing.json").read_bytes()).hexdigest(),
+        "v85_birth_zone_end_y":args.birth_zone_end_y,
+        "v85_birth_zone_source":"multi-run candidate audit when explicitly supplied; otherwise provisional geometry midpoint",
         "stage_profile":"stage_profile_by_frame.csv excludes rendering/encoding; scheduler simulator polling is reported separately",
         "future_frames_or_human_keys_in_decision_input":False,"decoded_frames":decoded_total,
         "limit_frames":args.limit_frames,"partial":args.limit_frames is not None and decoded_total>=args.limit_frames,

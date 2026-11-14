@@ -65,7 +65,15 @@ class LanePixelSegmenter:
             "green": (hue >= 40) & (hue <= 83) & (sat >= 55) & (val >= 105) & note_region,
             "yellow": (hue >= 16) & (hue < 40) & (sat >= 65) & (val >= 125) & note_region,
             "cyan": (hue >= 84) & (hue <= 112) & (sat >= 65) & (val >= 135) & note_region,
+            # A neutral panel stays UNKNOWN until repeated motion and separate
+            # ribbon evidence establish its physical meaning.
+            "neutral": (sat <= 72) & (val >= 160) & note_region,
         }
+        # Keep every neutral pixel available for inspection, but do not run
+        # per-component geometry, row profiles, or contour work on the many
+        # unrelated bright HUD/background regions. Plausible panel/ribbon ROIs
+        # are reconsidered below; unexamined pixels remain explicitly UNKNOWN.
+        masks["unknown"][class_masks["neutral"]] = 255
         components: list[PixelComponent] = []
         assigned = np.zeros((h, w), bool)
         next_id = 1
@@ -89,6 +97,12 @@ class LanePixelSegmenter:
                     continue
                 aspect = cw / max(1, ch)
                 density = area / max(1, cw * ch)
+                if color_name == "neutral":
+                    plausible_panel = (8 <= cw <= .62 * w and 3 <= ch <= 22 and
+                                       aspect >= 1.45 and density >= .28 and area >= 18)
+                    plausible_ribbon = (ch >= 24 and ch >= 1.05 * cw and area >= 80)
+                    if not (plausible_panel or plausible_ribbon):
+                        continue
                 plate = (8 <= cw <= .62 * w and 3 <= ch <= 22 and
                          aspect >= 1.45 and density >= .28 and area >= 18)
                 role = "unknown"
@@ -100,13 +114,22 @@ class LanePixelSegmenter:
                 head = np.zeros((ch, cw), bool)
                 tail = np.zeros((ch, cw), bool)
 
+                neutral_face=(color_name=="neutral" and plate and density>=.48)
+                yellow_ribbon=(color_name=="yellow" and ch>=24 and ch>=1.05*cw and area>=60)
+                neutral_ribbon=(color_name=="neutral" and ch>=24 and ch>=1.05*cw and area>=80)
                 if color_name in ("yellow", "cyan") and plate:
                     role = "tap_face"
                     positive.extend(("horizontal_panel_shape", "measured_color_fill"))
                     evidence.extend(("aspect_ratio", "pixel_density"))
-                elif color_name == "green" and ch >= 18 and area >= 24:
+                elif neutral_face:
+                    positive.extend(("neutral_full_face_candidate", "horizontal_panel_shape",
+                                     "measured_neutral_pixel_fill"))
+                    evidence.extend(("aspect_ratio", "pixel_density", "low_saturation_bright_pixels"))
+                    ambiguity.append("tap_or_hold_type_requires_motion_and_ribbon_evidence")
+                elif color_name in ("green", "yellow", "neutral") and ch >= 18 and area >= 24 and (
+                        color_name=="green" or yellow_ribbon or neutral_ribbon):
                     role = "hold_body"
-                    positive.extend(("elongated_green_region", "continuous_component"))
+                    positive.extend(("elongated_color_region", "continuous_component"))
                     evidence.extend(("vertical_extent", "component_area"))
                     ambiguity.append("head_tail_ownership_requires_distinct_endpoint_evidence")
                     rows = np.count_nonzero(region, axis=1)
@@ -172,8 +195,12 @@ class LanePixelSegmenter:
                     masks["unknown"][y0:y1, x0:x1][region] = 255
                     assigned[y0:y1, x0:x1][region] = True
                 elif role != "hold_body":
+                    if color_name == "neutral":
+                        masks["unknown"][y0:y1, x0:x1][region] = 0
                     masks[role][y0:y1, x0:x1][region] = 255
                     assigned[y0:y1, x0:x1][region] = True
+                elif color_name == "neutral":
+                    masks["unknown"][y0:y1, x0:x1][region] = 0
 
                 polygon: tuple[tuple[int, int], ...] = ()
                 # Unknown/effect specks keep their exact pixels in the masks

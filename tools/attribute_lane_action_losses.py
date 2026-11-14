@@ -46,6 +46,15 @@ def intersection(a,b):
     return area,area/max(1.,aw*ah),area/max(1.,bw*bh)
 
 
+def native_box_to_rectified(bbox,geometry):
+    """Invert the configured piecewise lane map, never approximate x by a scale."""
+    if not bbox:return None
+    x,y,w,h=bbox;bounds=np.asarray(geometry.boundaries(y+h/2),float)
+    lanes=np.arange(7,dtype=float)*geometry.lane_pixels
+    left=float(np.interp(x,bounds,lanes));right=float(np.interp(x+w,bounds,lanes))
+    return left,float(y),max(0.,right-left),float(h)
+
+
 def cross_score(legacy_rows,seg_frame_index,key):
     """Pair provider-local tracks using aligned visible position/motion."""
     best=None
@@ -55,7 +64,9 @@ def cross_score(legacy_rows,seg_frame_index,key):
         if abs(float(r.get("last_observation") or capture)-capture)>.001:continue
         b=box(r.get("bbox"));
         if not b:continue
-        frame=int(r["video_frame"]);rect=(b[0]*.5,b[1],b[2]*.5,b[3])
+        # Engine decision rows from both providers use Geometry.native_bbox,
+        # so compare their true native geometry directly.
+        frame=int(r["video_frame"]);rect=b
         left[frame]=(r,rect)
     grouped=defaultdict(dict)
     for frame,(lr,lb) in left.items():
@@ -65,7 +76,8 @@ def cross_score(legacy_rows,seg_frame_index,key):
             if key not in (sr.get("keys") or "").split("|"):continue
             raw=box(sr.get("bbox"))
             if not raw:continue
-            sb=(raw[0]*.5,raw[1],raw[2]*.5,raw[3])
+            # Provider Engine rows share native-frame coordinates.
+            sb=raw
             grouped[sr["note_uid"]][frame]=(sr,sb)
     for uid,series in grouped.items():
         matches=[];distances=[];covers=[]
@@ -88,7 +100,7 @@ def cross_score(legacy_rows,seg_frame_index,key):
 def nearest_same_frame(row,trace,geometry,key):
     target=box(row.get("bbox"));
     if not target:return None
-    tx,ty,tw,th=target;target=(tx*.5,ty,tw*.5,th)
+    target=native_box_to_rectified(target,geometry)
     candidates=[]
     for c in trace:
         if c.get("candidate_stage")!="segmentation_to_detector":continue
@@ -134,7 +146,7 @@ def classify_case(match,seg_row,component,seg_action,expected_key):
     return "UNKNOWN","LOW","no_spatially_matched_segmented_component_or_track"
 
 
-def render_evidence(run_dir,frame_no,trace,legacy_note,component,geometry,out_dir,masker):
+def render_evidence(run_dir,frame_no,trace,legacy_note,component,geometry,out_dir,masker,candidate_provider='segmented'):
     path=out_dir/f"frame_{frame_no:06d}.png"
     if path.exists():return str(path)
     cap=cv2.VideoCapture(str(run_dir/"live_source.mp4"));cap.set(cv2.CAP_PROP_POS_FRAMES,frame_no);ok,source=cap.read();cap.release()
@@ -150,10 +162,13 @@ def render_evidence(run_dir,frame_no,trace,legacy_note,component,geometry,out_di
         if b:cv2.rectangle(legacy_canvas,(int(b[0]),int(b[1])),(int(b[0]+b[2]),int(b[1]+b[3])),(230,100,230),1)
     if legacy_note:
         b=box(legacy_note.get("bbox"));
-        if b:cv2.rectangle(legacy_canvas,(int(b[0]*.5),int(b[1])),(int((b[0]+b[2])*.5),int(b[1]+b[3])),(0,255,255),2)
+        if b:
+            rb=native_box_to_rectified(b,geometry)
+            cv2.rectangle(legacy_canvas,(int(rb[0]),int(rb[1])),
+                          (int(rb[0]+rb[2]),int(rb[1]+rb[3])),(0,255,255),2)
     seg_canvas=rect.copy()
     for c in trace:
-        if c.get("provider")!="segmented" or c.get("candidate_stage")!="segmentation_to_detector" or int(c.get("video_frame",-1))!=frame_no:continue
+        if c.get("provider")!=candidate_provider or c.get("candidate_stage")!="segmentation_to_detector" or int(c.get("video_frame",-1))!=frame_no:continue
         b=box(c.get("bbox"));
         if not b:continue
         color=colors.get(c.get("role"),(170,170,170))
@@ -162,7 +177,7 @@ def render_evidence(run_dir,frame_no,trace,legacy_note,component,geometry,out_di
         b=box(component.get("bbox"));
         if b:cv2.rectangle(seg_canvas,(int(b[0]),int(b[1])),(int(b[0]+b[2]),int(b[1]+b[3])),(0,255,255),2)
     panels=[]
-    for name,img in (("source + Legacy candidates",legacy_canvas),("current-pixel masks",mask),("Segmented component candidates",seg_canvas)):
+    for name,img in (("source + Legacy candidates",legacy_canvas),("current-pixel masks",mask),(f"{candidate_provider} component candidates",seg_canvas)):
         panel=img.copy();cv2.rectangle(panel,(0,0),(panel.shape[1],22),(0,0,0),-1)
         cv2.putText(panel,name,(5,16),cv2.FONT_HERSHEY_SIMPLEX,.42,(255,255,255),1,cv2.LINE_AA);panels.append(panel)
     out=np.concatenate(panels,axis=1);cv2.imwrite(str(path),out);return str(path)
@@ -173,45 +188,47 @@ def main():
     ap.add_argument("--run-dir",type=Path,required=True)
     ap.add_argument("--replay-dir",type=Path,required=True)
     ap.add_argument("--out",type=Path,default=ROOT/"output/analysis_lane_filter_v84_rework")
+    ap.add_argument('--candidate-provider',choices=('segmented','v85'),default='segmented')
     args=ap.parse_args();args.out.mkdir(parents=True,exist_ok=True)
     actions=read_csv(args.replay_dir/"mock_actions.csv");decisions=read_csv(args.replay_dir/"physical_note_decisions.csv")
     trace=read_csv(args.replay_dir/"candidate_trace.csv")
     legacy_presses=[r for r in actions if r["provider"]=="legacy" and r["event"]=="pressed"]
-    segmented_presses=[r for r in actions if r["provider"]=="segmented" and r["event"]=="pressed"]
-    segmented_events=defaultdict(list)
+    segmented_presses=[r for r in actions if r["provider"]==args.candidate_provider and r["event"]=="pressed"]
+    candidate_events=defaultdict(list)
     for event in actions:
-        if event["provider"]=="segmented" and event.get("uid"):
-            segmented_events[event["uid"]].append(event)
+        if event["provider"]==args.candidate_provider and event.get("uid"):
+            candidate_events[event["uid"]].append(event)
     rows_by_provider=defaultdict(lambda:defaultdict(list))
     for r in decisions:rows_by_provider[r["provider"]][r["note_uid"]].append(r)
     for group in rows_by_provider.values():
         for rr in group.values():rr.sort(key=lambda x:int(x["video_frame"]))
     seg_frame_index=defaultdict(list)
     for r in decisions:
-        if r["provider"]=="segmented":seg_frame_index[int(r["video_frame"])].append(r)
+        if r["provider"]==args.candidate_provider:seg_frame_index[int(r["video_frame"])].append(r)
     trace_by_frame=defaultdict(list)
     for r in trace:trace_by_frame[int(r["video_frame"])].append(r)
-    evidence_dir=args.out/"action_loss_evidence_v4";evidence_dir.mkdir(exist_ok=True)
+    evidence_dir=args.out/("action_loss_evidence_v85" if args.candidate_provider=='v85' else "action_loss_evidence_v4");evidence_dir.mkdir(exist_ok=True)
     geometry=Geometry(ROOT/"config/geometry_live_assist.json");masker=LanePixelSegmenter()
     output=[];counts=Counter()
     for n,event in enumerate(legacy_presses,1):
         uid=event["uid"];legacy_track=rows_by_provider["legacy"].get(uid,[])
         key=event["key"]
-        segmented_tracks=list(rows_by_provider["segmented"].values())
         match=cross_score(legacy_track,seg_frame_index,key)
         match_uid=match[1] if match else "";matched_frames=match[2] if match else []
         cap_time=float(event.get("decision_capture_timestamp") or event["at"])
         legacy_row=min(legacy_track,key=lambda r:abs(float(r["capture_timestamp"])-cap_time)) if legacy_track else None
-        seg_track=rows_by_provider["segmented"].get(match_uid,[]) if match_uid else []
+        seg_track=rows_by_provider[args.candidate_provider].get(match_uid,[]) if match_uid else []
         seg_row=min(seg_track,key=lambda r:abs(float(r["capture_timestamp"])-cap_time)) if seg_track else None
         frame_trace=trace_by_frame.get(int(legacy_row["video_frame"]),[]) if legacy_row else []
         component=nearest_same_frame(legacy_row,frame_trace,geometry,key) if legacy_row else None
-        seg_track_events=segmented_events.get(match_uid,[]) if match_uid else []
+        seg_track_events=candidate_events.get(match_uid,[]) if match_uid else []
         seg_action=next((r for r in seg_track_events if r.get("event") in ("pressed","rejected")),None)
         stage,confidence,reason=classify_case(match,seg_row,component,seg_action,key)
+        if args.candidate_provider=='v85' and stage.startswith('SEGMENTED_'):
+            stage='V85_'+stage[len('SEGMENTED_'):]
         paired=len(matched_frames)
         frame=int(legacy_row["video_frame"]) if legacy_row else -1
-        evidence=render_evidence(args.run_dir,frame,frame_trace,legacy_row,component,geometry,evidence_dir,masker) if frame>=0 else ""
+        evidence=render_evidence(args.run_dir,frame,frame_trace,legacy_row,component,geometry,evidence_dir,masker,args.candidate_provider) if frame>=0 else ""
         counts[stage]+=1
         lbox=legacy_row.get("bbox","") if legacy_row else ""
         sbox=seg_row.get("bbox","") if seg_row else (str(component.get("bbox")) if component else "")
@@ -222,20 +239,21 @@ def main():
             "legacy_bbox_native":lbox,"legacy_tracker_uid_provider_local":uid,
             "legacy_tracker_confirmed":legacy_row.get("confirmed","") if legacy_row else "",
             "legacy_timing_reason":legacy_row.get("reason","") if legacy_row else "",
-            "segmented_component_id":component.get("component_id","") if component else "",
-            "segmented_component_role":component.get("role","") if component else "",
-            "segmented_conversion":component.get("conversion","") if component else "",
-            "segmented_component_bbox_rectified":component.get("bbox","") if component else "",
-            "segmented_tracker_uid_provider_local":match_uid,
-            "segmented_tracker_bbox_native":sbox,"segmented_tracker_confirmed":seg_row.get("confirmed","") if seg_row else "",
-            "segmented_tracker_state":seg_row.get("state","") if seg_row else "",
-            "segmented_timing_reason":seg_row.get("reason","") if seg_row else "",
-            "trajectory_matched_frames":paired,"segmented_action_uid_provider_local":seg_action.get("uid","") if seg_action else "",
-            "segmented_scheduler_outcome":seg_action.get("event","") if seg_action else "no_matched_scheduler_down_or_reject",
-            "segmented_action_event":seg_action.get("event","") if seg_action else "",
-            "segmented_action_key":seg_action.get("key","") if seg_action else "",
-            "segmented_action_time":seg_action.get("injection_started_at",seg_action.get("at","")) if seg_action else "",
-            "segmented_key_up":"yes" if any(e.get("event")=="released" for e in seg_track_events) else "no",
+            "candidate_provider":args.candidate_provider,
+            "candidate_component_id":component.get("component_id","") if component else "",
+            "candidate_component_role":component.get("role","") if component else "",
+            "candidate_conversion":component.get("conversion","") if component else "",
+            "candidate_component_bbox_rectified":component.get("bbox","") if component else "",
+            "candidate_tracker_uid_provider_local":match_uid,
+            "candidate_tracker_bbox_native":sbox,"candidate_tracker_confirmed":seg_row.get("confirmed","") if seg_row else "",
+            "candidate_tracker_state":seg_row.get("state","") if seg_row else "",
+            "candidate_timing_reason":seg_row.get("reason","") if seg_row else "",
+            "trajectory_matched_frames":paired,"candidate_action_uid_provider_local":seg_action.get("uid","") if seg_action else "",
+            "candidate_scheduler_outcome":seg_action.get("event","") if seg_action else "no_matched_scheduler_down_or_reject",
+            "candidate_action_event":seg_action.get("event","") if seg_action else "",
+            "candidate_action_key":seg_action.get("key","") if seg_action else "",
+            "candidate_action_time":seg_action.get("injection_started_at",seg_action.get("at","")) if seg_action else "",
+            "candidate_key_up":"yes" if any(e.get("event")=="released" for e in seg_track_events) else "no",
             "root_cause_stage":stage,"attribution_reason":reason,"evidence_confidence":confidence,
             "evidence_image":evidence,"interpretation":"provider UIDs are local labels only; physical match uses frame/position/key/color/downward track"})
     path=args.out/"action_loss_attribution.csv"
@@ -245,7 +263,7 @@ def main():
     with summary.open("w",encoding="utf-8",newline="") as f:
         w=csv.DictWriter(f,fieldnames=["root_cause_stage","action_count","fraction_of_legacy_presses"]);w.writeheader()
         for stage,count in sorted(counts.items()):w.writerow({"root_cause_stage":stage,"action_count":count,"fraction_of_legacy_presses":count/max(1,len(output))})
-    print(json.dumps({"legacy_presses":len(legacy_presses),"segmented_presses":len(segmented_presses),
+    print(json.dumps({"legacy_presses":len(legacy_presses),"candidate_presses":len(segmented_presses),
         "output":str(path),"stage_counts":counts},default=dict))
 
 

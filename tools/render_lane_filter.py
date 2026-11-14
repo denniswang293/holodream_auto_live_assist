@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 from src.lane_filter import LaneFilter, MASK_CHANNELS, PREVIEW_COLORS, ROLE_MASK  # noqa:E402
 from src.model import Geometry  # noqa:E402
 from src.perception import Perception  # noqa:E402
+from src.early_perception import EarlyPixelProvider  # noqa:E402
 
 
 def read_index(path: Path):
@@ -35,13 +36,26 @@ def debug_overlay(rectified, observations):
     return result
 
 
+def debug_detection_overlay(rectified,detections):
+    result=cv2.addWeighted(rectified,.72,np.zeros_like(rectified),.28,0)
+    colors={'tap':PREVIEW_COLORS['TAP_FACE'],'hold_head':PREVIEW_COLORS['HOLD_HEAD'],
+            'hold_tail':PREVIEW_COLORS['HOLD_TAIL'],'plate_fragment':PREVIEW_COLORS['UNKNOWN']}
+    for d in detections:
+        x,y,w,h=d.bbox;color=colors.get(d.kind,PREVIEW_COLORS['UNKNOWN'])
+        cv2.rectangle(result,(x,y),(x+w-1,y+h-1),color,1)
+        cv2.putText(result,f"{d.kind}/{d.semantic_candidate}",(x,max(10,y-2)),
+                    cv2.FONT_HERSHEY_SIMPLEX,.28,color,1,cv2.LINE_AA)
+    return result
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run-dir", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=ROOT / "output/analysis_lane_filter_v84_rework")
-    ap.add_argument("--mode", choices=("baseline", "filtered", "compare"), default="compare")
+    ap.add_argument("--mode", choices=("baseline", "filtered", "compare", "v85"), default="compare")
     ap.add_argument("--limit-frames", type=int)
     ap.add_argument("--review-seconds", type=float, nargs="+", default=[4.9, 6.0, 13.2, 14.9, 16.9])
+    ap.add_argument('--birth-zone-end-y',type=float,default=None)
     args = ap.parse_args()
     run_dir = args.run_dir.resolve(); source_path = run_dir / "live_source.mp4"
     index_path = run_dir / "live_video_index.csv"
@@ -56,12 +70,14 @@ def main():
     review_dir = out / "review_frames"; review_dir.mkdir(exist_ok=True)
     selected = {int(round(sec * fps)): sec for sec in args.review_seconds}
     lane_filter = LaneFilter(geometry) if args.mode in ("filtered", "compare") else None
+    early_provider=EarlyPixelProvider(geometry,birth_zone_end_y=args.birth_zone_end_y) if args.mode=='v85' else None
     legacy = Perception(geometry) if args.mode in ("baseline", "compare") else None
     writers = {}
     obs_path = out / "detections.csv"
     summary_path = out / "frame_summary.csv"
     fields = list(__import__("dataclasses").fields(__import__("src.lane_filter", fromlist=["LaneObservation"]).LaneObservation))
-    obs_names = [f.name for f in fields]
+    obs_names = ([f.name for f in fields] if early_provider is None else
+        ["video_frame","source_frame","capture_timestamp","acquired_timestamp","bbox_rectified","color","kind","keys","semantic_candidate","face_quality","full_face","connected_ribbon","birth_zone","evidence"])
     processing_ms=[];legacy_ms=[];render_ms=[];normalize_ms=[];rectify_ms=[];profile_rows=[]
     frame_rows=[];mask_chunk=[];chunk_start=0;decoded=0;missing_index=0
     role_counts={key:0 for key in ROLE_MASK}; channel_pixels={key:0 for key in MASK_CHANNELS}
@@ -80,7 +96,7 @@ def main():
                     focused=str(idx.get("focused","True")).lower() in ("true","1");roi_valid=str(idx.get("roi_valid","True")).lower() in ("true","1")
                 t0=time.perf_counter();normalized=geometry.normalize(frame);norm_ms=(time.perf_counter()-t0)*1000
                 t0=time.perf_counter();rectified=geometry.rectify(normalized);rect_ms=(time.perf_counter()-t0)*1000
-                observations=[];masks={};preview=None;pixel_area=0;seg_ms=0.;old_ms=0.;profile={}
+                observations=[];masks={};preview=None;pixel_area=0;seg_ms=0.;old_ms=0.;profile={};result=None
                 if lane_filter is not None and captured is not None and acquired is not None and acquired>=captured:
                     t0=time.perf_counter()
                     observations,masks,preview,rectified,result=lane_filter.process_rectified(rectified,run_id=run_dir.name,
@@ -109,6 +125,43 @@ def main():
                     if len(mask_chunk)>=120:
                         np.savez_compressed(mask_dir/f"masks_{chunk_start:06d}_{decoded:06d}.npz",
                             frame_indices=np.arange(chunk_start,decoded+1),channel_names=np.asarray(MASK_CHANNELS),masks=np.stack(mask_chunk));mask_chunk=[]
+                elif early_provider is not None and captured is not None and acquired is not None and acquired>=captured:
+                    t0=time.perf_counter();observations=early_provider.detect(normalized);seg_ms=(time.perf_counter()-t0)*1000
+                    rectified=early_provider.last_rect;result=early_provider.last_result;masks=result.masks
+                    profile={**early_provider.last_profile,"video_frame":decoded,
+                        "normalize_ms":norm_ms,"segmentation_and_conversion_ms":seg_ms}
+                    profile_rows.append(profile)
+                    for d in observations:
+                        ow.writerow({"video_frame":decoded,"source_frame":source_frame,
+                            "capture_timestamp":captured,"acquired_timestamp":acquired,
+                            "bbox_rectified":d.bbox,"color":d.color,"kind":d.kind,"keys":"|".join(d.keys),
+                            "semantic_candidate":d.semantic_candidate,"face_quality":d.face_quality,
+                            "full_face":d.full_face,"connected_ribbon":d.connected_ribbon,
+                            "birth_zone":d.birth_zone,"evidence":"|".join(d.evidence)})
+                    for key in role_counts:
+                        role_counts[key]+=sum((o.kind=='tap' and key=='TAP_FACE') or
+                            (o.kind=='hold_head' and key=='HOLD_HEAD') or
+                            (o.kind=='hold_tail' and key=='HOLD_TAIL') or
+                            (o.kind=='plate_fragment' and key=='UNKNOWN') for o in observations)
+                    channel_pixels={c:channel_pixels[c]+int(np.count_nonzero(masks[c])) for c in MASK_CHANNELS}
+                    pixel_area=sum(int(np.count_nonzero(masks[c])) for c in ("tap_face","hold_head","hold_body","hold_tail"))
+                    if not mask_chunk:chunk_start=decoded
+                    mask_chunk.append(np.stack([masks[c] for c in MASK_CHANNELS]))
+                    if len(mask_chunk)>=120:
+                        np.savez_compressed(mask_dir/f"masks_{chunk_start:06d}_{decoded:06d}.npz",
+                            frame_indices=np.arange(chunk_start,decoded+1),channel_names=np.asarray(MASK_CHANNELS),masks=np.stack(mask_chunk));mask_chunk=[]
+                    overlay=debug_detection_overlay(rectified,observations)
+                    mask_color=np.zeros_like(rectified)
+                    for role,channel in ROLE_MASK.items():mask_color[masks[channel]>0]=PREVIEW_COLORS[role]
+                    preview=mask_color
+                    if decoded in selected:
+                        key=f"frame_{decoded:06d}_{selected[decoded]:.1f}s"
+                        cv2.imwrite(str(review_dir/f"{key}_source.png"),frame)
+                        cv2.imwrite(str(review_dir/f"{key}_rectified.png"),rectified)
+                        cv2.imwrite(str(review_dir/f"{key}_gray.png"),cv2.cvtColor(rectified,cv2.COLOR_BGR2GRAY))
+                        cv2.imwrite(str(review_dir/f"{key}_mask.png"),mask_color)
+                        cv2.imwrite(str(review_dir/f"{key}_overlay.png"),overlay)
+                        np.savez_compressed(review_dir/f"{key}_masks.npz",channel_names=np.asarray(MASK_CHANNELS),**masks)
                 else:
                     overlay=np.zeros_like(rectified)
                 if legacy is not None:
@@ -119,7 +172,7 @@ def main():
                     if "baseline_video" not in writers:
                         writers["baseline_video"]=cv2.VideoWriter(str(out/"baseline_legacy_boxes.mp4"),cv2.VideoWriter_fourcc(*"mp4v"),fps,(geometry.plane_width,geometry.height))
                     writers["baseline_video"].write(legacy_canvas)
-                if lane_filter is not None:
+                if lane_filter is not None or early_provider is not None:
                     if "filtered_video" not in writers:
                         writers["filtered_video"]=cv2.VideoWriter(str(out/"filtered_video.mp4"),cv2.VideoWriter_fourcc(*"mp4v"),fps,(geometry.plane_width,geometry.height))
                         writers["side_video"]=cv2.VideoWriter(str(out/"side_by_side.mp4"),cv2.VideoWriter_fourcc(*"mp4v"),fps,(geometry.plane_width*2,geometry.height))
@@ -129,7 +182,7 @@ def main():
                     writers["debug_video"].write(overlay)
                 process_elapsed=(time.perf_counter()-loop_start)*1000
                 render_encode_ms=max(0.,process_elapsed-seg_ms-old_ms-norm_ms-rect_ms)
-                role_names="|".join(sorted({o.role for o in observations}))
+                role_names="|".join(sorted({getattr(o,"role",("unknown" if getattr(o,"kind","")=="plate_fragment" else getattr(o,"kind","unknown"))) for o in observations}))
                 sw.writerow({"video_frame":decoded,"source_frame":source_frame,"capture_timestamp":captured,"acquired_timestamp":acquired,
                     "focused":focused,"roi_valid":roi_valid,"detection_count":len(observations),"roles":role_names,
                     "pixel_area":pixel_area,"normalize_ms":f"{norm_ms:.3f}","rectify_ms":f"{rect_ms:.3f}",
@@ -153,6 +206,8 @@ def main():
         "missing_index_rows":missing_index,"partial":args.limit_frames is not None and decoded>=args.limit_frames,
         "preview_fps_only":fps,"timestamps_from_index":True,"geometry_status":geometry.status,
         "geometry_sha256":geometry.sha256,"segmentation_source":"current rectified frame pixels only",
+        "birth_zone_end_y":args.birth_zone_end_y if early_provider else None,
+        "birth_zone_source":early_provider.birth_zone_source if early_provider else None,
         "legacy_detections_used_for_candidate_masks":False,"role_observation_counts":role_counts,
         "mask_channel_pixel_counts":channel_pixels,
         "segmentation_wall_ms_mean":float(np.mean(processing_ms)) if processing_ms else None,

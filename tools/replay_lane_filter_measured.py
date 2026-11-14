@@ -38,10 +38,10 @@ def indexed_frames(run_dir,limit=None):
     finally:cap.release()
 
 
-def simulate_provider(run_dir,provider,arm_window,limit=None):
+def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=None):
     index=read_index(run_dir/"live_video_index.csv")
     geometry=Geometry(ROOT/"config/geometry_live_assist.json")
-    state=make_state(provider,Geometry(geometry.path),ROOT/"config/reference_timing.json",0.)
+    state=make_state(provider,Geometry(geometry.path),ROOT/"config/reference_timing.json",0.,birth_zone_end_y=birth_zone_end_y)
     iterator=iter(indexed_frames(run_dir,limit));current=next(iterator,None);pending_future=None
     if current is None:return state,{"decoded_frames":0,"processed_frames":0,"dropped_frames":0}
     first_acquired=float(current[2]["acquired_timestamp"])
@@ -128,18 +128,19 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--run-dir",type=Path,required=True)
     ap.add_argument("--out",type=Path,default=ROOT/"output/analysis_lane_filter_v84_rework/measured_realtime")
-    ap.add_argument("--mode",choices=("compare","baseline","segmented"),default="compare")
+    ap.add_argument("--mode",choices=("compare","baseline","segmented","v85"),default="compare")
     ap.add_argument("--simulated-arm-window",type=float,nargs=2,metavar=("START_S","END_S"),default=None)
     ap.add_argument("--reference-tolerance-ms",type=float,default=80.)
     ap.add_argument("--limit-frames",type=int)
+    ap.add_argument("--birth-zone-end-y",type=float,default=None)
     args=ap.parse_args();run_dir=args.run_dir.resolve();out=args.out.resolve()/run_dir.name;out.mkdir(parents=True,exist_ok=True)
-    providers=("legacy","segmented") if args.mode=="compare" else (args.mode,)
+    providers=("legacy","segmented","v85") if args.mode=="compare" else (args.mode,)
     reference=[];ref_path=run_dir/"player_key_events.csv"
     if ref_path.exists():
         with ref_path.open(encoding="utf-8-sig",newline="") as f:reference=list(csv.DictReader(f))
     summaries=[];actions=[];decisions=[];profiles=[];aggregates=[];admission=[]
     for provider in providers:
-        state,counts=simulate_provider(run_dir,provider,args.simulated_arm_window,args.limit_frames)
+        state,counts=simulate_provider(run_dir,provider,args.simulated_arm_window,args.limit_frames,args.birth_zone_end_y)
         summaries.extend({"provider":provider,**r} for r in state["summary"])
         actions.extend(state["actions"]);decisions.extend(state["decisions"])
         profiles.extend({"provider":provider,**r} for r in state["profile"])
@@ -160,6 +161,7 @@ def main():
         "capture_acquired_timestamps_shared_source":True,"processing_clock":"measured observe+decide wall time; scheduler polling simulated separately",
         "frame_admission":"latest acquired frame replaces pending frame while inference is busy",
         "dropped_frame_counts_are_provider_specific":True,"decode_io_excluded_from_processing_cost":True,
+        "v85_birth_zone_end_y":args.birth_zone_end_y,
         "video_encoding_included":False,"actuator":"in-memory MockActuator","OS_keyboard_injection":False,
         "future_frames_or_human_keys_in_decision_input":False,"geometry_config_sha256":Geometry(ROOT/"config/geometry_live_assist.json").sha256,
         "timing_calibration_sha256":__import__("hashlib").sha256((ROOT/"config/reference_timing.json").read_bytes()).hexdigest(),

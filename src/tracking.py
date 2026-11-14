@@ -5,7 +5,7 @@ from dataclasses import dataclass,field,replace
 import math
 from statistics import median
 import numpy as np
-from .model import Note
+from .model import BirthIdentity, Note
 from .perception import intervals
 
 
@@ -28,12 +28,49 @@ class Cap:
 
 
 class Tracker:
+    # A track with no sufficiently cheap hard-gated edge is deliberately left
+    # unmatched. This preserves the possibility of a real new physical note.
+    UNMATCHED_ASSOCIATION_COST = 1.65
+
     def __init__(self,geometry):
         self.geometry=geometry;self.next_id=1;self.caps={};self.notes={};self.retired=deque(maxlen=128)
         self.last_timestamp=float('-inf');self.audit=[]
 
     def reset(self):
         self.caps.clear();self.notes.clear();self.last_timestamp=float('-inf')
+
+    @staticmethod
+    def _global_assignment(cost_matrix):
+        """Rectangular Hungarian assignment (rows <= cols), pure NumPy/Python.
+
+        Callers append one private unmatched column per row. Consequently every
+        old cap may remain unmatched while each real detection is consumed at
+        most once. Infinite/forbidden edges are represented by a large cost.
+        """
+        n=len(cost_matrix)
+        if not n:return {}
+        m=len(cost_matrix[0])
+        if m<n or any(len(row)!=m for row in cost_matrix):
+            raise ValueError('assignment matrix must be rectangular with rows <= columns')
+        u=[0.]*(n+1);v=[0.]*(m+1);p=[0]*(m+1);way=[0]*(m+1)
+        for i in range(1,n+1):
+            p[0]=i;j0=0;minv=[float('inf')]*(m+1);used=[False]*(m+1)
+            while True:
+                used[j0]=True;i0=p[j0];delta=float('inf');j1=0
+                for j in range(1,m+1):
+                    if used[j]:continue
+                    cur=float(cost_matrix[i0-1][j-1])-u[i0]-v[j]
+                    if cur<minv[j]:minv[j]=cur;way[j]=j0
+                    if minv[j]<delta:delta=minv[j];j1=j
+                if not math.isfinite(delta):break
+                for j in range(m+1):
+                    if used[j]:u[p[j]]+=delta;v[j]-=delta
+                    else:minv[j]-=delta
+                j0=j1
+                if p[j0]==0:break
+            while j0:
+                j1=way[j0];p[j0]=p[j1];j0=j1
+        return {p[j]-1:j-1 for j in range(1,m+1) if p[j]}
 
     def _complete_tap_in_effect(self,cap,c):
         """Keep an established Tap face when yellow judgment light looks like ribbon.
@@ -78,7 +115,7 @@ class Tracker:
         if not math.isfinite(timestamp) or timestamp<=self.last_timestamp:
             raise ValueError('Tracker requires strictly increasing real capture timestamps')
         self.last_timestamp=timestamp;self.audit=[]
-        current=list(detections);offers=[]
+        current=list(detections);offers={}
         active_tails={n.tail_uid for n in self.notes.values() if n.state in ('HELD','SCHEDULED')}
         live={uid:c for uid,c in self.caps.items() if timestamp-c.samples[-1][0]<=.24}
         for uid,cap in live.items():
@@ -133,17 +170,48 @@ class Tracker:
                 error=abs(cy-predicted);iou=overlap((lo,hi),c.span)
                 center_gap=abs((lo+hi)/2-sum(c.span)/2)
                 if error>gate or center_gap>.28 or (iou<.1 and center_gap>.12):continue
-                cost=error/gate+.8*(1-min(iou,1))+.8*center_gap
-                offers.append((cost,uid,j))
+                semantic_penalty=.18*(1.-min(1.,max(0.,c.face_quality))) if c.evidence else 0.
+                cost=error/gate+.8*(1-min(iou,1))+.8*center_gap+semantic_penalty
+                offers[(uid,j)]=cost
+        cap_ids=list(live)
+        unmatched=self.UNMATCHED_ASSOCIATION_COST
+        forbidden=1e6
+        ambiguous_detections=set();ambiguous_notes=set()
+        for j in range(len(current)):
+            competitors=sorted((offers[(uid,j)],uid) for uid in cap_ids
+                               if (uid,j) in offers and offers[(uid,j)]<unmatched)
+            if len(competitors)>=2 and competitors[1][0]-competitors[0][0]<=.12:
+                ambiguous_detections.add(j)
+                ambiguous_notes.update(self.caps[uid].note_uid for _,uid in competitors
+                                       if self.caps[uid].note_uid in self.notes)
+        matrix=[]
+        for i,uid in enumerate(cap_ids):
+            row=[(forbidden if j in ambiguous_detections else offers.get((uid,j),forbidden))
+                 for j in range(len(current))]
+            row.extend(unmatched+(0.000001*abs(i-k)) for k in range(len(cap_ids)))
+            matrix.append(row)
+        picked=self._global_assignment(matrix)
         assigned={};used=set()
-        for cost,uid,j in sorted(offers):
-            if uid in assigned or j in used:continue
-            assigned[uid]=j;used.add(j)
+        for i,j in picked.items():
+            if j>=len(current) or matrix[i][j]>=unmatched:continue
+            uid=cap_ids[i];assigned[uid]=j;used.add(j)
+        # An unassigned observation near multiple established tracks is an
+        # association ambiguity, not proof of a newly born physical object.
+        for j,c in enumerate(current):
+            if j in used:continue
+            competitors=[uid for uid in cap_ids if (uid,j) in offers and offers[(uid,j)]<unmatched]
+            if competitors:
+                ambiguous_detections.add(j)
+                ambiguous_notes.update(self.caps[uid].note_uid for uid in competitors
+                                       if self.caps[uid].note_uid in self.notes)
+        observed_notes=set()
         for uid,j in assigned.items():
+            cap=live[uid]
+            if cap.note_uid:observed_notes.add(cap.note_uid)
             self._observe(live[uid],current[j],timestamp)
         recovered=[current[j] for j in assigned.values() if current[j].recovery_only]
         for j,c in enumerate(current):
-            if j in used or c.kind in ('body','ambiguous'):continue
+            if j in used or j in ambiguous_detections or c.kind in ('body','ambiguous'):continue
             if c.recovery_only:continue
             x,y,w,h=c.bbox
             if any(c.color==r.color and
@@ -152,6 +220,27 @@ class Tracker:
             uid=f'cap:{self.next_id}';self.next_id+=1
             cap=Cap(uid,c);self.caps[uid]=cap;self._observe(cap,c,timestamp)
         for uid,note in list(self.notes.items()):
+            if note.last_seen==timestamp:
+                note.visibility_state=('CONFIRMED_VISIBLE' if note.confirmed else 'CANDIDATE')
+                note.visibility_reason='current_real_observation'
+                note.occluded_since=None
+            elif note.confirmed:
+                age=timestamp-note.last_seen
+                if uid in ambiguous_notes:
+                    note.visibility_state='AMBIGUOUS_ASSOCIATION'
+                    note.visibility_reason='multiple_hard_gated_tracks_compete_for_observation'
+                    if note.occluded_since is None:note.occluded_since=timestamp
+                elif age<=.14:
+                    note.visibility_state='CONFIRMED_OCCLUDED'
+                    note.visibility_reason='no_current_observation_within_short_occlusion_window'
+                    if note.occluded_since is None:note.occluded_since=timestamp
+                else:
+                    note.visibility_state='AMBIGUOUS_ASSOCIATION'
+                    note.visibility_reason='observation_gap_exceeded_short_occlusion_window'
+                    if note.occluded_since is None:note.occluded_since=timestamp
+            else:
+                note.visibility_state='CANDIDATE'
+                note.visibility_reason='awaiting_motion_and_semantic_confirmation'
             if timestamp-note.last_seen>.04:note.missed+=1
             expired=(timestamp-note.last_seen>(9.5 if note.kind=='hold' else .45))
             if expired and note.state not in ('HELD','SCHEDULED'):
@@ -187,7 +276,7 @@ class Tracker:
         y=c.bbox[1] if is_tail else c.bbox[1]+c.bbox[3]
         cap.samples.append((t,float(y),*c.span))
         if is_tail:return
-        if not cap.note_uid and c.kind not in ('tap','hold_head','plate_fragment'):return
+        if not cap.note_uid and c.kind not in ('tap','hold_head','plate_fragment') and c.semantic_candidate not in ('tap','hold','pending'):return
         # A newly visible lower-track yellow bevel is not a physical note
         # head. Keep its cap available for association, but do not give that
         # thin fragment an early origin from which a later piece can confirm
@@ -198,9 +287,25 @@ class Tracker:
             cap.note_uid=f'note:{cap.uid.split(":")[-1]}'
             # Yellow has both Tap and Hold appearances. A weak first bevel
             # observation cannot latch the whole lifetime into Hold.
-            self.notes[cap.note_uid]=Note(cap.note_uid,'hold' if c.kind=='hold_head' and c.color!='yellow' else 'tap',c.color,c)
+            initial_kind=('pending' if c.semantic_candidate=='pending' else
+                          'hold' if c.kind=='hold_head' or c.semantic_candidate=='hold' else 'tap')
+            birth=BirthIdentity(float(t),tuple(map(int,c.bbox)),tuple(map(float,c.span)),c.color,
+                c.semantic_candidate or c.kind,tuple(c.evidence) or ('real_detector_observation',),
+                float(c.face_quality),bool(c.full_face),bool(c.birth_zone))
+            self.notes[cap.note_uid]=Note(cap.note_uid,initial_kind,c.color,c,birth_info=birth)
         note=self.notes.get(cap.note_uid)
         if note is None:return
+        if note.birth_info is None:
+            note.birth_info=BirthIdentity(float(t),tuple(map(int,c.bbox)),tuple(map(float,c.span)),c.color,
+                c.semantic_candidate or c.kind,tuple(c.evidence) or ('real_detector_observation',),
+                float(c.face_quality),bool(c.full_face),bool(c.birth_zone))
+        for evidence in c.evidence:
+            if evidence not in note.semantic_evidence:note.semantic_evidence.append(evidence)
+        if c.full_face or (not c.evidence and c.kind=='tap' and c.bbox[3]>=8):
+            note.last_verified_full_face_at=t
+        note.visibility_state=('CONFIRMED_VISIBLE' if note.confirmed else 'CANDIDATE')
+        note.visibility_reason='current_real_observation'
+        note.occluded_since=None
         if note.origin_y is None:note.origin_y=float(y)
         note.detection=c;note.head.append((t,float(y),*c.span));note.observations+=1;note.missed=0
         if c.kind=='tap' and c.bbox[3]>=8:note.last_full_tap_at=t
@@ -211,13 +316,29 @@ class Tracker:
         if (evidence_kind=='hold_head' and c.bbox[3]>=minimum_face and early_yellow and
                 not (note.kind_locked and note.kind=='tap')):
             note.full_head_observations+=1;note.last_full_head_at=t
-        if not note.kind_locked and not c.recovery_only and note.state not in ('SCHEDULED','HELD','PRESSED','DONE'):
+        if note.kind=='pending' and c.semantic_candidate in ('tap','hold') and c.full_face:
+            vote='candidate_'+c.semantic_candidate
+            cap.votes[vote]=cap.votes.get(vote,0)+1
+            if cap.votes[vote]>=2:
+                note.kind=c.semantic_candidate
+                note.kind_locked=True
+                note.semantic_evidence.append('repeated_full_face_semantic_confirmation')
+        if note.kind=='pending' and c.connected_ribbon and c.kind=='hold_head':
+            cap.votes['candidate_hold']=cap.votes.get('candidate_hold',0)+1
+            if cap.votes['candidate_hold']>=2:
+                note.kind='hold';note.kind_locked=True
+                note.semantic_evidence.append('repeated_current_frame_head_ribbon_connection')
+        if not note.kind_locked and note.kind!='pending' and not c.recovery_only and note.state not in ('SCHEDULED','HELD','PRESSED','DONE'):
             if note.color=='yellow' and note.full_head_observations>=2:note.kind='hold'
             elif note.tap_marker:note.kind='tap'
             elif note.color=='green' and cap.votes.get('hold_head',0)>=2:note.kind='hold'
         points=list(note.head)
         span=max(p[1] for p in points)-min(p[1] for p in points)
-        note.confirmed=bool(note.confirmed or (len(points)>=3 and points[-1][0]-points[0][0]>=.045 and span>=5 and
+        repeated_face=("v85_early_provider" in c.evidence and c.full_face and
+            ((note.kind=='tap' and cap.votes.get('tap',0)>=2) or
+             (note.kind=='hold' and c.connected_ribbon and note.full_head_observations>=2)))
+        enough_observations=(len(points)>=3 or (len(points)>=2 and repeated_face))
+        note.confirmed=bool(note.confirmed or (enough_observations and points[-1][0]-points[0][0]>=.045 and span>=5 and
                         note.origin_y<=self.geometry.hit_y-45 and
                         np.mean(np.diff([p[1] for p in points])>=-2)>=.8))
         # Lock only after repeated real face evidence in the existing clean

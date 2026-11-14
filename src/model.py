@@ -83,6 +83,14 @@ class Detection:
     plane_width: int = 360
     tap_marker: bool = False
     recovery_only: bool = False
+    # Provenance for pixel-derived/early observations. Empty defaults preserve
+    # the legacy detector interface and never manufacture visual evidence.
+    evidence: tuple[str, ...] = ()
+    semantic_candidate: str = ''  # tap | hold | pending; hint only, not authority
+    face_quality: float = 0.0
+    full_face: bool = False
+    connected_ribbon: bool = False
+    birth_zone: bool = False
 
     @property
     def y(self):return self.bbox[1]+self.bbox[3]/2
@@ -121,6 +129,27 @@ class Note:
     tap_marker: bool = False
     tap_marker_observations: int = 0
     last_tap_marker_at: float = float('-inf')
+    birth_info: 'BirthIdentity | None' = None
+    identity_state: str = 'CANDIDATE'
+    visibility_state: str = 'CANDIDATE'
+    visibility_reason: str = 'first_real_observation'
+    occluded_since: float | None = None
+    last_verified_full_face_at: float = float('-inf')
+    semantic_evidence: list[str] = field(default_factory=list)
 
     @property
     def last_seen(self):return self.head[-1][0] if self.head else float('-inf')
+
+
+@dataclass(frozen=True)
+class BirthIdentity:
+    """Immutable first-pixel identity; predictions never update this record."""
+    captured_at: float
+    bbox: tuple[int, int, int, int]
+    lane_span: tuple[float, float]
+    color: str
+    type_hint: str
+    evidence: tuple[str, ...]
+    face_quality: float
+    full_face: bool
+    birth_zone: bool
