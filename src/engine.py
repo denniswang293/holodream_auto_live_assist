@@ -370,19 +370,30 @@ class Engine:
         self.last_capture=frame.captured_at;self.frame_count+=1
         self.scheduler.begin_frame(frame.captured_at,frame.focused,frame.roi_valid)
         started=time.perf_counter()
+        profile={}
+        stage=time.perf_counter()
         image=self.geometry.normalize(frame.image)
+        profile['normalize_ms']=(time.perf_counter()-stage)*1000
+        stage=time.perf_counter()
         playing=self.gate.update(image) if frame.focused and frame.roi_valid else False
+        profile['game_gate_ms']=(time.perf_counter()-stage)*1000
         if playing:
             self.absent_since=None;self.reset_done=False
+            stage=time.perf_counter()
             ds=self.perception.detect(image)
+            profile['perception_ms']=(time.perf_counter()-stage)*1000
+            stage=time.perf_counter()
             notes=self.tracker.update(ds,frame.captured_at,self.perception.last_labels,self.perception.last_path)
+            profile['tracker_association_ms']=(time.perf_counter()-stage)*1000
         else:
             if self.absent_since is None:self.absent_since=frame.captured_at
             if not self.reset_done and frame.captured_at-self.absent_since>=.3:
                 self.tracker.reset();self.reset_done=True
             notes=list(self.tracker.notes.values());ds=[]
+            profile['perception_ms']=0.;profile['tracker_association_ms']=0.
+        provider_profile=getattr(self.perception,'last_profile',{})
         return dict(frame=frame,image=image,playing=playing,notes=notes,detections=ds,
-                    cpu_ms=(time.perf_counter()-started)*1000)
+                    cpu_ms=(time.perf_counter()-started)*1000,profile={**profile,**provider_profile})
 
     def decide(self,observation,processed_at=None):
         s=self.scheduler;frame=observation['frame']
@@ -408,6 +419,7 @@ class Engine:
                      state=n.state,reason=n.reason,crossing_at='',press_at='',release_at='',uncertainty='',
                      detection_kind=n.detection.kind,detection_color=n.detection.color,
                      detection_component=n.detection.component,origin_y=n.origin_y,
+                     confirmed=n.confirmed,
                      full_head_observations=n.full_head_observations,
                      last_full_tap_at=n.last_full_tap_at if math.isfinite(n.last_full_tap_at) else None)
             cap=self.tracker.caps.get(n.tail_uid)

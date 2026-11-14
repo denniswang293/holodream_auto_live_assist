@@ -1,33 +1,45 @@
+import cv2
 import numpy as np
+import pytest
 
-from src.lane_filter import LaneFilter
-from src.model import Detection, Geometry
+from src.lane_filter import LaneFilter, PREVIEW_COLORS
+from src.model import Geometry
 
 
-def test_observations_use_current_source_provenance_and_no_action_inputs(monkeypatch):
+def hsv(h, s=220, v=230):
+    return tuple(int(x) for x in cv2.cvtColor(np.uint8([[[h, s, v]]]), cv2.COLOR_HSV2BGR)[0, 0])
+
+
+def test_filter_returns_provenance_and_pixels_not_filled_detection_boxes():
     geometry = Geometry()
+    image = np.zeros((geometry.height, 720, 3), np.uint8)
+    image[40:390, 180:540] = hsv(98, 90, 85)
+    green = hsv(62)
+    curve = np.array([[354, 100], [360, 130], [372, 150], [385, 166], [390, 185]], np.int32)
+    cv2.polylines(image, [curve], False, green, 6)
+    cv2.rectangle(image, (382, 181), (412, 190), green, -1)
+
     lane_filter = LaneFilter(geometry)
-    monkeypatch.setattr(lane_filter.perception, "detect", lambda _: [
-        Detection((20, 100, 40, 12), "cyan", "tap", ("S",), .8,
-                  plane_width=geometry.plane_width)])
-    image = np.zeros((404, 720, 3), np.uint8)
-    obs, masks, _ = lane_filter.process(image, run_id="r", source_frame=3,
-        video_frame=2, captured_at=1.0, acquired_at=1.01)
-    assert len(obs) == 1
-    assert (obs[0].run_id, obs[0].source_frame, obs[0].video_frame) == ("r", 3, 2)
-    assert (obs[0].captured_at, obs[0].acquired_at) == (1.0, 1.01)
-    assert obs[0].role == "TAP_FACE" and obs[0].fresh_observation
-    assert np.count_nonzero(masks["tap_face"]) > 0
-    assert not np.count_nonzero(masks["hold_head"])
+    observations, masks, preview, rectified, result = lane_filter.process(
+        image, run_id="synthetic", source_frame=51, video_frame=50,
+        captured_at=10.0, acquired_at=10.006)
+    assert any(o.role == "HOLD_BODY" for o in observations)
+    assert any(o.role == "HOLD_HEAD" for o in observations)
+    assert all(o.source_frame == 51 and o.video_frame == 50 for o in observations)
+    assert all(o.captured_at == 10.0 and o.acquired_at == 10.006 for o in observations)
+    body = masks["hold_body"] > 0
+    observed_hsv = cv2.cvtColor(rectified, cv2.COLOR_BGR2HSV)
+    source_green = (observed_hsv[:, :, 0] >= 38) & (observed_hsv[:, :, 0] <= 83) & (observed_hsv[:, :, 1] >= 55)
+    assert np.count_nonzero(body) > 100
+    assert np.all(body <= source_green)
+    expected = np.asarray(PREVIEW_COLORS["HOLD_BODY"], np.uint8)
+    assert np.count_nonzero(np.all(preview == expected, axis=2)) > 0
+    assert not hasattr(lane_filter, "perception")
+    assert result.frame_index == 50
 
 
-def test_capture_order_is_validated_before_perception(monkeypatch):
+def test_filter_rejects_future_acquisition_clock():
     lane_filter = LaneFilter(Geometry())
-    monkeypatch.setattr(lane_filter.perception, "detect", lambda _: (_ for _ in ()).throw(AssertionError()))
-    try:
+    with pytest.raises(ValueError, match="timestamps"):
         lane_filter.process(np.zeros((404, 720, 3), np.uint8), run_id="r",
             source_frame=1, video_frame=1, captured_at=2.0, acquired_at=1.0)
-    except ValueError as exc:
-        assert "acquired_at" in str(exc)
-    else:
-        raise AssertionError("reversed capture/acquired timestamps must be rejected")

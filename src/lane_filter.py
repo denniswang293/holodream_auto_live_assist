@@ -1,29 +1,26 @@
-"""Causal, reviewable semantic observations for offline lane-filter experiments.
-
-This module adapts current V8.3 detections into an auditable format. It is not
-an independently validated replacement detector and is deliberately not wired
-into the live engine.
-"""
+"""Pixel-backed semantic lane observations for offline V8.4 experiments."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from time import perf_counter
 from typing import Any
 
 import cv2
 import numpy as np
 
-from .model import Detection, Geometry
-from .perception import Perception
+from .lane_segmentation import LanePixelSegmenter, SegmentationResult
+from .model import Geometry, KEYS
 
-
-CHANNELS = ("lane", "tap_face", "hold_head", "hold_body", "hold_tail",
-            "judgment_line", "effect_or_artifact", "unknown")
-ROLE_COLORS = {
-    "TAP_FACE": (40, 220, 80), "HOLD_HEAD": (0, 220, 255),
-    "HOLD_BODY": (220, 120, 30), "HOLD_TAIL": (220, 40, 220),
-    "FRAGMENT": (120, 160, 200), "EFFECT": (90, 90, 220),
-    "UNKNOWN": (180, 180, 180),
+MASK_CHANNELS = ("lane", "tap_face", "hold_head", "hold_body", "hold_tail",
+                 "effect_or_artifact", "unknown", "judgment_line")
+PREVIEW_COLORS = {
+    "TAP_FACE": (40, 220, 70), "HOLD_HEAD": (0, 220, 255),
+    "HOLD_BODY": (255, 120, 20), "HOLD_TAIL": (220, 40, 220),
+    "EFFECT": (40, 80, 255), "UNKNOWN": (170, 170, 170),
 }
+ROLE_MASK = {"TAP_FACE": "tap_face", "HOLD_HEAD": "hold_head",
+             "HOLD_BODY": "hold_body", "HOLD_TAIL": "hold_tail",
+             "EFFECT": "effect_or_artifact", "UNKNOWN": "unknown"}
 
 
 @dataclass(frozen=True)
@@ -34,6 +31,7 @@ class LaneObservation:
     captured_at: float
     acquired_at: float
     bbox_rectified: tuple[int, int, int, int]
+    polygon_rectified: tuple[tuple[int, int], ...]
     lane_span: tuple[float, float]
     candidate_keys: tuple[str, ...]
     role: str
@@ -42,102 +40,113 @@ class LaneObservation:
     motion_evidence: str
     connection_evidence: str
     confidence_basis: str
+    status: str
     fresh_observation: bool
     component_id: int
     candidate_id: str
+    pixel_area: int
     mask_ref: str
     reason_codes: tuple[str, ...]
     positive_evidence: tuple[str, ...]
     negative_evidence: tuple[str, ...]
+    ambiguity: tuple[str, ...]
 
     def csv_row(self) -> dict[str, Any]:
         row = asdict(self)
-        for k, v in list(row.items()):
-            if isinstance(v, (tuple, list)):
-                row[k] = "|".join(map(str, v))
+        for key, value in row.items():
+            if isinstance(value, (tuple, list)):
+                row[key] = "|".join(map(str, value))
         return row
 
 
-def role_for(d: Detection) -> str:
-    return {"tap": "TAP_FACE", "hold_head": "HOLD_HEAD", "body": "HOLD_BODY",
-            "hold_tail": "HOLD_TAIL", "plate_fragment": "FRAGMENT",
-            "ambiguous": "UNKNOWN"}.get(d.kind, "UNKNOWN")
-
-
 class LaneFilter:
-    """Per-frame adapter with strictly past-only motion association."""
+    """Runs independent current-frame pixel segmentation, never legacy boxes."""
 
-    def __init__(self, geometry: Geometry):
+    def __init__(self, geometry: Geometry, segmenter: LanePixelSegmenter | None = None):
         self.geometry = geometry
-        self.perception = Perception(geometry)
-        self._past: list[tuple[float, Detection]] = []
-        self._counter = 0
+        self.segmenter = segmenter or LanePixelSegmenter()
+        self._past: list[tuple[float, tuple[int, int, int, int], str, str]] = []
+
+    def segment_rectified(self, rectified: np.ndarray, *, frame_index: int | None = None) -> SegmentationResult:
+        return self.segmenter.segment(rectified, self.geometry, frame_index=frame_index)
 
     def process(self, image: np.ndarray, *, run_id: str, source_frame: int,
                 video_frame: int, captured_at: float, acquired_at: float
-                ) -> tuple[list[LaneObservation], dict[str, np.ndarray], np.ndarray]:
-        if acquired_at < captured_at:
-            raise ValueError("acquired_at must be >= captured_at")
+                ) -> tuple[list[LaneObservation], dict[str, np.ndarray], np.ndarray, np.ndarray, SegmentationResult]:
         normalized = self.geometry.normalize(image)
-        rect = self.geometry.rectify(normalized)
-        detections = self.perception.detect(normalized)
-        masks = {name: np.zeros(rect.shape[:2], np.uint8) for name in CHANNELS}
-        masks["lane"][:] = 255
-        y = int(round(self.geometry.hit_y))
-        cv2.line(masks["judgment_line"], (0, y), (self.geometry.plane_width - 1, y), 255, 2)
-        canvas = np.zeros_like(rect)
-        # Boundary lines document the configured lanes; no game background is retained.
-        for row_y in (int(self.geometry.top_y), int(self.geometry.hit_y)):
-            boundaries = self.geometry.boundaries(row_y)
-            for x in boundaries:
-                cv2.line(canvas, (int(round(x / self.geometry.width * self.geometry.plane_width)),
-                                  int(row_y)),
-                         (int(round(x / self.geometry.width * self.geometry.plane_width)),
-                          int(row_y)), (100, 100, 100), 1)
+        rectified = self.geometry.rectify(normalized)
+        return self.process_rectified(rectified, run_id=run_id, source_frame=source_frame,
+            video_frame=video_frame, captured_at=captured_at, acquired_at=acquired_at)
+
+    def process_rectified(self, rectified: np.ndarray, *, run_id: str, source_frame: int,
+                video_frame: int, captured_at: float, acquired_at: float
+                ) -> tuple[list[LaneObservation], dict[str, np.ndarray], np.ndarray, np.ndarray, SegmentationResult]:
+        """Process a caller's already normalized/rectified frame exactly once."""
+        if not np.isfinite(captured_at) or not np.isfinite(acquired_at) or acquired_at < captured_at:
+            raise ValueError("capture/acquired timestamps must be finite and ordered")
+        segment_start=perf_counter()
+        result = self.segment_rectified(rectified, frame_index=video_frame)
+        segment_ms=(perf_counter()-segment_start)*1000
         observations: list[LaneObservation] = []
-        current: list[tuple[float, Detection]] = []
-        for d in detections:
-            role = role_for(d)
-            self._counter += 1
-            x, yy, w, h = d.bbox
-            x0, y0 = max(0, x), max(0, yy)
-            x1, y1 = min(rect.shape[1], x + w), min(rect.shape[0], yy + h)
-            if x1 <= x0 or y1 <= y0:
-                continue
-            mask_name = {"TAP_FACE": "tap_face", "HOLD_HEAD": "hold_head",
-                         "HOLD_BODY": "hold_body", "HOLD_TAIL": "hold_tail"}.get(role)
-            if mask_name:
-                masks[mask_name][y0:y1, x0:x1] = 255
-            else:
-                masks["unknown"][y0:y1, x0:x1] = 255
-            motion = "no_prior_match"
-            prior = [p for t, p in self._past if 0 < captured_at - t <= .25
-                     and p.kind == d.kind and p.keys == d.keys and p.color == d.color]
+        lane_width = self.geometry.lane_pixels
+        conversion_start=perf_counter()
+        for component in result.components:
+            role = {"tap_face": "TAP_FACE", "hold_head": "HOLD_HEAD", "hold_body": "HOLD_BODY",
+                    "hold_tail": "HOLD_TAIL", "effect_or_artifact": "EFFECT"}.get(component.role, "UNKNOWN")
+            x, y, width, height = component.bbox
+            span = (x / self.geometry.plane_width, (x + width) / self.geometry.plane_width)
+            keys = tuple(key for index, key in enumerate(KEYS)
+                         if min(x + width, (index + 1) * lane_width) - max(x, index * lane_width) >= 4)
+            prior = [(t, box) for t, box, old_role, old_color in self._past
+                     if old_role == role and old_color == component.color and
+                     0 < captured_at - t <= .25 and
+                     min(x + width, box[0] + box[2]) > max(x, box[0])]
+            motion = "no_prior_component_match"
             if prior:
-                nearest = min(prior, key=lambda p: abs(p.y - d.y))
-                dt = captured_at - max(t for t, p in self._past if p is nearest)
-                dy = d.y - nearest.y
-                motion = "past_same_direction_down" if dy > 0 and dt > 0 else "past_non_down_or_static"
-            positive = ["legacy_panel_or_ribbon_detector", "six_lane_geometry_overlap"]
-            negative = []
-            if d.kind in ("ambiguous", "plate_fragment"):
-                negative.append("incomplete_or_ambiguous_panel_evidence")
-            if motion != "past_same_direction_down":
-                negative.append("causal_motion_not_yet_confirmed")
-            if d.kind in ("hold_head", "body", "hold_tail"):
-                connection = f"same_frame_ribbon_depth_above={d.above:.1f},below={d.below:.1f}px"
-                positive.append("local_ribbon_depth")
-            else:
-                connection = "not_established"
+                t, box = min(prior, key=lambda pair: abs((pair[1][1] + pair[1][3] / 2) - (y + height / 2)))
+                dy = (y + height / 2) - (box[1] + box[3] / 2)
+                motion = "past_same_role_downward" if dy > 0 else "past_same_role_static_or_upward"
+            link = ("observed_connected_ribbon_endpoint" if role in ("HOLD_HEAD", "HOLD_TAIL")
+                    else "same_frame_connected_region" if role == "HOLD_BODY" else "not_established")
+            channel = ROLE_MASK.get(role, "unknown")
+            reasons = list(component.ambiguity)
+            if role == "UNKNOWN":
+                reasons.extend(component.negative or ("semantic_role_not_confirmed",))
             observations.append(LaneObservation(
                 run_id, int(source_frame), int(video_frame), float(captured_at), float(acquired_at),
-                tuple(map(int, d.bbox)), tuple(map(float, d.span)), tuple(d.keys), role,
-                f"hsv_class={d.color}", f"legacy_kind={d.kind};box={w}x{h};detector_score={d.score:.3f}",
-                motion, connection, "measured_geometry+legacy_shape/color; score is not probability",
-                True, int(d.component), f"obs-{video_frame}-{self._counter}",
-                mask_name or "unknown", tuple(["legacy_perception_adapter"]), tuple(positive), tuple(negative)))
-            cv2.rectangle(canvas, (x0, y0), (x1 - 1, y1 - 1), ROLE_COLORS.get(role, ROLE_COLORS["UNKNOWN"]), -1)
-            current.append((captured_at, d))
-        # Preserve only bounded history. No future frames, labels, or key events enter this path.
-        self._past = (self._past + current)[-128:]
-        return observations, masks, canvas
+                tuple(map(int, component.bbox)), tuple(component.polygon), tuple(map(float, span)), keys,
+                role, component.color, f"bbox={width}x{height};observed_pixels={component.area}",
+                motion, link, "current-frame HSV pixels, connected-component area/shape; no probability score",
+                "OBSERVED" if component.role != "unknown" else "UNKNOWN",
+                True, int(component.component_id), f"obs-{video_frame}-{component.component_id}",
+                int(component.area), channel, tuple(sorted(set(reasons))), tuple(component.positive),
+                tuple(component.negative), tuple(component.ambiguity)))
+        association_start=perf_counter()
+        self._past = (self._past + [(captured_at, c.bbox,
+                                    {"tap_face": "TAP_FACE", "hold_head": "HOLD_HEAD",
+                                     "hold_body": "HOLD_BODY", "hold_tail": "HOLD_TAIL",
+                                     "effect_or_artifact": "EFFECT"}.get(c.role, "UNKNOWN"), c.color)
+                                   for c in result.components])[-256:]
+        temporal_ms=(perf_counter()-association_start)*1000
+        conversion_ms=max(0.,(perf_counter()-conversion_start)*1000-temporal_ms)
+        preview_start=perf_counter()
+        preview = np.zeros_like(rectified)
+        for role, mask_name in ROLE_MASK.items():
+            color = PREVIEW_COLORS[role]
+            preview[result.masks[mask_name] > 0] = color
+        # Geometry lines are visualization only. Semantic masks remain only
+        # source-supported pixels and never contain painted boxes.
+        for lane in range(7):
+            pts = []
+            for yy in np.linspace(self.geometry.top_y, self.geometry.hit_y, 24):
+                xx = self.geometry.boundaries(yy)[lane] * self.geometry.plane_width / self.geometry.width
+                pts.append((round(xx), round(yy)))
+            cv2.polylines(preview, [np.asarray(pts, np.int32)], False, (105, 105, 105), 1)
+        cv2.line(preview, (0, round(self.geometry.hit_y)),
+                 (self.geometry.plane_width - 1, round(self.geometry.hit_y)), (0, 230, 255), 2)
+        self.segmenter.last_profile={**getattr(self.segmenter,"last_profile",{}),
+            "segmentation_ms":segment_ms,"data_conversion_ms":conversion_ms,
+            "temporal_association_ms":temporal_ms,
+            "preview_render_ms":(perf_counter()-preview_start)*1000}
+        # Exact same rectified coordinate space for source and segmentation preview.
+        return observations, result.masks, preview, rectified, result
