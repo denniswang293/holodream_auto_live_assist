@@ -96,3 +96,15 @@ python tools/replay_lane_filter_measured.py --run-dir output/recording/run_20261
 ```
 
 候選影片與遮罩只保存像素結果；`review_queue.csv` 尚未由真人審核的標籤均為 UNKNOWN。80ms 人工按鍵鄰近度僅為事後輔助診斷，不是遊戲命中率或物理音符召回率。
+
+### V8.6 離線回歸流程
+
+V8.6 用於因果 Replay、逐動作損失歸因、來源 index 對齊的審核片段與效能摘要；不會切換 Live Perception，也不會送出 OS 按鍵。先用 `--dry-run` 檢查選中的 Run 和輸出命令：
+
+```powershell
+python tools/v86_autoloop.py --quick --dry-run
+python tools/v86_autoloop.py --full --dry-run
+python tools/v86_autoloop.py --quick
+```
+
+`--full` 會跑完整 fixed 14ms A/B、兩次 measured-time A/B、action attribution、所有完整本機 Run 的自動候選掃描與來源對齊片段；候選掃描可能耗時較長。詳細結果與未通過項目見 `docs/V86_AUTONOMOUS_RESULT.md`、`docs/V86_EVALUATION.md`。完整 replay 輸出集中於 `output/analysis_v86_autoloop/`；原始 Run 唯讀，模型候選及視覺審核佇列不能當作人工真值。

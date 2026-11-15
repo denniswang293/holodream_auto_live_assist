@@ -29,7 +29,7 @@ class Engine:
         self.perception=Perception(geometry);self.tracker=Tracker(geometry)
         self.timing=Timing(geometry,calibration);self.gate=GameGate()
         self.last_capture=float('-inf');self.absent_since=None;self.reset_done=False
-        self.decisions=[];self.frame_count=0
+        self.decisions=[];self.frame_count=0;self.profile_note_iterations=False
         self.hold_connections={}
 
     def _consolidate_tap_identity(self,frame):
@@ -396,8 +396,10 @@ class Engine:
                     cpu_ms=(time.perf_counter()-started)*1000,profile={**profile,**provider_profile})
 
     def decide(self,observation,processed_at=None):
+        decision_started=time.perf_counter();decision_profile={}
         s=self.scheduler;frame=observation['frame']
         now=s.clock() if processed_at is None else processed_at
+        stage_started=time.perf_counter()
         s.update_context(frame.captured_at,observation['playing'],frame.focused,frame.roi_valid)
         for uid,reason in s.drain_releases():
             note=self.tracker.notes.get(uid)
@@ -406,13 +408,27 @@ class Engine:
             if (not note.kind_locked and note.kind=='hold' and note.color=='yellow' and note.tap_marker_observations>=2 and
                     frame.captured_at-note.last_tap_marker_at<.06 and not note.tail_uid):
                 if s.correct_hold_to_tap(note.uid):note.kind='tap'
+        decision_profile['context_and_correction_ms']=(time.perf_counter()-stage_started)*1000
+        stage_started=time.perf_counter()
         self._consolidate_tap_identity(frame)
+        decision_profile['tap_identity_consolidation_ms']=(time.perf_counter()-stage_started)*1000
+        stage_started=time.perf_counter()
         self._recover_unreserved_hold_head(frame)
+        decision_profile['hold_head_recovery_ms']=(time.perf_counter()-stage_started)*1000
+        stage_started=time.perf_counter()
         self._consolidate_hold_fragments(frame)
+        decision_profile['hold_fragment_consolidation_ms']=(time.perf_counter()-stage_started)*1000
         observation['notes']=list(self.tracker.notes.values())
         snapshot=s.snapshot();held={a.uid:a for a in snapshot['held'].values()}
         self.decisions=[]
+        stage_started=time.perf_counter()
+        slowest_note_ms=0.;slowest_note_uid='';slowest_note_reason=''
+        slowest_note_sections=({name:{'ms':0.,'uid':'','reason':''} for name in
+                               ('row_build','action_logic','scheduler_snapshot','finalize')}
+                              if self.profile_note_iterations else None)
         for n in sorted(observation['notes'],key=lambda n:(-n.head[-1][1],n.uid)):
+            note_started=time.perf_counter() if self.profile_note_iterations else None
+            note_section_started=note_started
             if n.uid in snapshot['fired'] or n.uid in snapshot['consumed'] or n.state=='DONE':
                 n.identity_state='CONSUMED'
             elif n.uid in snapshot['pending'] or n.uid in held:
@@ -449,6 +465,11 @@ class Engine:
                        release_update_reason='',tail_detection_kind=cap.detection.kind if cap else None,
                        tail_detection_color=cap.detection.color if cap else None,
                        tail_terminal_owner=cap.terminal_owner_uid if cap else None)
+            if note_section_started is not None:
+                section_ms=(time.perf_counter()-note_section_started)*1000
+                if section_ms>slowest_note_sections['row_build']['ms']:
+                    slowest_note_sections['row_build']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
+                note_section_started=time.perf_counter()
             if n.uid in held and held[n.uid].kind=='tap':
                 n.state='PRESSED';n.reason='tap_in_progress'
             elif n.uid in held:
@@ -523,6 +544,7 @@ class Engine:
                     elif estimate.press_at-now>.30:n.reason='outside_commit_horizon'
                     else:
                         existing=snapshot['pending'].get(n.uid)
+                        ambiguous_key_coverage=False
                         if existing:keys=[existing.key]
                         else:
                             votes=Counter(key for point in list(n.head)[-8:] for i,key in enumerate(KEYS)
@@ -530,13 +552,23 @@ class Engine:
                             keys=[k for k in KEYS if votes[k]>=max(1,min(8,len(n.head))*.6)]
                             center=sum(n.detection.span)/2*6
                             keys.sort(key=lambda k:(abs(KEYS.index(k)+.5-center),KEYS.index(k)))
+                            if len(keys)>=2:
+                                first,second=keys[:2]
+                                first_distance=abs(KEYS.index(first)+.5-center)
+                                second_distance=abs(KEYS.index(second)+.5-center)
+                                ambiguous_key_coverage=(
+                                    votes[first]==votes[second] and
+                                    math.isclose(first_distance,second_distance,rel_tol=1e-9,abs_tol=1e-9))
+                                if ambiguous_key_coverage:keys=[]
                         end=None
                         if n.kind=='hold':
                             tail=self.timing.predict(n.tail,frame.captured_at,kind='tail')
                             if tail.reason=='ready':
                                 proposed=tail.crossing_at+tail.uncertainty+self.timing.release_guard
                                 if estimate.press_at+.04<proposed<=estimate.press_at+s.max_hold_s:end=proposed
-                        if not keys:n.reason='no_reliable_key_coverage'
+                        if not keys:
+                            n.reason=('ambiguous_key_coverage' if ambiguous_key_coverage
+                                      else 'no_reliable_key_coverage')
                         for key in keys:
                             press=estimate.press_at
                             if existing and n.kind=='hold' and n.aliases:
@@ -553,7 +585,18 @@ class Engine:
             row.update(state=n.state,reason=n.reason,key=n.key,crossing_at=n.crossing_at,
                        press_at=n.press_at,release_at=n.release_at,uncertainty=n.uncertainty,
                        tail_uid=n.tail_uid,tail_observations=len(n.tail),aliases='|'.join(n.aliases))
+            if note_section_started is not None:
+                section_ms=(time.perf_counter()-note_section_started)*1000
+                if section_ms>slowest_note_sections['action_logic']['ms']:
+                    slowest_note_sections['action_logic']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
+                note_section_started=time.perf_counter()
+            snapshot_started=time.perf_counter() if note_started is not None else None
             latest_snapshot=s.snapshot()
+            if snapshot_started is not None:
+                section_ms=(time.perf_counter()-snapshot_started)*1000
+                if section_ms>slowest_note_sections['scheduler_snapshot']['ms']:
+                    slowest_note_sections['scheduler_snapshot']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
+                note_section_started=time.perf_counter()
             if n.uid in latest_snapshot['fired'] or n.uid in latest_snapshot['consumed'] or n.state=='DONE':
                 n.identity_state='CONSUMED'
             elif n.uid in latest_snapshot['pending'] or n.uid in latest_snapshot['held']:
@@ -561,13 +604,35 @@ class Engine:
             else:n.identity_state=n.visibility_state
             row['identity_state']=n.identity_state
             self.decisions.append(row)
+            if note_started is not None:
+                section_ms=(time.perf_counter()-note_section_started)*1000
+                if section_ms>slowest_note_sections['finalize']['ms']:
+                    slowest_note_sections['finalize']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
+                note_ms=(time.perf_counter()-note_started)*1000
+                if note_ms>slowest_note_ms:
+                    slowest_note_ms=note_ms;slowest_note_uid=n.uid;slowest_note_reason=n.reason
+        decision_profile['per_note_decision_loop_ms']=(time.perf_counter()-stage_started)*1000
+        if self.profile_note_iterations:
+            decision_profile['slowest_note_iteration_ms']=slowest_note_ms
+            decision_profile['slowest_note_uid']=slowest_note_uid
+            decision_profile['slowest_note_reason']=slowest_note_reason
+            for section,record in slowest_note_sections.items():
+                decision_profile[f'slowest_note_{section}_ms']=record['ms']
+                decision_profile[f'slowest_note_{section}_uid']=record['uid']
+                decision_profile[f'slowest_note_{section}_reason']=record['reason']
+        stage_started=time.perf_counter()
         s.poll()
+        decision_profile['scheduler_poll_ms']=(time.perf_counter()-stage_started)*1000
         info=dict(sequence=frame.sequence,captured_at=frame.captured_at,acquired_at=frame.acquired_at,
                   processed_at=now,playing=observation['playing'],focused=frame.focused,roi_valid=frame.roi_valid,
                   hit_y=self.geometry.hit_y,held_keys='|'.join(sorted(s.snapshot()['held'])),
                   capture_age_ms=(now-frame.captured_at)*1000,cpu_ms=observation['cpu_ms'],
                   detections=len(observation['detections']),tracks=len(observation['notes']),
                   armed=s.armed,status=('INPUT PAUSED' if s.snapshot()['paused'] else 'ASSIST ARMED') if s.armed else 'INPUT OFF')
+        decision_profile['note_count']=len(observation['notes'])
+        decision_profile['decision_row_count']=len(self.decisions)
+        decision_profile['total_decide_ms']=(time.perf_counter()-decision_started)*1000
+        self.last_decision_profile=decision_profile
         return info,self.decisions
 
     @staticmethod

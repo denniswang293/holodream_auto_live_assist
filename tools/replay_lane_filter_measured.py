@@ -22,6 +22,15 @@ from src.model import Frame,Geometry,KEYS  # noqa:E402
 from tools.replay_lane_filter import make_state,read_index,poll_to,action_metrics  # noqa:E402
 
 
+def stale_event_counts(events):
+    return {
+        "stale_pause_events":sum(e.get("event")=="input_paused" and
+                                  e.get("reason")=="stale_capture" for e in events),
+        "stale_timeout_disarms":sum(e.get("event")=="disarmed" and
+                                     e.get("reason")=="stale_timeout" for e in events),
+    }
+
+
 def indexed_frames(run_dir,limit=None):
     index=read_index(run_dir/"live_video_index.csv")
     cap=cv2.VideoCapture(str(run_dir/"live_source.mp4"))
@@ -38,12 +47,16 @@ def indexed_frames(run_dir,limit=None):
     finally:cap.release()
 
 
-def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=None):
+def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=None,
+                      profile_v85_decision_notes=False):
     index=read_index(run_dir/"live_video_index.csv")
     geometry=Geometry(ROOT/"config/geometry_live_assist.json")
     state=make_state(provider,Geometry(geometry.path),ROOT/"config/reference_timing.json",0.,birth_zone_end_y=birth_zone_end_y)
+    state["engine"].profile_note_iterations=(provider=="v85" and profile_v85_decision_notes)
     iterator=iter(indexed_frames(run_dir,limit));current=next(iterator,None);pending_future=None
-    if current is None:return state,{"decoded_frames":0,"processed_frames":0,"dropped_frames":0}
+    stale_pauses=stale_timeouts=0
+    if current is None:return state,{"decoded_frames":0,"processed_frames":0,"dropped_frames":0,
+        "stale_pause_events":0,"stale_timeout_disarms":0}
     first_acquired=float(current[2]["acquired_timestamp"])
     state["now"][0]=first_acquired;state["next_poll"]=first_acquired+.002
     decoded=0;processed=0;dropped=0;first_capture=float(current[2]["capture_timestamp"])
@@ -67,6 +80,9 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
         decision_ms=(after_decide-after_observe)*1000
         finish=decision_at+(after_decide-after_observe)
         poll_to(state,finish)
+        event_counts=stale_event_counts(state["scheduler"].drain_events())
+        stale_pauses+=event_counts["stale_pause_events"]
+        stale_timeouts+=event_counts["stale_timeout_disarms"]
         compute_ms=observe_ms+decision_ms
         processed+=1
         state["summary"].append({"video_frame":seq,"source_frame":int(row.get("source_frame",seq)),
@@ -77,6 +93,8 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
             "armed":info["armed"],"frame_drops_so_far":dropped})
         state["wall_ms"].append(compute_ms)
         profile=dict(observation.get("profile",{}))
+        profile.update({f"decide_{key}":value for key,value in
+                        getattr(state["engine"],"last_decision_profile",{}).items()})
         profile.update({"video_frame":seq,"source_frame":int(row.get("source_frame",seq)),
             "processing_ms":compute_ms,"observe_wall_ms":observe_ms,"decision_wall_ms":decision_ms,
             "capture_age_ms":(finish-captured)*1000})
@@ -111,10 +129,14 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
         else:current=None
     final=(state["now"][0]+.04) if state["summary"] else 0.
     poll_to(state,final);state["scheduler"].disarm("replay_end")
+    event_counts=stale_event_counts(state["scheduler"].drain_events())
+    stale_pauses+=event_counts["stale_pause_events"]
+    stale_timeouts+=event_counts["stale_timeout_disarms"]
     state["actions"]=[{"provider":provider,"latency_ms":"MEASURED","run_id":run_dir.name,**event}
                        for event in state["event_log"]]
     state["decoded_frames"]=decoded;state["dropped_frames"]=dropped
-    return state,{"decoded_frames":decoded,"processed_frames":processed,"dropped_frames":dropped}
+    return state,{"decoded_frames":decoded,"processed_frames":processed,"dropped_frames":dropped,
+        "stale_pause_events":stale_pauses,"stale_timeout_disarms":stale_timeouts}
 
 
 def write_rows(path,rows):
@@ -133,6 +155,8 @@ def main():
     ap.add_argument("--reference-tolerance-ms",type=float,default=80.)
     ap.add_argument("--limit-frames",type=int)
     ap.add_argument("--birth-zone-end-y",type=float,default=None)
+    ap.add_argument("--profile-v85-decision-notes",action="store_true",
+                    help="add per-note timing instrumentation; diagnostic only and not performance-A/B eligible")
     args=ap.parse_args();run_dir=args.run_dir.resolve();out=args.out.resolve()/run_dir.name;out.mkdir(parents=True,exist_ok=True)
     providers=("legacy","segmented","v85") if args.mode=="compare" else (args.mode,)
     reference=[];ref_path=run_dir/"player_key_events.csv"
@@ -140,7 +164,8 @@ def main():
         with ref_path.open(encoding="utf-8-sig",newline="") as f:reference=list(csv.DictReader(f))
     summaries=[];actions=[];decisions=[];profiles=[];aggregates=[];admission=[]
     for provider in providers:
-        state,counts=simulate_provider(run_dir,provider,args.simulated_arm_window,args.limit_frames,args.birth_zone_end_y)
+        state,counts=simulate_provider(run_dir,provider,args.simulated_arm_window,args.limit_frames,
+            args.birth_zone_end_y,profile_v85_decision_notes=args.profile_v85_decision_notes)
         summaries.extend({"provider":provider,**r} for r in state["summary"])
         actions.extend(state["actions"]);decisions.extend(state["decisions"])
         profiles.extend({"provider":provider,**r} for r in state["profile"])
@@ -162,11 +187,14 @@ def main():
         "frame_admission":"latest acquired frame replaces pending frame while inference is busy",
         "dropped_frame_counts_are_provider_specific":True,"decode_io_excluded_from_processing_cost":True,
         "v85_birth_zone_end_y":args.birth_zone_end_y,
+        "v85_conversion_trace_enabled":False,
+        "v85_decision_note_profiling_enabled":args.profile_v85_decision_notes,
+        "performance_a_b_eligible":not args.profile_v85_decision_notes,
         "video_encoding_included":False,"actuator":"in-memory MockActuator","OS_keyboard_injection":False,
         "future_frames_or_human_keys_in_decision_input":False,"geometry_config_sha256":Geometry(ROOT/"config/geometry_live_assist.json").sha256,
         "timing_calibration_sha256":__import__("hashlib").sha256((ROOT/"config/reference_timing.json").read_bytes()).hexdigest(),
         "partial":args.limit_frames is not None,"game_grade":"UNVERIFIED",
-        "note":"Measured compute is host-dependent; offline video decode is excluded and actions remain mock only."},indent=2),encoding="utf-8")
+        "note":"Measured compute is host-dependent; offline video decode is excluded and actions remain mock only. Per-note V85 profiling is opt-in and makes the run diagnostic-only."},indent=2),encoding="utf-8")
     print(out)
 
 

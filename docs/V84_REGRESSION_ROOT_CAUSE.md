@@ -7,7 +7,9 @@ Scope: complete same-source replay, current-pixel segmentation, per-action attri
 
 The reported `72 vs 18` press gap and `46 vs 232` stale-pause gap are not trustworthy counts. The replay's Scheduler retained only its most recent 512 events. `updated` events consumed that buffer, so the old Legacy `mock_actions.csv` omitted earlier press and pause events. The full callback event stream now records all events before that display/history cap. On the original fixed-delay run, the complete event totals were 348 Legacy presses and 18 Segmented presses, with 232 input-pause events for each provider. Therefore the reported 54-press difference was an artifact of incomplete event logging; the uncapped original fixed replay's algorithm gap was 330 presses.
 
-After the perception/adapter fixes in this document, a complete fixed-14ms run yields 348 Legacy versus 228 Segmented Mock key-downs. The remaining 120-count difference is traced per Legacy action below. A separate measured-time replay yields a materially different gap because Segmented takes longer per frame and the live-style latest-frame admission drops frames. The two replay modes answer different questions and must not be combined.
+**Answer to the original 54-press question:** those 54 presses cannot be assigned to segmentation, adapter, tracker, Timing, Engine, or Scheduler. They were not a valid complete-stream difference: the Legacy view was truncated at 512 Scheduler events, while the Segmented view retained its full 350-event history. The corrected full callback stream changes the comparison to 348 vs 18. Likewise, 46 vs 232 pause events was a retention-window mismatch; the full stream contains 232 for both. Later 348/228, 343/213/199 (older V8.5 snapshot), and 343/221/179 (current V8.6 baseline) tables are different code/replay snapshots and must not be mixed with the original 72/18 snapshot.
+
+After the perception/adapter fixes in this document, a complete fixed-14ms run yields 348 Legacy versus 228 Segmented Mock key-downs. The revised attribution below distinguishes 161 Legacy actions without a same-key paired action from 41 candidate actions not paired to a Legacy action; the net count gap is 120. These are provider-output comparisons, not physical-note recall. A separate measured-time replay yields a materially different gap because Segmented takes longer per frame and the live-style latest-frame admission drops frames. The two replay modes answer different questions and must not be combined.
 
 ## P0 — replay fairness and the 14ms / 64ms discrepancy
 
@@ -24,9 +26,35 @@ The measured mode intentionally has provider-specific frame admission, because r
 
 All actions are from `MockActuator`; there was no OS keyboard injection. Human key events are consulted after replay only. The 80ms key/time proximity metric is an auxiliary diagnostic (latest fixed run: 107/341 Legacy and 69/341 Segmented) and is not game hit rate, physical-note recall, or ground truth.
 
-## P1 — where Legacy actions are lost in the fixed-delay A/B
+## P1 — revised action attribution with exact Tracker/component provenance
 
-`action_loss_attribution.csv` contains one row per each of the 348 Legacy key-downs. Cross-provider pairing uses same-frame geometry, lane/key, color, and a multi-frame vertical trajectory. Provider UIDs are used only to collect each provider's own tracks; they are not treated as cross-version identities. Each row includes source frame/time, source image evidence, pixel-mask/component evidence, both candidates and tracker state, Timing reason, Scheduler outcome, key-down/key-up, confidence, and an evidence-image path.
+The previous CSV assigned a nearby pixel component independently of the matched Tracker track, which can misstate which segmentation input caused a decision. That file and its summary are preserved as `action_loss_attribution_pre_provenance_fix.csv` and `action_loss_attribution_summary_pre_provenance_fix.csv`; their stage counts below are historical and **superseded**. The current canonical `action_loss_attribution.csv` was regenerated from the same immutable fixed-14ms replay. Cross-provider pairing still uses same-frame geometry, lane/key, color, and motion; a component is linked to the matched track only with an exact provider + video-frame + Tracker-UID trace edge. A spatially nearby detection without that edge is reported separately and does not prove a component-to-track cause. Stale observations without a fresh exact-frame link remain low-confidence `TRACK_ASSOCIATION_UNVERIFIED`.
+
+| Revised per-Legacy-action outcome | Count | Interpretation |
+|---|---:|---|
+| Segmented action, same key | 144 | Same-key paired Mock action. |
+| Segmented action, wrong key | 43 | Paired candidate action used another key. |
+| Tracker association unverified | 86 | Candidate track/component linkage is not proven at the reference frame. |
+| Track not active at reference frame | 38 | No matching candidate decision exists at that exact frame. |
+| Engine eligibility gate | 12 | Exact-linked track has a recorded Engine eligibility reason. |
+| Timing insufficient observations | 1 | Exact-linked track has too few observations. |
+| Scheduler rejection | 2 | Exact-linked candidate action was rejected by Scheduler. |
+| UNKNOWN | 22 | No supported stage assignment; left unresolved. |
+| **Total Legacy actions** | **348** | One row per Legacy Mock key-down. |
+
+Only 78/348 rows have an exact current-frame Tracker-UID-to-component link; 270 rows have a spatially overlapping but unverified detection. Physical-note labels remain `UNKNOWN`. In net press totals, 161 rows lack a same-key paired action and 41 candidate Mock presses are not paired to Legacy rows, giving a 120-count net gap (348 vs 228). Do not read that net difference as recall or 161 confirmed missed physical notes. The corrected per-action CSV and source images are in `output/analysis_lane_filter_v84_rework/` and `attribution_revision_0012/`.
+
+Frame 97 is now classified `TRACK_ASSOCIATION_UNVERIFIED`, not as a confirmed Timing loss: the matched candidate track's last observation is stale, and the current-frame spatially overlapping cyan component remains `UNKNOWN` without a Tracker UID link. Frame 177 is a same-key Segmented action in this V8.4 run; it must not be confused with the separate V8.5 replay's unassigned Tap at that frame. The revised attribution manifest is `output/analysis_lane_filter_v84_rework/attribution_revision_0012/attribution_manifest.json`.
+
+### Iteration 0013 Tracker trace follow-up
+
+The 86 `TRACK_ASSOCIATION_UNVERIFIED` V8.4 rows were inspected with opt-in same-frame Tracker edge diagnostics, selected component IDs, and source-space candidate regions. The refinement is: 73 spatial components were dropped before Tracker input by the semantic adapter, six were assigned to an existing cap, four were ambiguous, one prior cap was outside the 240ms live-association window, one exact component hit a hard gate, and one remains unresolved. These are candidate-region execution facts, not 86 physical-note misses; all physical-note links remain UNKNOWN.
+
+Frame 97 gives a concrete boundary record: Segmented component 83 has cyan pixels, bbox `(0,250,209,73)`, area 4,023, role `unknown`, and conversion `dropped_semantic_gate`. The raw component is broad and vertically extended; the available trace does not prove that it is the Legacy Tap, so it remains UNKNOWN and was not made executable. Full trace and per-case refinement are in `output/analysis_v86_autoloop/iteration_0013/`; no Scheduler, Tracker gate, calibration, or Live default changed.
+
+### Superseded attribution (pre-provenance audit)
+
+The historical table below is retained only to explain earlier reports. Its adapter/segmentation/Timing/Engine counts were derived before exact Tracker-UID-to-component linkage was required, so they are no longer accepted as causal stage counts.
 
 | Per Legacy action outcome | Count | Confidence and interpretation |
 |---|---:|---|
@@ -89,7 +117,12 @@ The current evidence is sufficient to repair the observed endpoint and panel-mas
 - Fixed-delay full A/B: `output/analysis_lane_filter_v84_rework/fixed_14ms_verified/run_20261106T164049_800126Z/`
 - Measured-time full A/B: `output/analysis_lane_filter_v84_rework/measured_realtime_profiled/run_20261106T164049_800126Z/`
 - Attribution CSV: `output/analysis_lane_filter_v84_rework/action_loss_attribution.csv`
-- Action evidence images: `output/analysis_lane_filter_v84_rework/action_loss_evidence_v4/`
+- Corrected action evidence images: `output/analysis_lane_filter_v84_rework/attribution_revision_0012/action_loss_evidence_v4/`
 - Full video and masks: `output/analysis_lane_filter_v84_rework/visual_verified/run_20261106T164049_800126Z/`
 
 Original `output/recording/run_*` and `output/assist/run_*` inputs were read only. No Git commands were run.
+
+
+## Iteration 0046 ? preserve Hold connection lineage
+
+Added a per-frame `connection_group_id` shared by each source hold connected region's body, derived head, and derived tail; propagated it through LaneObservation CSV, both provider conversion traces, and replay tracker-input rows. Masks, semantic gates, timing, Tracker, Engine, Scheduler, and actions were not changed. Full fixed 3,159-frame 14ms Replay is byte-identical to iteration 0037 for mock actions, safety audit, frame summary, physical-note decisions, and posthoc action comparison (343/221/194 downs; all safety counters zero). Group audit: 28,120 groups, 44,754 grouped rows, zero endpoint groups without body; tracker inputs carry groups for Segmented 22,213/22,213 and V8.5 8,317/8,317. Targeted 24 and full 69 tests pass. A 15-instance assistant-visual label seed and source/rectified masks were created for frames 294, 360, 894; they are provisional, not human truth. Status remains OFFLINE_NOT_PASSED. See `output/analysis_v86_autoloop/iteration_0046/iteration_report.md`.

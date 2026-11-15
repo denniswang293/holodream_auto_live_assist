@@ -2,8 +2,9 @@ import numpy as np
 
 from src.engine import Engine
 from src.model import Detection, Frame, Geometry, Note
-from src.scheduler import MockActuator, Scheduler
+from src.scheduler import Action, MockActuator, Scheduler
 from src.tracking import Tracker
+from src.timing import Estimate
 
 
 def _tap(y, *, t=0.0, pending=False):
@@ -21,6 +22,26 @@ def test_global_assignment_uses_both_feasible_edges_instead_of_greedy_choice():
     assignment=Tracker._global_assignment(matrix)
     assert assignment[0]==1
     assert assignment[1]==0
+
+
+def test_sparse_component_assignment_matches_dense_gated_assignment():
+    offers={(0,0):.20,(0,1):.10,(1,0):.05,
+            (2,2):.35,(3,2):.11,(4,4):.70}
+    blocked={4}
+    unmatched=Tracker.UNMATCHED_ASSOCIATION_COST
+    forbidden=1e6
+    dense=[]
+    for row in range(5):
+        costs=[forbidden if detection in blocked else offers.get((row,detection),forbidden)
+               for detection in range(5)]
+        costs.extend(unmatched+0.000001*abs(row-other) for other in range(5))
+        dense.append(costs)
+    picked=Tracker._global_assignment(dense)
+    expected={row:detection for row,detection in picked.items()
+              if detection<5 and dense[row][detection]<unmatched}
+    sparse,components=Tracker._sparse_global_assignment(5,5,offers,unmatched,blocked)
+    assert sparse==expected=={0:1,1:0,3:2}
+    assert sorted(components)==[(2,1),(2,2)]
 
 
 def test_birth_identity_is_immutable_and_occlusion_never_becomes_observation():
@@ -60,6 +81,7 @@ def test_engine_never_offers_an_unresolved_type_pending_note():
     geometry=Geometry('config/geometry_live_assist.json',plane_width=360)
     actuator=MockActuator();scheduler=Scheduler(actuator,clock=lambda:30.0)
     engine=Engine(geometry,scheduler,'config/reference_timing.json')
+    engine.profile_note_iterations=True
     note=Note('note:pending','pending','neutral',_tap(75,pending=True))
     note.head.append((30.,82.,.1,.22));note.confirmed=True
     engine.tracker.notes[note.uid]=note
@@ -67,6 +89,44 @@ def test_engine_never_offers_an_unresolved_type_pending_note():
     info,decisions=engine.decide({'frame':frame,'playing':True,'notes':[note],
         'detections':[],'cpu_ms':0.,'image':frame.image},processed_at=30.)
     assert decisions[0]['reason']=='type_pending'
+    assert engine.last_decision_profile['note_count']==1
+    assert engine.last_decision_profile['decision_row_count']==1
+    assert engine.last_decision_profile['total_decide_ms']>=engine.last_decision_profile['per_note_decision_loop_ms']
+    assert engine.last_decision_profile['slowest_note_row_build_ms']>=0
+    assert engine.last_decision_profile['slowest_note_action_logic_ms']>=0
+    assert engine.last_decision_profile['slowest_note_scheduler_snapshot_ms']>=0
+    assert engine.last_decision_profile['slowest_note_finalize_ms']>=0
     assert not scheduler.pending
+    assert not actuator.calls
+
+
+def test_engine_reuses_pending_key_when_current_lane_evidence_differs():
+    geometry=Geometry('config/geometry_live_assist.json',plane_width=360)
+    actuator=MockActuator();scheduler=Scheduler(actuator,clock=lambda:30.1)
+    scheduler.update_context(30.1,True,True)
+    scheduler.armed=True
+    committed=Action('note:committed','S','tap',30.2,.01)
+    assert scheduler.offer(committed)
+
+    engine=Engine(geometry,scheduler,'config/reference_timing.json')
+    engine.timing.predict=lambda samples,capture_timestamp,*,kind='tap': Estimate(
+        crossing_at=30.3,press_at=30.2,eta_s=.1,uncertainty=.01,reason='ready',velocity=100.)
+    detection=Detection((300,260,40,14),'cyan','tap',('L',),.9,plane_width=360,
+        evidence=('current_frame_hsv_chroma',),semantic_candidate='tap',face_quality=.9,
+        full_face=True,birth_zone=True)
+    note=Note('note:committed','tap','cyan',detection)
+    note.head.extend((t,y,.83,.95) for t,y in ((30.0,230.),(30.03,240.),(30.06,250.),(30.09,260.)))
+    note.confirmed=True
+    engine.tracker.notes[note.uid]=note
+    frame=Frame(1,np.zeros((720,1280,3),np.uint8),30.1,30.1)
+
+    _,decisions=engine.decide({'frame':frame,'playing':True,'notes':[note],
+        'detections':[detection],'cpu_ms':0.,'image':frame.image},processed_at=30.1)
+
+    assert decisions[0]['key']=='S'
+    assert decisions[0]['reason']=='updated'
+    assert scheduler.snapshot()['pending'][note.uid].key=='S'
+    assert scheduler.snapshot()['error'] is None
+    assert not any(event['event'] in ('rejected','disarmed') for event in scheduler.events)
     assert not actuator.calls
 

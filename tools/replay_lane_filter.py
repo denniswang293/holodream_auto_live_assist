@@ -52,12 +52,14 @@ class SegmentedProvider:
                 # UNKNOWN/effect components remain available in the perception
                 # report but are never offered to the executable tracker.
                 trace.append({"component_id":component.component_id,"role":component.role,
+                    "connection_group_id":component.connection_group_id,
                     "conversion":"dropped_semantic_gate","bbox":component.bbox,"color":component.color,
                     "area":component.area,"reason":"role_not_executable"})
                 continue
             x,y,w,h=component.bbox
             if w<1 or h<1:
                 trace.append({"component_id":component.component_id,"role":component.role,
+                    "connection_group_id":component.connection_group_id,
                     "conversion":"dropped_invalid_bbox","bbox":component.bbox,"color":component.color,
                     "area":component.area,"reason":"empty_bbox"})
                 continue
@@ -65,6 +67,7 @@ class SegmentedProvider:
                        if min(x+w,(i+1)*self.geometry.lane_pixels)-max(x,i*self.geometry.lane_pixels)>=5)
             if not keys:
                 trace.append({"component_id":component.component_id,"role":component.role,
+                    "connection_group_id":component.connection_group_id,
                     "conversion":"dropped_no_lane_coverage","bbox":component.bbox,"color":component.color,
                     "area":component.area,"reason":"less_than_5_rectified_pixels_in_any_lane"})
                 continue
@@ -77,8 +80,10 @@ class SegmentedProvider:
                     if yy<held_binary.shape[0] and np.count_nonzero(held_binary[yy,max(0,x):min(held_binary.shape[1],x+w)])>=max(2,.12*w):below=step
             confidence=min(1.,component.area/max(1,w*h))
             out.append(Detection(tuple(map(int,component.bbox)),component.color,kind,keys,
-                confidence,component.component_id,above,below,plane_width=self.geometry.plane_width))
+                confidence,component.component_id,above,below,plane_width=self.geometry.plane_width,
+                connection_group_id=component.connection_group_id))
             trace.append({"component_id":component.component_id,"role":component.role,
+                "connection_group_id":component.connection_group_id,
                 "conversion":"accepted","bbox":component.bbox,"color":component.color,
                 "area":component.area,"kind":kind,"keys":"|".join(keys),
                 "above":above,"below":below,"confidence":confidence})
@@ -106,24 +111,30 @@ def poll_to(state,target,*,inclusive=True):
     state["next_poll"]=next_poll;now[0]=target
 
 
-def make_state(provider,geometry,calibration,start_time,*,birth_zone_end_y=None):
+def make_state(provider,geometry,calibration,start_time,*,birth_zone_end_y=None,
+               trace_tracker_associations=False,record_conversion_trace=False):
     now=[start_time];actuator=MockActuator();event_log=[]
     scheduler=Scheduler(actuator,clock=lambda:now[0],focus_check=lambda:True,
                         modifiers_check=lambda:False,on_event=lambda event:event_log.append(dict(event)))
     engine=Engine(geometry,scheduler,calibration)
+    engine.tracker.trace_associations=trace_tracker_associations
     if provider=="segmented":engine.perception=SegmentedProvider(geometry)
-    elif provider=="v85":engine.perception=EarlyPixelProvider(geometry,birth_zone_end_y=birth_zone_end_y)
+    elif provider=="v85":engine.perception=EarlyPixelProvider(geometry,
+        birth_zone_end_y=birth_zone_end_y,record_conversion_trace=record_conversion_trace)
     return {"provider":provider,"now":now,"scheduler":scheduler,"actuator":actuator,"engine":engine,
             "next_poll":start_time+.002,"arm_triggered":False,"arm_ended":False,
             "actions":[],"event_log":event_log,"decisions":[],"summary":[],"candidate_trace":[],
-            "wall_ms":[],"compute_wall_ms":[],"profile":[]}
+            "wall_ms":[],"compute_wall_ms":[],"profile":[],"tracker_trace":[]}
 
 
-def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limit_frames=None,*,birth_zone_end_y=None):
+def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limit_frames=None,*,
+                birth_zone_end_y=None,trace_tracker_associations=False,trace_frames=None):
     index=read_index(run_dir/"live_video_index.csv")
     caps=cv2.VideoCapture(str(run_dir/"live_source.mp4"))
     if not caps.isOpened():raise RuntimeError(f"cannot open {run_dir/'live_source.mp4'}")
-    states=[make_state(provider,Geometry(geometry.path),calibration,0.,birth_zone_end_y=birth_zone_end_y) for provider in providers]
+    states=[make_state(provider,Geometry(geometry.path),calibration,0.,birth_zone_end_y=birth_zone_end_y,
+        trace_tracker_associations=trace_tracker_associations,
+        record_conversion_trace=(provider=="v85")) for provider in providers]
     decoded=0;first_capture=None;last_capture=None
     while True:
         ok,frame=caps.read()
@@ -141,6 +152,9 @@ def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limi
         focused=str(idx.get("focused","True")).lower() in ("true","1")
         roi_valid=str(idx.get("roi_valid","True")).lower() in ("true","1")
         for s in states:
+            trace_this_frame=(trace_tracker_associations and
+                (trace_frames is None or decoded in trace_frames))
+            s["engine"].tracker.trace_associations=trace_this_frame
             process_time=acquired+latency_s
             # The acquired frame becomes in-flight before its configured
             # processing delay elapses. Let begin_frame publish that timestamp
@@ -160,12 +174,22 @@ def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limi
             s["wall_ms"].append(wall_ms)
             s["compute_wall_ms"].append(compute_ms)
             profile=dict(observation.get("profile",{}))
+            # Scalar Tracker graph sizes expose the source of association cost
+            # without storing per-edge traces or timing this post-decision
+            # serialization. These fields are useful for fixed diagnostic
+            # runs; trace mode remains ineligible for performance claims.
+            profile.update({f"tracker_assoc_{key}":value for key,value in
+                            getattr(s["engine"].tracker,"association_profile",{}).items()})
             profile.update({"video_frame":decoded,"decision_wall_ms":(decide_end-poll_end)*1000,
                 "compute_wall_ms":compute_ms,"scheduler_simulation_wall_ms":poll_wall_ms,
                 "component_count":profile.get("component_count",len(observation["detections"])),
                 "converted_count":profile.get("converted_count",len(observation["detections"])),
                 "dropped_component_count":profile.get("dropped_component_count",0)})
             s["profile"].append(profile)
+            if trace_this_frame:
+                for row in s["engine"].tracker.association_trace:
+                    s["tracker_trace"].append({"provider":s["provider"],"video_frame":decoded,
+                        "source_frame":int(idx.get("source_frame",decoded)),**row})
             perception=s["engine"].perception
             conversion_by_id={r.get("component_id"):r for r in getattr(perception,"conversion_trace",[])}
             decision_by_uid={r.get("note_uid"):r for r in decisions}
@@ -182,6 +206,7 @@ def run_latency(run_dir,latency_s,arm_window,geometry,calibration,providers,limi
                     "source_frame":int(idx.get("source_frame",decoded)),"capture_timestamp":captured,
                     "acquired_timestamp":acquired,"candidate_stage":"tracker_input",
                     "component_id":detection.component,"role":converted.get("role",detection.kind),
+                    "connection_group_id":converted.get("connection_group_id"),
                     "kind":detection.kind,"color":detection.color,"bbox":detection.bbox,
                     "area":converted.get("area",""),"keys":"|".join(detection.keys),
                     "conversion":"accepted","tracker_uid":note.uid if note else "",
@@ -261,7 +286,17 @@ def main():
     ap.add_argument("--birth-zone-end-y",type=float,default=None,
                     help="V8.5 audit-derived rectified y boundary; defaults to provisional geometry midpoint")
     ap.add_argument("--limit-frames",type=int)
+    ap.add_argument("--trace-tracker-associations",action="store_true",
+                    help="write opt-in offline tracker gate/assignment diagnostics; do not use this run for performance claims")
+    ap.add_argument("--trace-frames-file",type=Path,
+                    help="optional text file of video_frame integers to trace; defaults to every admitted frame")
     args=ap.parse_args();run_dir=args.run_dir.resolve();out=args.out.resolve()/run_dir.name;out.mkdir(parents=True,exist_ok=True)
+    if args.trace_frames_file and not args.trace_tracker_associations:
+        ap.error("--trace-frames-file requires --trace-tracker-associations")
+    trace_frames=None
+    if args.trace_frames_file:
+        trace_frames={int(line.strip()) for line in args.trace_frames_file.read_text(encoding="utf-8").splitlines()
+                      if line.strip() and not line.lstrip().startswith("#")}
     requested=("legacy","segmented","v85") if args.mode=="compare" else (
         ("legacy",) if args.mode=="baseline" else (args.mode,))
     # `run_latency` always compares both providers; for a single-provider CLI mode
@@ -270,18 +305,21 @@ def main():
     ref_path=run_dir/"player_key_events.csv"
     if ref_path.exists():
         with ref_path.open(encoding="utf-8-sig",newline="") as f:reference=list(csv.DictReader(f))
-    all_actions=[];all_decisions=[];all_candidates=[];all_profiles=[]
+    all_actions=[];all_decisions=[];all_candidates=[];all_profiles=[];all_tracker_traces=[]
     aggregate=[];frame_summaries=[];decoded_total=None
     for latency_ms in args.latency_ms:
         if not 0<=latency_ms<=200:ap.error("latency values must be between 0 and 200 ms")
         states,decoded=run_latency(run_dir,latency_ms/1000,args.simulated_arm_window,
             Geometry(ROOT/"config/geometry_live_assist.json"),ROOT/"config/reference_timing.json",requested,args.limit_frames,
-            birth_zone_end_y=args.birth_zone_end_y)
+            birth_zone_end_y=args.birth_zone_end_y,trace_tracker_associations=args.trace_tracker_associations,
+            trace_frames=trace_frames)
         decoded_total=decoded
         for state in states:
             if state["provider"] not in requested:continue
             all_actions.extend(state["actions"]);all_decisions.extend(state["decisions"])
             all_candidates.extend({"latency_ms":latency_ms,**row} for row in state["candidate_trace"])
+            if args.trace_tracker_associations:
+                all_tracker_traces.extend({"latency_ms":latency_ms,**row} for row in state["tracker_trace"])
             all_profiles.extend({"provider":state["provider"],"latency_ms":latency_ms,**row} for row in state["profile"])
             frame_summaries.extend({"provider":state["provider"],"latency_ms":latency_ms,**r} for r in state["summary"])
             metrics=action_metrics(state,reference,args.reference_tolerance_ms/1000)
@@ -296,6 +334,8 @@ def main():
         with path.open("w",encoding="utf-8",newline="") as f:w=csv.DictWriter(f,fieldnames=fields,extrasaction="ignore");w.writeheader();w.writerows(rows)
     write_rows(out/"mock_actions.csv",all_actions);write_rows(out/"physical_note_decisions.csv",all_decisions)
     write_rows(out/"candidate_trace.csv",all_candidates)
+    if args.trace_tracker_associations:
+        write_rows(out/"tracker_association_trace.csv",all_tracker_traces)
     write_rows(out/"stage_profile_by_frame.csv",all_profiles)
     write_rows(out/"frame_summary.csv",frame_summaries);write_rows(out/"baseline_vs_candidate.csv",aggregate)
     safety=[]
@@ -328,11 +368,18 @@ def main():
         "timing_calibration_sha256":__import__("hashlib").sha256((ROOT/"config/reference_timing.json").read_bytes()).hexdigest(),
         "v85_birth_zone_end_y":args.birth_zone_end_y,
         "v85_birth_zone_source":"multi-run candidate audit when explicitly supplied; otherwise provisional geometry midpoint",
+        "v85_conversion_trace_enabled":"v85" in requested,
         "stage_profile":"stage_profile_by_frame.csv excludes rendering/encoding; scheduler simulator polling is reported separately",
         "future_frames_or_human_keys_in_decision_input":False,"decoded_frames":decoded_total,
         "limit_frames":args.limit_frames,"partial":args.limit_frames is not None and decoded_total>=args.limit_frames,
         "reference_events":"posthoc only; key/time proximity is not game judgment",
-        "game_grade":"UNVERIFIED","safety_note":"same Engine/Tracker/Timing/Scheduler used for both providers"}
+        "game_grade":"UNVERIFIED","safety_note":"same Engine/Tracker/Timing/Scheduler used for both providers",
+        "tracker_association_diagnostics":{"enabled":args.trace_tracker_associations,
+            "trace_frames_file":str(args.trace_frames_file) if args.trace_frames_file else None,
+            "traced_frame_count":len(trace_frames) if trace_frames is not None else (decoded_total if args.trace_tracker_associations else 0),
+            "output":"tracker_association_trace.csv" if args.trace_tracker_associations else None,
+            "performance_claim_eligible":not args.trace_tracker_associations,
+            "thresholds_or_assignment_behavior_changed":False}}
     (out/"replay_manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf-8")
     print(out)
 

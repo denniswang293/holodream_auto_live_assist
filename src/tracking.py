@@ -35,9 +35,65 @@ class Tracker:
     def __init__(self,geometry):
         self.geometry=geometry;self.next_id=1;self.caps={};self.notes={};self.retired=deque(maxlen=128)
         self.last_timestamp=float('-inf');self.audit=[]
+        # Opt-in offline diagnostics only. The default hot path allocates no
+        # association trace rows and all matching gates remain unchanged.
+        self.trace_associations=False;self.association_trace=[]
 
     def reset(self):
-        self.caps.clear();self.notes.clear();self.last_timestamp=float('-inf')
+        self.caps.clear();self.notes.clear();self.last_timestamp=float('-inf');self.association_trace=[]
+
+    @classmethod
+    def _sparse_global_assignment(cls, row_count, detection_count, offers, unmatched,
+                                  blocked_detections=()):
+        """Solve independent hard-gated association groups exactly.
+
+        ``offers`` contains only edges that passed the existing motion, lane,
+        semantic, and color checks. Components in that bipartite graph cannot
+        compete for detections, so each can use a compact Hungarian matrix
+        with private unmatched columns instead of one dense all-track matrix.
+        The gates, costs, and ambiguity rules remain owned by ``update``.
+        """
+        blocked=set(blocked_detections)
+        row_edges=[[] for _ in range(row_count)]
+        detection_rows=[[] for _ in range(detection_count)]
+        for (row,detection),cost in offers.items():
+            if cost>=unmatched or detection in blocked:
+                continue
+            row_edges[row].append(detection)
+            detection_rows[detection].append(row)
+
+        assignment={};components=[];visited_rows=set()
+        for seed in range(row_count):
+            if seed in visited_rows or not row_edges[seed]:
+                continue
+            rows=set();detections=set();pending_rows=[seed]
+            while pending_rows:
+                row=pending_rows.pop()
+                if row in rows:
+                    continue
+                rows.add(row)
+                for detection in row_edges[row]:
+                    if detection in detections:
+                        continue
+                    detections.add(detection)
+                    pending_rows.extend(other for other in detection_rows[detection]
+                                        if other not in rows)
+            visited_rows.update(rows)
+            ordered_rows=sorted(rows);ordered_detections=sorted(detections)
+            forbidden=1e6;matrix=[]
+            for row in ordered_rows:
+                costs=[offers.get((row,detection),forbidden) for detection in ordered_detections]
+                costs.extend(unmatched+0.000001*abs(row-other) for other in ordered_rows)
+                matrix.append(costs)
+            picked=cls._global_assignment(matrix)
+            for local_row,column in picked.items():
+                if column<len(ordered_detections):
+                    row=ordered_rows[local_row]
+                    detection=ordered_detections[column]
+                    if offers.get((row,detection),forbidden)<unmatched:
+                        assignment[row]=detection
+            components.append((len(ordered_rows),len(ordered_detections)))
+        return assignment,components
 
     @staticmethod
     def _global_assignment(cost_matrix):
@@ -115,7 +171,44 @@ class Tracker:
         if not math.isfinite(timestamp) or timestamp<=self.last_timestamp:
             raise ValueError('Tracker requires strictly increasing real capture timestamps')
         self.last_timestamp=timestamp;self.audit=[]
+        trace_enabled=bool(self.trace_associations)
+        if trace_enabled:self.association_trace=[]
+        trace_edges=[] if trace_enabled else None
+        trace_detections=[] if trace_enabled else None
         current=list(detections);offers={}
+        # Cache immutable per-observation geometry once. For the normal hot
+        # path, lane centers beyond the existing hard 0.28-span gate cannot
+        # form an association edge, so don't run color, semantic, or motion
+        # calculations for those pairs. Diagnostic tracing still visits every
+        # pair and records the original ordered gate reasons.
+        detection_spans=[c.span for c in current]
+        detection_centers=[sum(span)/2 for span in detection_spans]
+        if trace_enabled:
+            for j,c in enumerate(current):
+                trace_detections.append({"timestamp":timestamp,"detection_index":j,
+                    "component_id":c.component,"bbox":c.bbox,"color":c.color,"kind":c.kind,
+                    "keys":"|".join(c.keys),"recovery_only":c.recovery_only})
+
+        if trace_enabled:
+            def trace_edge(uid,cap,c,j,reason,cost=None):
+                prior_note=self.notes.get(cap.note_uid)
+                trace_edges.append({"timestamp":timestamp,"detection_index":j,
+                    "trace_type":"association_edge",
+                    "component_id":c.component,"detection_bbox":c.bbox,"detection_color":c.color,
+                    "detection_kind":c.kind,"detection_keys":"|".join(c.keys),
+                    "cap_uid":uid,"prior_note_uid":cap.note_uid,
+                    "prior_kind":self.notes[cap.note_uid].kind if cap.note_uid in self.notes else "",
+                    "prior_bbox":cap.detection.bbox,"prior_color":cap.detection.color,
+                    "prior_note_confirmed":prior_note.confirmed if prior_note else False,
+                    "prior_note_kind_locked":prior_note.kind_locked if prior_note else False,
+                    "prior_note_observations":prior_note.observations if prior_note else 0,
+                    "prior_note_state":prior_note.state if prior_note else "",
+                    "prior_note_visibility":prior_note.visibility_state if prior_note else "",
+                    "prior_note_last_seen":prior_note.last_seen if prior_note else "",
+                    "prior_note_origin_y":prior_note.origin_y if prior_note else "",
+                    "cap_sample_count":len(cap.samples),"cap_last_sample_timestamp":cap.samples[-1][0] if cap.samples else "",
+                    "cap_votes":";".join(f"{key}:{value}" for key,value in sorted(cap.votes.items())),
+                    "edge_reason":reason,"edge_cost":cost,"assignment_status":""})
         active_tails={n.tail_uid for n in self.notes.values() if n.state in ('HELD','SCHEDULED')}
         live={uid:c for uid,c in self.caps.items() if timestamp-c.samples[-1][0]<=.24}
         for uid,cap in live.items():
@@ -128,7 +221,14 @@ class Tracker:
                 velocity=float(min(1400,max(0,median(slopes))))
             predicted=y+velocity*dt
             gate=max(9.,min(50.,6.+.35*velocity*dt+180*dt))
-            for j,c in enumerate(current):
+            cap_center=(lo+hi)/2
+            if trace_enabled:
+                detection_indices=range(len(current))
+            else:
+                detection_indices=(j for j,center in enumerate(detection_centers)
+                                   if abs(cap_center-center)<=.28)
+            for j in detection_indices:
+                c=current[j]
                 old=cap.detection
                 compatible=(old.color==c.color or 'neutral' in (old.color,c.color))
                 owner=self.notes.get(cap.note_uid)
@@ -136,15 +236,18 @@ class Tracker:
                     if owner is None:
                         owners=[n for n in self.notes.values() if n.tail_uid==uid and n.state in ('HELD','SCHEDULED')]
                         if not (cap.tail_locked and cap.full_tail_observations>=2 and len(owners)==1):
+                            if trace_enabled:trace_edge(uid,cap,c,j,'recovery_tail_owner_unverified')
                             continue
                     else:
                         tail=self.caps.get(owner.tail_uid)
                         if (not owner.confirmed or (owner.kind=='hold' and
                                 (owner.full_head_observations<2 or tail is None or tail.full_tail_observations<2))):
+                            if trace_enabled:trace_edge(uid,cap,c,j,'recovery_owner_not_confirmed')
                             continue
                 if owner is not None and owner.color!='neutral' and c.color not in (owner.color,'neutral'):
                     compatible=False
                 if c.kind=='plate_fragment' and owner is not None and owner.kind=='hold':
+                    if trace_enabled:trace_edge(uid,cap,c,j,'plate_fragment_cannot_update_hold')
                     continue
                 role=not cap.note_uid and (cap.tail_locked or cap.votes.get('hold_tail',0)>max(cap.votes.get('hold_head',0),
                         cap.votes.get('tap',0) if cap.detection.color=='yellow' else 0))
@@ -154,25 +257,39 @@ class Tracker:
                 # fresh motion, with all existing spatial gates still applied.
                 moving_tail=(role and uid in active_tails and cap.full_tail_observations>=2 and
                              len(cap.samples)>=4 and dt<=.06 and velocity>20 and
-                             c.bbox[1]>=y-2 and overlap((lo,hi),c.span)>.55)
+                             c.bbox[1]>=y-2 and overlap((lo,hi),detection_spans[j])>.55)
                 if (not compatible or (role and c.kind=='hold_head' and not moving_tail) or
                         (not role and c.kind=='hold_tail' and cap.note_uid and
                          not self._complete_tap_in_effect(cap,c))):
+                    reason=('color_incompatible' if not compatible else
+                            'hold_head_rejected_by_tail_role' if role and c.kind=='hold_head' and not moving_tail else
+                            'hold_tail_rejected_by_non_tail_role')
+                    if trace_enabled:trace_edge(uid,cap,c,j,reason)
                     continue
                 cy=c.bbox[1] if role else c.bbox[1]+c.bbox[3]
                 if (role and cap.tail_locked and uid in active_tails and c.kind in ('tap','plate_fragment') and
                         c.color in ('cyan','pink') and cy<y-2):
+                    if trace_enabled:trace_edge(uid,cap,c,j,'active_tail_direction_guard')
                     continue
                 if len(history)>=5:
                     recent=list(history)[-5:]
                     if max(p[1] for p in recent)-min(p[1] for p in recent)<=2 and abs(cy-y)>2:
+                        if trace_enabled:trace_edge(uid,cap,c,j,'stationary_track_motion_guard')
                         continue
-                error=abs(cy-predicted);iou=overlap((lo,hi),c.span)
-                center_gap=abs((lo+hi)/2-sum(c.span)/2)
-                if error>gate or center_gap>.28 or (iou<.1 and center_gap>.12):continue
+                error=abs(cy-predicted);iou=overlap((lo,hi),detection_spans[j])
+                center_gap=abs(cap_center-detection_centers[j])
+                if error>gate or center_gap>.28 or (iou<.1 and center_gap>.12):
+                    if trace_enabled:
+                        reasons=[]
+                        if error>gate:reasons.append('vertical_prediction_gate')
+                        if center_gap>.28:reasons.append('lane_center_gate')
+                        if iou<.1 and center_gap>.12:reasons.append('lane_span_iou_gate')
+                        trace_edge(uid,cap,c,j,'|'.join(reasons))
+                    continue
                 semantic_penalty=.18*(1.-min(1.,max(0.,c.face_quality))) if c.evidence else 0.
                 cost=error/gate+.8*(1-min(iou,1))+.8*center_gap+semantic_penalty
                 offers[(uid,j)]=cost
+                if trace_enabled:trace_edge(uid,cap,c,j,'feasible_edge',cost)
         cap_ids=list(live)
         unmatched=self.UNMATCHED_ASSOCIATION_COST
         forbidden=1e6
@@ -184,17 +301,18 @@ class Tracker:
                 ambiguous_detections.add(j)
                 ambiguous_notes.update(self.caps[uid].note_uid for _,uid in competitors
                                        if self.caps[uid].note_uid in self.notes)
-        matrix=[]
-        for i,uid in enumerate(cap_ids):
-            row=[(forbidden if j in ambiguous_detections else offers.get((uid,j),forbidden))
-                 for j in range(len(current))]
-            row.extend(unmatched+(0.000001*abs(i-k)) for k in range(len(cap_ids)))
-            matrix.append(row)
-        picked=self._global_assignment(matrix)
-        assigned={};used=set()
-        for i,j in picked.items():
-            if j>=len(current) or matrix[i][j]>=unmatched:continue
-            uid=cap_ids[i];assigned[uid]=j;used.add(j)
+        row_offers={(i,j):offers[(uid,j)] for i,uid in enumerate(cap_ids)
+                    for j in range(len(current)) if (uid,j) in offers}
+        picked,components=self._sparse_global_assignment(
+            len(cap_ids),len(current),row_offers,unmatched,ambiguous_detections)
+        self.association_profile={
+            'track_rows':len(cap_ids),'detection_columns':len(current),
+            'feasible_edges':sum(1 for cost in row_offers.values() if cost<unmatched),
+            'assignment_components':len(components),
+            'largest_component_rows':max((n for n,_ in components),default=0),
+            'largest_component_detections':max((m for _,m in components),default=0),
+        }
+        assigned={cap_ids[i]:j for i,j in picked.items()};used=set(picked.values())
         # An unassigned observation near multiple established tracks is an
         # association ambiguity, not proof of a newly born physical object.
         for j,c in enumerate(current):
@@ -205,20 +323,59 @@ class Tracker:
                 ambiguous_notes.update(self.caps[uid].note_uid for uid in competitors
                                        if self.caps[uid].note_uid in self.notes)
         observed_notes=set()
+        detection_outcomes={} if trace_enabled else None
         for uid,j in assigned.items():
             cap=live[uid]
             if cap.note_uid:observed_notes.add(cap.note_uid)
             self._observe(live[uid],current[j],timestamp)
+            if trace_enabled:
+                note=self.notes.get(cap.note_uid)
+                detection_outcomes[j]={"outcome":"matched_existing_cap","cap_uid":uid,
+                    "note_uid":cap.note_uid,"confirmed":note.confirmed if note else False,
+                    "note_kind":note.kind if note else "","note_kind_locked":note.kind_locked if note else False,
+                    "note_observations":note.observations if note else 0,"note_state":note.state if note else "",
+                    "note_visibility":note.visibility_state if note else "","note_last_seen":note.last_seen if note else ""}
         recovered=[current[j] for j in assigned.values() if current[j].recovery_only]
         for j,c in enumerate(current):
-            if j in used or j in ambiguous_detections or c.kind in ('body','ambiguous'):continue
-            if c.recovery_only:continue
+            if j in used:continue
+            if j in ambiguous_detections:
+                if trace_enabled:detection_outcomes[j]={"outcome":"ambiguous_unassigned","cap_uid":"","note_uid":"","confirmed":False}
+                continue
+            if c.kind in ('body','ambiguous'):
+                if trace_enabled:detection_outcomes[j]={"outcome":"non_seed_kind","cap_uid":"","note_uid":"","confirmed":False}
+                continue
+            if c.recovery_only:
+                if trace_enabled:detection_outcomes[j]={"outcome":"recovery_only_unmatched","cap_uid":"","note_uid":"","confirmed":False}
+                continue
             x,y,w,h=c.bbox
-            if any(c.color==r.color and
+            overlaps_recovered=any(c.color==r.color and
                    max(0,min(x+w,r.bbox[0]+r.bbox[2])-max(x,r.bbox[0]))*
-                   max(0,min(y+h,r.bbox[1]+r.bbox[3])-max(y,r.bbox[1]))>=.8*w*h for r in recovered):continue
+                   max(0,min(y+h,r.bbox[1]+r.bbox[3])-max(y,r.bbox[1]))>=.8*w*h for r in recovered)
+            if overlaps_recovered:
+                if trace_enabled:detection_outcomes[j]={"outcome":"overlaps_recovered_detection","cap_uid":"","note_uid":"","confirmed":False}
+                continue
             uid=f'cap:{self.next_id}';self.next_id+=1
             cap=Cap(uid,c);self.caps[uid]=cap;self._observe(cap,c,timestamp)
+            if trace_enabled:
+                note=self.notes.get(cap.note_uid)
+                detection_outcomes[j]={"outcome":"born_new_cap","cap_uid":uid,
+                    "note_uid":cap.note_uid,"confirmed":note.confirmed if note else False,
+                    "note_kind":note.kind if note else "","note_kind_locked":note.kind_locked if note else False,
+                    "note_observations":note.observations if note else 0,"note_state":note.state if note else "",
+                    "note_visibility":note.visibility_state if note else "","note_last_seen":note.last_seen if note else ""}
+        if trace_enabled:
+            selected={(uid,j) for uid,j in assigned.items()}
+            for row in trace_edges:
+                j=row['detection_index'];uid=row['cap_uid']
+                if (uid,j) in selected:row['assignment_status']='selected'
+                elif j in ambiguous_detections:row['assignment_status']='ambiguous_detection'
+                elif row['edge_reason']=='feasible_edge' and row['edge_cost']>=unmatched:row['assignment_status']='cost_at_or_above_unmatched'
+                elif row['edge_reason']=='feasible_edge':row['assignment_status']='lost_global_assignment_competition'
+                else:row['assignment_status']='edge_rejected'
+            self.association_trace=trace_edges+[{
+                **d,**detection_outcomes.get(d['detection_index'],{
+                    "outcome":"no_feasible_edge","cap_uid":"","note_uid":"","confirmed":False}),
+                "trace_type":"detection_outcome"} for d in trace_detections]
         for uid,note in list(self.notes.items()):
             if note.last_seen==timestamp:
                 note.visibility_state=('CONFIRMED_VISIBLE' if note.confirmed else 'CANDIDATE')
@@ -402,11 +559,27 @@ class Tracker:
             return (len(points)>=3 and points[-1][0]-points[0][0]>=.045 and
                     points[-1][1]-points[0][1]>=5 and
                     np.mean(np.diff([p[1] for p in points])>=-2)>=.8)
+        current_group_heads={}
+        for note in self.notes.values():
+            group=note.detection.connection_group_id
+            if (group is not None and note.kind=='hold' and note.confirmed and
+                    note.last_seen==t and note.detection.kind=='hold_head' and
+                    note.full_head_observations>=2):
+                current_group_heads.setdefault(group,[]).append(note)
+        current_group_tails={}
+        for cap in self.caps.values():
+            group=cap.detection.connection_group_id
+            if (group is not None and cap.samples and cap.samples[-1][0]==t and
+                    cap.detection.kind=='hold_tail' and cap.full_tail_observations>=2):
+                current_group_tails.setdefault(group,[]).append(cap)
         tails=[c for c in self.caps.values() if not c.note_uid and
                c.votes.get('hold_tail',0)>=2 and (c.tail_locked or
                c.votes.get('hold_tail',0)>max(c.votes.get('hold_head',0),c.votes.get('tap',0) if c.detection.color=='yellow' else 0)) and
                t-c.samples[-1][0]<.12 and
-               (any(n.tail_uid==c.uid for n in self.notes.values()) or moving_endpoint(c))]
+               (any(n.tail_uid==c.uid for n in self.notes.values()) or moving_endpoint(c) or
+                (c.detection.connection_group_id is not None and
+                 len(current_group_heads.get(c.detection.connection_group_id,()))==1 and
+                 len(current_group_tails.get(c.detection.connection_group_id,()))==1))]
         occupied={n.tail_uid for n in self.notes.values() if n.tail_uid}
         claims={uid:[n for n in self.notes.values() if n.tail_uid==uid] for uid in occupied}
         endpoints={}
@@ -488,6 +661,20 @@ class Tracker:
                 # a numeric label from a previous frame is not ribbon evidence.
                 same_frame=(n.last_seen==t and cap.samples[-1][0]==t)
                 same_component=(same_frame and c.component and c.component==n.detection.component)
+                # A Hold head and terminal are derived as separate boxes, so
+                # component IDs differ even when both came from the same
+                # connected current-frame pixel region. Group IDs are local to
+                # this exact update only; require unique current head and tail
+                # members before using that connectivity to claim ownership.
+                group=c.connection_group_id
+                same_connected_group=(same_frame and group is not None and
+                    group==n.detection.connection_group_id and n.detection.kind=='hold_head' and
+                    c.kind=='hold_tail' and c.color==n.detection.color and
+                    len(current_group_heads.get(group,()))==1 and
+                    current_group_heads[group][0].uid==n.uid and
+                    len(current_group_tails.get(group,()))==1 and
+                    current_group_tails[group][0].uid==cap.uid and
+                    n.confirmed and n.full_head_observations>=2 and cap.full_tail_observations>=2)
                 # The same component must not own multiple independent heads.
                 owners=[o for o in self.notes.values() if o.kind=='hold' and o.last_seen==t and
                         o.detection.component==c.component]
@@ -498,6 +685,8 @@ class Tracker:
                         n.detection.bbox[3]<(6 if n.detection.bbox[1]<180 else 10) or
                         c.bbox[3]>n.detection.bbox[3]+2):continue
                 if not transfer and same_component and len(owners)==1:
+                    offers.append((0.,cap));continue
+                if not transfer and not n.tail_uid and same_connected_group:
                     offers.append((0.,cap));continue
                 if (not fresh_head or n.state in ('HELD','SCHEDULED')) and path_mask is not None and t-n.body_seen_at<.12:
                     possible=[o.uid for o in self.notes.values() if o.kind=='hold' and o.confirmed and o.state!='DONE' and

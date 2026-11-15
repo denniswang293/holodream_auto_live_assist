@@ -91,6 +91,10 @@ class Detection:
     full_face: bool = False
     connected_ribbon: bool = False
     birth_zone: bool = False
+    # Exact-frame lineage from a connected observed Hold region. IDs are local
+    # to one source image and may only be compared for detections timestamped
+    # in the same Tracker.update call.
+    connection_group_id: int | None = None
 
     @property
     def y(self):return self.bbox[1]+self.bbox[3]/2

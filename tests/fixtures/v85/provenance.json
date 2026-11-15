@@ -26,5 +26,13 @@
     "selection": "video_frame=894; preview=14.9s; human_reviewed=false",
     "size_bytes": 495069,
     "sha256": "034148d3b6ad5ec8fd6fe5ff4e993824e2ed1fd522592f12447dd9463ce9df05"
+  },
+  {
+    "fixture": "tests/fixtures/v85/recording_tap_frame_186.png",
+    "derived_from": "output/recording/run_20261106T164049_800126Z/live_source.mp4",
+    "selection": "video_frame=186; source_frame=186; sequential decode aligned to live_video_index.csv; provisional machine review only; human_reviewed=false",
+    "size_bytes": 1134682,
+    "sha256": "df6b2301ab46fd8827a19388f66f6623472120691bf73a63d10f1cd3cb7a9d19",
+    "source_video_sha256": "94c8cff96e2328925718aa837183df7b17456e8c6f6dac1101f128d8694b8f03"
   }
 ]

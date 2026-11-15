@@ -43,6 +43,7 @@ class LaneObservation:
     status: str
     fresh_observation: bool
     component_id: int
+    connection_group_id: int | None
     candidate_id: str
     pixel_area: int
     mask_ref: str
@@ -118,7 +119,8 @@ class LaneFilter:
                 role, component.color, f"bbox={width}x{height};observed_pixels={component.area}",
                 motion, link, "current-frame HSV pixels, connected-component area/shape; no probability score",
                 "OBSERVED" if component.role != "unknown" else "UNKNOWN",
-                True, int(component.component_id), f"obs-{video_frame}-{component.component_id}",
+                True, int(component.component_id), component.connection_group_id,
+                f"obs-{video_frame}-{component.component_id}",
                 int(component.area), channel, tuple(sorted(set(reasons))), tuple(component.positive),
                 tuple(component.negative), tuple(component.ambiguity)))
         association_start=perf_counter()
