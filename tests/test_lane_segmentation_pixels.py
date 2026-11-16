@@ -1,8 +1,11 @@
 import cv2
 import numpy as np
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
-from src.lane_segmentation import LanePixelSegmenter
+from src.diagnostics import raw_identity_trace, pack_identity_trace, trace_planes
+from src.lane_segmentation import LanePixelSegmenter, _bool_region_row_bounds
 from src.model import Geometry
 from src.early_perception import EarlyPixelProvider
 
@@ -14,6 +17,23 @@ def color(h, s=220, v=230):
 
 def geometry():
     return Geometry("config/geometry_live_assist.json", plane_width=360)
+
+
+def test_vectorized_boolean_row_bounds_match_scalar_argmax_for_all_row_shapes():
+    region = np.zeros((6, 11), dtype=bool)
+    region[1, 0] = True
+    region[2, 10] = True
+    region[3, 1:3] = True
+    region[3, 8:10] = True
+    region[4, :] = True
+    # Row 0 remains empty; rows may contain separated spans as ribbon
+    # curvature/aliasing can create more than one run at a given y.
+    first, last = _bool_region_row_bounds(region)
+    expected_first = np.asarray([int(np.argmax(row)) for row in region])
+    expected_last = np.asarray([region.shape[1] - 1 - int(np.argmax(row[::-1]))
+                                for row in region])
+    assert np.array_equal(first, expected_first)
+    assert np.array_equal(last, expected_last)
 
 
 def test_hsv_channel_views_match_split_values_and_keep_interleaved_strides():
@@ -211,6 +231,86 @@ def test_tap_face_survives_thin_connection_without_filling_pixels():
     assert np.all(result["tap_face"][image[:,:,0]==0]==0)
 
 
+def test_tap_recovery_diagnostics_do_not_change_masks_or_ordered_components():
+    g=geometry();image=np.zeros((g.height,g.plane_width,3),np.uint8)
+    cyan=color(96,220,230);yellow=color(27)
+    cv2.rectangle(image,(220,280),(300,294),cyan,-1)
+    cv2.line(image,(0,287),(220,287),cyan,1)
+    cv2.rectangle(image,(30,145),(87,158),yellow,-1)
+
+    ordinary=LanePixelSegmenter()
+    diagnostic=LanePixelSegmenter()
+    ordinary_result=ordinary.segment(image,g,frame_index=500)
+    diagnostic.profile_tap_recovery=True
+    diagnostic_result=diagnostic.segment(image,g,frame_index=500)
+
+    assert ordinary_result.components==diagnostic_result.components
+    assert ordinary_result.frame_index==diagnostic_result.frame_index
+    assert ordinary_result.lane_bounds==diagnostic_result.lane_bounds
+    assert all(np.array_equal(ordinary_result.masks[name],diagnostic_result.masks[name])
+               for name in ordinary_result.masks)
+    detail_keys={
+        f"tap_recovery_{pass_name}_{field}"
+        for pass_name in ("yellow","cyan_global","cyan_tiled")
+        for field in ("ms","connected_component_proposals","geometry_qualified_proposals",
+                      "accepted_faces","duplicate_rejections")
+    }
+    detail_keys.add("tap_recovery_cyan_tiled_early_duplicate_prunes")
+    assert not (detail_keys & ordinary.last_profile.keys())
+    assert detail_keys <= diagnostic.last_profile.keys()
+    assert all(diagnostic.last_profile[key]>=0 for key in detail_keys)
+
+
+def test_cyan_tiled_prunes_global_duplicates_and_keeps_independent_panels():
+    g=geometry();image=np.zeros((g.height,g.plane_width,3),np.uint8)
+    cyan=color(96,220,230)
+    # The thin bridge lets cyan-global recover the broad face. The separate
+    # upper-left and right-edge panels must remain independently observable.
+    cv2.rectangle(image,(220,280),(300,294),cyan,-1)
+    cv2.line(image,(0,287),(220,287),cyan,1)
+    cv2.rectangle(image,(28,242),(80,256),cyan,-1)
+    cv2.rectangle(image,(306,260),(359,274),cyan,-1)
+
+    ordinary=LanePixelSegmenter()
+    diagnostic=LanePixelSegmenter();diagnostic.profile_tap_recovery=True
+    ordinary_result=ordinary.segment(image,g,frame_index=503)
+    diagnostic_result=diagnostic.segment(image,g,frame_index=503)
+
+    assert ordinary_result.components==diagnostic_result.components
+    assert all(np.array_equal(ordinary_result.masks[name],diagnostic_result.masks[name])
+               for name in ordinary_result.masks)
+    profile=diagnostic.last_profile
+    assert profile["tap_recovery_cyan_global_accepted_faces"]>=1
+    assert profile["tap_recovery_cyan_tiled_early_duplicate_prunes"]>=1
+    assert profile["tap_recovery_cyan_tiled_accepted_faces"]==0
+    for x0,x1,y0,y1 in ((220,301,280,295),(28,81,242,257),(306,360,260,275)):
+        assert np.count_nonzero(ordinary_result["tap_face"][y0:y1,x0:x1])>0
+
+
+def test_polygon_opt_out_preserves_segmentation_and_provider_observations():
+    g=geometry();image=np.zeros((g.height,g.plane_width,3),dtype=np.uint8)
+    green=color(62);cyan=color(96,220,230)
+    cv2.line(image,(82,80),(88,212),green,9)
+    cv2.rectangle(image,(72,204),(108,226),green,-1)
+    cv2.rectangle(image,(185,255),(252,272),cyan,-1)
+
+    polygon_result=LanePixelSegmenter().segment(image,g,frame_index=71)
+    compact_result=LanePixelSegmenter().segment(
+        image,g,frame_index=71,include_polygons=False)
+    assert any(component.polygon for component in polygon_result.components)
+    assert all(not component.polygon for component in compact_result.components)
+    assert compact_result.components==[
+        replace(component,polygon=()) for component in polygon_result.components]
+    assert all(np.array_equal(polygon_result.masks[name],compact_result.masks[name])
+               for name in polygon_result.masks)
+
+    default_provider=EarlyPixelProvider(g)
+    compact_provider=EarlyPixelProvider(g,include_polygons=False)
+    assert default_provider.detect(image)==compact_provider.detect(image)
+    assert any(component.polygon for component in default_provider.last_result.components)
+    assert all(not component.polygon for component in compact_provider.last_result.components)
+
+
 def test_recorded_connected_cyan_tap_is_recovered_but_hit_glow_is_not():
     # Source video_frame=186 from the immutable recording. Provisional visual
     # pixel ROIs are used only to pin this regression; they are not note GT.
@@ -296,11 +396,16 @@ def test_conversion_trace_is_opt_in_and_does_not_change_observations(monkeypatch
     assert realtime_detections==diagnostic_detections
     assert np.array_equal(realtime.last_path,diagnostic.last_path)
     assert set(np.unique(realtime.last_path)).issubset({0,255})
+    assert realtime.last_labels is None
+    assert diagnostic.last_labels is None
     expected_count,expected_labels=cv2.connectedComponents(
         (realtime.last_path>0).astype(np.uint8),8)
-    assert expected_count==int(realtime.last_labels.max())+1
-    assert np.array_equal(expected_labels,realtime.last_labels)
-    assert np.array_equal(realtime.last_labels,diagnostic.last_labels)
+    realtime_labels=realtime.ensure_last_labels()
+    diagnostic_labels=diagnostic.ensure_last_labels()
+    assert realtime.ensure_last_labels() is realtime_labels
+    assert expected_count==int(realtime_labels.max())+1
+    assert np.array_equal(expected_labels,realtime_labels)
+    assert np.array_equal(realtime_labels,diagnostic_labels)
     assert realtime.last_result.components==diagnostic.last_result.components
     assert all(np.array_equal(realtime.last_result.masks[name],diagnostic.last_result.masks[name])
                for name in realtime.last_result.masks)
@@ -309,6 +414,24 @@ def test_conversion_trace_is_opt_in_and_does_not_change_observations(monkeypatch
     assert realtime.last_profile["dropped_component_count"]==diagnostic.last_profile["dropped_component_count"]
     assert "drop_reasons" not in realtime.last_profile
     assert "drop_reasons" in diagnostic.last_profile
+
+
+def test_raw_identity_trace_materializes_exact_lazy_labels(monkeypatch):
+    g=geometry();monkeypatch.setattr(g,"rectify",lambda image:image)
+    image=np.zeros((g.height,g.plane_width,3),np.uint8)
+    provider=EarlyPixelProvider(g,birth_zone_end_y=176.75)
+    provider.detect(image)
+    assert provider.last_labels is None
+
+    engine=SimpleNamespace(perception=provider,tracker=SimpleNamespace(audit=[]))
+    raw=raw_identity_trace(engine,{'detections':[]})
+    assert provider.last_labels is not None
+    packed=pack_identity_trace(raw)
+    planes=trace_planes(packed,provider.last_path.shape)
+    expected_count,expected=cv2.connectedComponents(provider.last_path,8)
+    assert expected_count==int(planes['labels'].max())+1
+    assert np.array_equal(planes['labels'],expected)
+    assert np.array_equal(planes['path'],provider.last_path)
 
 
 def test_neutral_icon_inside_complete_tap_stays_unknown_without_duplicate_observation():
@@ -443,3 +566,36 @@ def test_connection_group_id_survives_lane_observation_and_both_provider_traces(
         video_frame=1,captured_at=1.,acquired_at=1.)
     hold_rows=[o.csv_row() for o in observations if o.role in ('HOLD_BODY','HOLD_HEAD','HOLD_TAIL')]
     assert {row['connection_group_id'] for row in hold_rows}=={next(iter(seg_groups.values()))}
+
+
+def test_early_hold_spans_use_only_their_connection_group_and_keep_ambiguity():
+    g=geometry();g.rectify=lambda frame:frame
+    image=np.zeros((g.height,g.plane_width,3),np.uint8)
+    green=color(62);yellow=color(27)
+    # The yellow ribbon overlaps the green head's x-range below its endpoint.
+    # A frame-wide Hold union therefore gives the green head a false below span.
+    cv2.line(image,(196,55),(200,181),green,9)
+    cv2.rectangle(image,(174,170),(226,192),green,-1)
+    cv2.rectangle(image,(184,46),(215,66),green,-1)
+    cv2.line(image,(225,207),(241,318),yellow,9)
+    cv2.rectangle(image,(212,306),(258,328),yellow,-1)
+    cv2.rectangle(image,(207,193),(238,216),yellow,-1)
+
+    provider=EarlyPixelProvider(g)
+    detections=provider.detect(image)
+    green_head=next(d for d in detections if d.kind=='hold_head' and d.color=='green')
+    yellow_head=next(d for d in detections if d.kind=='hold_head' and d.color=='yellow')
+    assert green_head.connection_group_id!=yellow_head.connection_group_id
+    assert green_head.below==0
+    assert 'physical_owner_not_confirmed_across_frames' in green_head.evidence
+    assert 'head_tail_ownership_requires_distinct_endpoint_evidence' in next(
+        c.ambiguity for c in provider.last_result.components
+        if c.role=='hold_body' and c.connection_group_id==green_head.connection_group_id)
+    bodies=[c for c in provider.last_result.components if c.role=='hold_body']
+    assert {c.connection_group_id for c in bodies}==set(
+        provider.last_result.connection_group_masks)
+    for body in bodies:
+        bbox,mask=provider.last_result.connection_group_masks[body.connection_group_id]
+        assert bbox==body.bbox and mask.dtype==np.bool_
+        assert mask.shape==(bbox[3],bbox[2])
+        assert np.count_nonzero(mask)==body.area

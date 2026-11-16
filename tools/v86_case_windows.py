@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import csv
+import gzip
 import hashlib
 import json
 import re
@@ -31,9 +32,14 @@ ASSIST_PREVIEW_FRAMES = ((294, "assist_preview_4_9s_frame_294"),
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
-    if not path.is_file():
-        return []
-    with path.open(encoding="utf-8-sig", newline="") as handle:
+    if path.is_file():
+        handle_context = path.open(encoding="utf-8-sig", newline="")
+    else:
+        compressed_path = path.with_name(path.name + ".gz")
+        if not compressed_path.is_file():
+            return []
+        handle_context = gzip.open(compressed_path, "rt", encoding="utf-8-sig", newline="")
+    with handle_context as handle:
         return list(csv.DictReader(handle))
 
 

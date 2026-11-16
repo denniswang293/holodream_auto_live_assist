@@ -1,6 +1,6 @@
 ﻿"""Causal current-frame pixel segmentation in rectified lane coordinates."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from bisect import bisect_left
 from typing import Any
 import cv2
@@ -9,6 +9,16 @@ from time import perf_counter
 
 MASK_ROLES = ("lane", "tap_face", "hold_head", "hold_body", "hold_tail",
               "effect_or_artifact", "unknown", "judgment_line")
+
+
+def _bool_region_row_bounds(region: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return first/last occupied x per Boolean row; empty rows keep argmax defaults."""
+    if region.dtype != np.bool_ or region.ndim != 2:
+        raise TypeError("region must be a 2D Boolean array")
+    width = region.shape[1]
+    first = np.argmax(region, axis=1)
+    last = width - 1 - np.argmax(region[:, ::-1], axis=1)
+    return first, last
 
 @dataclass(frozen=True)
 class PixelComponent:
@@ -32,13 +42,21 @@ class SegmentationResult:
     frame_index: int | None
     hit_y: float
     lane_bounds: tuple[float, float]
+    # Exact local Hold-group ROIs keyed by the body component's frame-local ID.
+    connection_group_masks: dict[int, tuple[tuple[int, int, int, int], np.ndarray]] = field(default_factory=dict)
     def __getitem__(self, role: str) -> np.ndarray:
         return self.masks[role]
 
 class LanePixelSegmenter:
     """Extract conservative masks; every semantic pixel comes from this image."""
+    def __init__(self):
+        # Opt-in offline counters/timers; the production segment path leaves
+        # detailed Tap diagnostics disabled by default.
+        self.profile_tap_recovery = False
+
     def segment(self, rectified_bgr: np.ndarray, geometry: Any, *,
-                frame_index: int | None = None) -> SegmentationResult:
+                frame_index: int | None = None,
+                include_polygons: bool = True) -> SegmentationResult:
         stage_start = perf_counter()
         image = np.asarray(rectified_bgr)
         if image.dtype != np.uint8 or image.ndim != 3 or image.shape[2] != 3:
@@ -78,6 +96,7 @@ class LanePixelSegmenter:
         # are reconsidered below; unexamined pixels remain explicitly UNKNOWN.
         masks["unknown"][class_masks["neutral"]] = 255
         components: list[PixelComponent] = []
+        connection_group_masks: dict[int, tuple[tuple[int, int, int, int], np.ndarray]] = {}
         assigned = np.zeros((h, w), bool)
         next_id = 1
         class_mask_setup_ms = (perf_counter() - mask_setup_start) * 1000
@@ -179,6 +198,7 @@ class LanePixelSegmenter:
                     mid = active[(active >= int(.2 * ch)) & (active <= int(.7 * ch))]
                     base = float(np.median(rows[mid])) if len(mid) else 0.
                     if base > 0:
+                        row_first_x, row_last_x = _bool_region_row_bounds(region)
                         # Find a flat, panel-like terminal face. Comparing only
                         # ribbon width to a global median misses valid heads on
                         # curved notes where the end panel is only modestly
@@ -196,9 +216,8 @@ class LanePixelSegmenter:
                                     misses += 1
                                     if misses >= 2: break
                                     continue
-                                row_pixels=region[row_index]
-                                center=(int(np.argmax(row_pixels))+
-                                        cw-1-int(np.argmax(row_pixels[::-1])))/2
+                                center=(int(row_first_x[row_index])+
+                                        int(row_last_x[row_index]))/2
                                 if selected:
                                     next_center_min=min(center_min,center)
                                     next_center_max=max(center_max,center)
@@ -273,7 +292,7 @@ class LanePixelSegmenter:
                 # artifact consumed most of the non-CC CPU time without adding
                 # usable shape evidence. Semantic note components still get a
                 # polygon from observed pixels.
-                if role not in ("unknown", "effect_or_artifact"):
+                if include_polygons and role not in ("unknown", "effect_or_artifact"):
                     contours, _ = cv2.findContours(region.astype(np.uint8), cv2.RETR_EXTERNAL,
                                                     cv2.CHAIN_APPROX_SIMPLE)
                 else:
@@ -283,9 +302,15 @@ class LanePixelSegmenter:
                     approx = cv2.approxPolyDP(contour, 1.0, True).reshape(-1, 2)
                     polygon = tuple((int(px + x0), int(py + y0)) for px, py in approx)
                 connection_group_id = next_id if role == "hold_body" else None
-                components.append(PixelComponent(next_id, role, (x0, y0, cw, ch),
+                component = PixelComponent(next_id, role, (x0, y0, cw, ch),
                     polygon, color_name, area, tuple(evidence), tuple(positive),
-                    tuple(negative), tuple(ambiguity), frame_index, connection_group_id))
+                    tuple(negative), tuple(ambiguity), frame_index, connection_group_id)
+                if role == "hold_body":
+                    # ``region`` is the exact local component mask already
+                    # materialized above; retain its reference without a new
+                    # full-frame copy or Python row-run materialization.
+                    connection_group_masks[connection_group_id] = ((x0, y0, cw, ch), region)
+                components.append(component)
                 next_id += 1
                 if role == "hold_body":
                     for end_role, end_pixels in (("hold_head", head), ("hold_tail", tail)):
@@ -296,12 +321,15 @@ class LanePixelSegmenter:
                         local_x, local_y = int(ex.min()), int(ey.min())
                         ecx, ecy = x0 + local_x, y0 + local_y
                         ecw, ech = int(ex.max() - local_x + 1), int(ey.max() - local_y + 1)
-                        contours, _ = cv2.findContours(end_pixels.astype(np.uint8), cv2.RETR_EXTERNAL,
-                                                       cv2.CHAIN_APPROX_SIMPLE)
-                        contour = max(contours, key=cv2.contourArea)
-                        approx = cv2.approxPolyDP(contour, 1.0, True).reshape(-1, 2)
+                        polygon = ()
+                        if include_polygons:
+                            contours, _ = cv2.findContours(end_pixels.astype(np.uint8), cv2.RETR_EXTERNAL,
+                                                           cv2.CHAIN_APPROX_SIMPLE)
+                            contour = max(contours, key=cv2.contourArea)
+                            approx = cv2.approxPolyDP(contour, 1.0, True).reshape(-1, 2)
+                            polygon = tuple((int(px + x0), int(py + y0)) for px, py in approx)
                         components.append(PixelComponent(next_id, end_role, (ecx, ecy, ecw, ech),
-                            tuple((int(px + x0), int(py + y0)) for px, py in approx), color_name, end_area,
+                            polygon, color_name, end_area,
                             ("current_frame_hsv_chroma", "connected_to_ribbon", "broad_endpoint_cap"),
                             ("endpoint_wider_than_ribbon_body",), (),
                             ("physical_owner_not_confirmed_across_frames",), frame_index,
@@ -309,21 +337,41 @@ class LanePixelSegmenter:
                         next_id += 1
         class_component_loop_ms = (perf_counter() - class_component_start) * 1000
 
+        # Tap recovery only needs to compare proposals with existing Tap
+        # faces. Building these ordered per-color ROI lists once avoids
+        # rescanning unrelated Hold/body/UNKNOWN components for every
+        # recovery proposal. Newly recovered faces are appended immediately,
+        # preserving the original ordered duplicate checks between proposals.
+        tap_face_boxes_by_color = {
+            color_name: [component.bbox for component in components
+                         if component.role == "tap_face" and component.color == color_name]
+            for color_name in ("yellow", "cyan")
+        }
+
         # Recover complete cyan/yellow Tap faces that connect to a bright
         # judgment glint or lane line in the raw hue mask. A horizontal open
         # kernel proposes only panel-like cores; the exported mask is then
         # clipped back to the observed current-frame chroma pixels. This uses
         # no Perception detections and never fills the proposed rectangle.
         tap_recovery_start=perf_counter()
+        tap_recovery_diagnostics={} if self.profile_tap_recovery else None
         roi_top=max(0,int(np.floor(geometry.top_y)))
         roi_bottom=min(h,int(np.ceil(geometry.hit_y-3)))
         for color_name in ("yellow", "cyan"):
+            if tap_recovery_diagnostics is not None:
+                pass_started=perf_counter()
+                pass_counts={"connected_component_proposals":0,
+                             "geometry_qualified_proposals":0,
+                             "accepted_faces":0,"duplicate_rejections":0}
+            else:
+                pass_started=None;pass_counts=None
             # Boolean arrays use the same 0/1 byte representation needed by
             # OpenCV morphology, so pass a byte view instead of copying.
             source_mask=class_masks[color_name][roi_top:roi_bottom,:].view(np.uint8)
             opened=cv2.morphologyEx(source_mask,cv2.MORPH_OPEN,
                 np.ones((3,max(12,round(.22*geometry.lane_pixels))),np.uint8))
             count,labels,stats,_=cv2.connectedComponentsWithStats(opened,8)
+            if pass_counts is not None:pass_counts["connected_component_proposals"]+=max(0,count-1)
             for label in range(1,count):
                 px,py,pw,ph,proposal_area=map(int,stats[label])
                 py+=roi_top
@@ -345,37 +393,55 @@ class LanePixelSegmenter:
                 hsv_roi=hsv[by:by+bh,bx:bx+bw]
                 if not (bh>=12 and bw/max(1,bh)>=2.4 and density>=.42 and fill_rows>=.65 and
                         float(np.mean(hsv_roi[:,:,1]))>=95 and float(np.mean(hsv_roi[:,:,2]))>=150):continue
+                if pass_counts is not None:pass_counts["geometry_qualified_proposals"]+=1
                 # Do not duplicate a panel already isolated as its own
                 # connected component; preserve the larger, full face mask.
                 duplicate=False
-                for existing in components:
-                    if existing.role!="tap_face" or existing.color!=color_name:continue
-                    ex,ey,ew,eh=existing.bbox
+                for ex,ey,ew,eh in tap_face_boxes_by_color[color_name]:
                     overlap=max(0,min(bx+bw,ex+ew)-max(bx,ex))*max(0,min(by+bh,ey+eh)-max(by,ey))
                     cover=overlap/max(1,bw*bh)
                     if cover>=.55:duplicate=True;break
-                if duplicate:continue
+                if duplicate:
+                    if pass_counts is not None:pass_counts["duplicate_rejections"]+=1
+                    continue
                 observed=pixels
                 masks["tap_face"][by:by+bh,bx:bx+bw][observed]=255
                 masks["unknown"][by:by+bh,bx:bx+bw][observed]=0
                 assigned[by:by+bh,bx:bx+bw][observed]=True
-                contours,_=cv2.findContours(observed.view(np.uint8),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
                 polygon=()
-                if contours:
-                    approx=cv2.approxPolyDP(max(contours,key=cv2.contourArea),1.0,True).reshape(-1,2)
-                    polygon=tuple((int(x+bx),int(y+by)) for x,y in approx)
+                if include_polygons:
+                    contours,_=cv2.findContours(observed.view(np.uint8),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+                    if contours:
+                        approx=cv2.approxPolyDP(max(contours,key=cv2.contourArea),1.0,True).reshape(-1,2)
+                        polygon=tuple((int(x+bx),int(y+by)) for x,y in approx)
                 components.append(PixelComponent(next_id,"tap_face",(bx,by,bw,bh),polygon,
                     color_name,int(np.count_nonzero(observed)),
                     ("current_frame_hsv_chroma","horizontal_morphology_panel_core","connected_observed_pixels"),
                     ("horizontal_panel_shape","dense_saturated_face_fill"),(),
                     ("judgment_effect_excluded_by_hit_band_and_panel_geometry",),frame_index))
+                tap_face_boxes_by_color[color_name].append((bx,by,bw,bh))
                 next_id+=1
+                if pass_counts is not None:pass_counts["accepted_faces"]+=1
+            if pass_counts is not None:
+                pass_name=("tap_recovery_yellow" if color_name=="yellow" else
+                           "tap_recovery_cyan_global")
+                tap_recovery_diagnostics[f"{pass_name}_ms"]=(perf_counter()-pass_started)*1000
+                tap_recovery_diagnostics.update({f"{pass_name}_{key}":value
+                                                 for key,value in pass_counts.items()})
         # A screen-wide cyan connection can erase a real panel during opening.
         # Recheck one bounded 2.2-lane ROI centered on each lane (rather than
         # sliding many overlapping windows across every x position). A black
         # separator keeps the tiled ROIs independent for morphology/labeling.
         # Only a dense, sufficiently tall horizontal core may restore observed
         # pixels; clipped hit glows and thin rails remain UNKNOWN.
+        if tap_recovery_diagnostics is not None:
+            cyan_tiled_started=perf_counter()
+            cyan_tiled_counts={"connected_component_proposals":0,
+                               "geometry_qualified_proposals":0,
+                               "accepted_faces":0,"duplicate_rejections":0,
+                               "early_duplicate_prunes":0}
+        else:
+            cyan_tiled_started=None;cyan_tiled_counts=None
         cyan_top=max(0,int(np.floor(geometry.top_y)))
         cyan_bottom=min(h,int(np.ceil(geometry.hit_y-3)))
         cyan_source=class_masks["cyan"][cyan_top:cyan_bottom,:].view(np.uint8)
@@ -403,6 +469,8 @@ class LanePixelSegmenter:
         opened=cv2.morphologyEx(tiled,cv2.MORPH_OPEN,
             np.ones((3,kernel_width),np.uint8))
         proposal_count,proposal_labels,proposal_stats,_=cv2.connectedComponentsWithStats(opened,8)
+        if cyan_tiled_counts is not None:
+            cyan_tiled_counts["connected_component_proposals"]+=max(0,proposal_count-1)
         cyan_proposals=[]
         for label in range(1,proposal_count):
             tx,ty,pw,ph,proposal_area=map(int,proposal_stats[label])
@@ -436,41 +504,66 @@ class LanePixelSegmenter:
             if len(xs)<40:continue
             bx,by=x0+int(xs.min()),y0+int(ys.min())
             ex,ey=x0+int(xs.max()+1),y0+int(ys.max()+1)
-            pixels=local[int(ys.min()):int(ys.max()+1),int(xs.min()):int(xs.max()+1)]
             bw,bh=ex-bx,ey-by
+            # The final observed-pixel box is the same box used by the later
+            # duplicate pass. Use the existing overlap/coverage rule here so
+            # known Tap faces can prune proposals before density and HSV work.
+            duplicate=False
+            for ex0,ey0,ew,eh in tap_face_boxes_by_color["cyan"]:
+                overlap=max(0,min(ex,ex0+ew)-max(bx,ex0))*max(0,min(ey,ey0+eh)-max(by,ey0))
+                if overlap/max(1,min(bw*bh,ew*eh))>=.55:
+                    duplicate=True;break
+            if duplicate:
+                if cyan_tiled_counts is not None:
+                    cyan_tiled_counts["duplicate_rejections"]+=1
+                    cyan_tiled_counts["early_duplicate_prunes"]+=1
+                continue
+            pixels=local[int(ys.min()):int(ys.max()+1),int(xs.min()):int(xs.max()+1)]
             density=float(np.mean(pixels));rows=np.count_nonzero(pixels,axis=1)
             fill_rows=np.count_nonzero(rows>=.45*bw)/max(1,bh)
             hsv_roi=hsv[by:ey,bx:ex]
             if not (bh>=12 and bw/max(1,bh)>=2.4 and density>=.42 and fill_rows>=.65 and
                     float(np.mean(hsv_roi[:,:,1]))>=95 and float(np.mean(hsv_roi[:,:,2]))>=150):continue
             cyan_proposals.append((int(np.count_nonzero(pixels)),bx,by,ex,ey,pixels.copy()))
+            if cyan_tiled_counts is not None:
+                cyan_tiled_counts["geometry_qualified_proposals"]+=1
         accepted_boxes=[]
         for area,bx,by,ex,ey,pixels in sorted(cyan_proposals,key=lambda p:(-p[0],p[1],p[2])):
             bw,bh=ex-bx,ey-by
             duplicate=False
-            for existing in components:
-                if existing.role!="tap_face" or existing.color!="cyan":continue
-                ex0,ey0,ew,eh=existing.bbox
+            for ex0,ey0,ew,eh in tap_face_boxes_by_color["cyan"]:
                 overlap=max(0,min(ex,ex0+ew)-max(bx,ex0))*max(0,min(ey,ey0+eh)-max(by,ey0))
                 if overlap/max(1,min(bw*bh,ew*eh))>=.55:
                     duplicate=True;break
-            if duplicate:continue
+            if duplicate:
+                if cyan_tiled_counts is not None:cyan_tiled_counts["duplicate_rejections"]+=1
+                continue
             if any(max(0,min(ex,x0+ww)-max(bx,x0))*max(0,min(ey,y0+hh)-max(by,y0)) /
                    max(1,min(bw*bh,ww*hh))>=.55 for x0,y0,ww,hh in accepted_boxes):
+                if cyan_tiled_counts is not None:cyan_tiled_counts["duplicate_rejections"]+=1
                 continue
             accepted_boxes.append((bx,by,bw,bh))
             masks["tap_face"][by:ey,bx:ex][pixels]=255
             masks["unknown"][by:ey,bx:ex][pixels]=0
             assigned[by:ey,bx:ex][pixels]=True
-            contours,_=cv2.findContours(pixels.astype(np.uint8),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-            approx=cv2.approxPolyDP(max(contours,key=cv2.contourArea),1.0,True).reshape(-1,2)
-            polygon=tuple((int(x+bx),int(y+by)) for x,y in approx)
+            polygon=()
+            if include_polygons:
+                contours,_=cv2.findContours(pixels.astype(np.uint8),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+                approx=cv2.approxPolyDP(max(contours,key=cv2.contourArea),1.0,True).reshape(-1,2)
+                polygon=tuple((int(x+bx),int(y+by)) for x,y in approx)
             components.append(PixelComponent(next_id,"tap_face",(bx,by,bw,bh),polygon,
                 "cyan",area,
                 ("current_frame_hsv_chroma","lane_centered_panel_core","connected_observed_pixels"),
                 ("horizontal_panel_shape","dense_saturated_face_fill"),(),
                 ("judgment_glow_excluded_by_hit_distance_and_screen_edge",),frame_index))
+            tap_face_boxes_by_color["cyan"].append((bx,by,bw,bh))
             next_id+=1
+            if cyan_tiled_counts is not None:cyan_tiled_counts["accepted_faces"]+=1
+        if cyan_tiled_counts is not None:
+            pass_name="tap_recovery_cyan_tiled"
+            tap_recovery_diagnostics[f"{pass_name}_ms"]=(perf_counter()-cyan_tiled_started)*1000
+            tap_recovery_diagnostics.update({f"{pass_name}_{key}":value
+                                             for key,value in cyan_tiled_counts.items()})
         tap_recovery_ms=(perf_counter()-tap_recovery_start)*1000
 
         effect_y0=max(0,int(np.ceil(geometry.hit_y-34)))
@@ -505,7 +598,7 @@ class LanePixelSegmenter:
             y0=local_y0+effect_y0
             region = labels[local_y0:local_y0 + ch, x0:x0 + cw] == label
             polygon: tuple[tuple[int, int], ...] = ()
-            if area >= 16:
+            if include_polygons and area >= 16:
                 contours, _ = cv2.findContours(region.astype(np.uint8), cv2.RETR_EXTERNAL,
                                                cv2.CHAIN_APPROX_SIMPLE)
                 if contours:
@@ -529,5 +622,8 @@ class LanePixelSegmenter:
                              "effect_connected_components_ms": effect_connected_components_ms,
                              "effect_component_loop_ms": effect_component_loop_ms,
                              "mask_and_component_ms": max(0., (perf_counter() - stage_start) * 1000 - hsv_ms - gray_conversion_ms - connected_components_ms-tap_recovery_ms)}
+        if tap_recovery_diagnostics is not None:
+            self.last_profile.update(tap_recovery_diagnostics)
         return SegmentationResult(masks, components, frame_index, float(geometry.hit_y),
-                                  (float(geometry.top_y), float(geometry.hit_y)))
+                                  (float(geometry.top_y), float(geometry.hit_y)),
+                                  connection_group_masks)

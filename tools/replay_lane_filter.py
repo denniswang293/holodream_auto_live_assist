@@ -120,7 +120,8 @@ def make_state(provider,geometry,calibration,start_time,*,birth_zone_end_y=None,
     engine.tracker.trace_associations=trace_tracker_associations
     if provider=="segmented":engine.perception=SegmentedProvider(geometry)
     elif provider=="v85":engine.perception=EarlyPixelProvider(geometry,
-        birth_zone_end_y=birth_zone_end_y,record_conversion_trace=record_conversion_trace)
+        birth_zone_end_y=birth_zone_end_y,record_conversion_trace=record_conversion_trace,
+        include_polygons=False)
     return {"provider":provider,"now":now,"scheduler":scheduler,"actuator":actuator,"engine":engine,
             "next_poll":start_time+.002,"arm_triggered":False,"arm_ended":False,
             "actions":[],"event_log":event_log,"decisions":[],"summary":[],"candidate_trace":[],

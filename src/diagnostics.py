@@ -17,6 +17,8 @@ import numpy as np
 
 def raw_identity_trace(engine,observation):
     """Copy mutable pixels only; encoding belongs to the bounded writer."""
+    ensure_labels=getattr(engine.perception,'ensure_last_labels',None)
+    if ensure_labels is not None:ensure_labels()
     planes={name:np.array(value,copy=True) for name,value in
             [('labels',engine.perception.last_labels),('path',engine.perception.last_path)] if value is not None}
     return dict(schema=1,tracker='one_to_one',

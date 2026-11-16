@@ -42,6 +42,11 @@ def percentile(values: list[float], q: float) -> float | None:
 
 def summarize_run(run_output: Path, provider: str, repeat: int) -> tuple[dict, dict]:
     manifest = json.loads((run_output / "replay_manifest.json").read_text(encoding="utf-8"))
+    decision_csv = run_output / "physical_note_decisions.csv"
+    if (bool(manifest.get("performance_only")) and decision_csv.exists()) or (
+            not bool(manifest.get("performance_only")) and int(aggregate["decision_rows"]) > 0
+            and not decision_csv.exists()):
+        raise RuntimeError(f"per-note decision output presence contradicts recording mode: {run_output}")
     aggregates = read_csv(run_output / "baseline_vs_candidate.csv")
     aggregate = next((row for row in aggregates if row["provider"] == provider), None)
     if aggregate is None:
@@ -59,6 +64,11 @@ def summarize_run(run_output: Path, provider: str, repeat: int) -> tuple[dict, d
         "decoded_frames": int(aggregate["decoded_frames"]),
         "processed_frames": int(aggregate["processed_frames"]),
         "dropped_frames": int(aggregate["dropped_frames"]),
+        "decision_rows": int(aggregate["decision_rows"]),
+        "recording_mode": manifest.get("recording_mode", "detailed"),
+        "performance_only": bool(manifest.get("performance_only", False)),
+        "per_note_output_history_retained": bool(manifest.get("per_note_output_history_retained", True)),
+        "physical_note_attribution_available": bool(manifest.get("physical_note_attribution_available", True)),
         "processing_mean_ms": float(aggregate["compute_ms_mean"]),
         "processing_p90_ms": percentile(processing, 90),
         "processing_p99_ms": percentile(processing, 99),
@@ -130,6 +140,8 @@ def main() -> int:
     parser.add_argument("--reference-tolerance-ms", type=float, default=80.0)
     parser.add_argument("--limit-frames", type=int, default=None,
                         help="Use only for a short smoke run; omit for full replay.")
+    parser.add_argument("--performance-only", action="store_true",
+                        help="compact measured recording; omit per-note decision history and attribution output")
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("--repeats must be at least 1")
@@ -159,6 +171,8 @@ def main() -> int:
                 "--reference-tolerance-ms", str(args.reference_tolerance_ms),
                 "--birth-zone-end-y", str(args.birth_zone_end_y),
             ]
+            if args.performance_only:
+                command.append("--performance-only")
             if args.limit_frames is not None:
                 command.extend(("--limit-frames", str(args.limit_frames)))
             print(f"[repeat {repeat}/{args.repeats}] provider={provider}; launching fresh process",
@@ -181,7 +195,8 @@ def main() -> int:
                   f"mock_down={row['mock_pressed']}", flush=True)
 
     shared = ("geometry_config_sha256", "timing_calibration_sha256", "arm_window_s",
-              "birth_zone_end_y")
+              "birth_zone_end_y", "recording_mode", "performance_only",
+              "per_note_output_history_retained", "physical_note_attribution_available")
     for key in shared:
         values = {json.dumps(manifest.get(key), sort_keys=True) for manifest in manifests}
         if len(values) != 1:
@@ -202,6 +217,11 @@ def main() -> int:
         "process_isolation": "one fresh Python process per provider per repeat",
         "simulated_arm_window_s": list(args.simulated_arm_window),
         "birth_zone_end_y": args.birth_zone_end_y,
+        "recording_mode":"performance_only" if args.performance_only else "detailed",
+        "performance_only":args.performance_only,
+        "per_note_output_history_retained":not args.performance_only,
+        "physical_note_attribution_available":not args.performance_only,
+        "note":"Performance-only mode still computes every Engine decision and records the scalar row total, but omits per-note output/history; do not use it for per-note attribution.",
         "reference_tolerance_ms": args.reference_tolerance_ms,
         "limit_frames": args.limit_frames,
         "geometry_config_sha256": manifests[0]["geometry_config_sha256"],

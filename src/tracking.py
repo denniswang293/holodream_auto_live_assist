@@ -249,12 +249,12 @@ class Tracker:
                 if c.kind=='plate_fragment' and owner is not None and owner.kind=='hold':
                     if trace_enabled:trace_edge(uid,cap,c,j,'plate_fragment_cannot_update_hold')
                     continue
-                role=not cap.note_uid and (cap.tail_locked or cap.votes.get('hold_tail',0)>max(cap.votes.get('hold_head',0),
-                        cap.votes.get('tap',0) if cap.detection.color=='yellow' else 0))
                 # An endpoint cannot become a new head just because effects
                 # or the bottom ROI hide its below-ribbon evidence. Preserve
                 # role only after repeated COMPLETE tail faces and coherent
                 # fresh motion, with all existing spatial gates still applied.
+                role=not cap.note_uid and (cap.tail_locked or cap.votes.get('hold_tail',0)>max(cap.votes.get('hold_head',0),
+                        cap.votes.get('tap',0) if cap.detection.color=='yellow' else 0))
                 moving_tail=(role and uid in active_tails and cap.full_tail_observations>=2 and
                              len(cap.samples)>=4 and dt<=.06 and velocity>20 and
                              c.bbox[1]>=y-2 and overlap((lo,hi),detection_spans[j])>.55)

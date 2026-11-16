@@ -466,3 +466,16 @@ class Scheduler:
                     "pending": dict(self.pending), "held": dict(self.held),
                     "consumed": set(self.consumed), "fired":set(self.fired), "sent_taps": self.sent_taps,
                     "sent_holds": self.sent_holds, "error": self.error}
+
+    def uid_state_flags(self, uid):
+        """Return current membership flags without copying scheduler history.
+
+        Engine's per-note decision loop only needs membership for one UID after
+        offering or updating that note. A full snapshot there copies the ever-
+        growing fired/consumed sets once per note and frame. Read all four
+        memberships under the same lock so a concurrent poll sees one atomic
+        scheduler state, as it would through ``snapshot()``.
+        """
+        with self.lock:
+            return (uid in self.fired, uid in self.consumed, uid in self.pending,
+                    any(action.uid == uid for action in self.held.values()))

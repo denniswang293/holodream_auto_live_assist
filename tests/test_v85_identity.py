@@ -1,4 +1,5 @@
 import numpy as np
+import threading
 
 from src.engine import Engine
 from src.model import Detection, Frame, Geometry, Note
@@ -94,10 +95,77 @@ def test_engine_never_offers_an_unresolved_type_pending_note():
     assert engine.last_decision_profile['total_decide_ms']>=engine.last_decision_profile['per_note_decision_loop_ms']
     assert engine.last_decision_profile['slowest_note_row_build_ms']>=0
     assert engine.last_decision_profile['slowest_note_action_logic_ms']>=0
-    assert engine.last_decision_profile['slowest_note_scheduler_snapshot_ms']>=0
+    assert engine.last_decision_profile['slowest_note_uid_state_lookup_ms']>=0
     assert engine.last_decision_profile['slowest_note_finalize_ms']>=0
     assert not scheduler.pending
     assert not actuator.calls
+
+
+def test_scheduler_uid_state_flags_match_full_snapshot_without_exposing_history():
+    scheduler=Scheduler(MockActuator(),clock=lambda:30.0)
+    pending=Action('pending-uid','S','tap',30.1,.01)
+    held=Action('held-uid','D','hold',30.1,.01,30.5)
+    scheduler.pending[pending.uid]=pending
+    scheduler.held['D']=held
+    scheduler.consumed.add('consumed-uid')
+    scheduler.fired.add('fired-uid')
+
+    expected={
+        pending.uid:(False,False,True,False),
+        held.uid:(False,False,False,True),
+        'consumed-uid':(False,True,False,False),
+        'fired-uid':(True,False,False,False),
+        'unused-uid':(False,False,False,False),
+    }
+    for uid,flags in expected.items():
+        snapshot=scheduler.snapshot()
+        assert scheduler.uid_state_flags(uid)==(
+            uid in snapshot['fired'],uid in snapshot['consumed'],
+            uid in snapshot['pending'],any(action.uid==uid for action in snapshot['held'].values()))
+        assert scheduler.uid_state_flags(uid)==flags
+
+
+def test_scheduler_uid_state_flags_wait_for_atomic_poll_transition():
+    entered_key_down=threading.Event()
+    allow_key_down=threading.Event()
+    query_started=threading.Event()
+    query_done=threading.Event()
+    query_result=[]
+
+    class BlockingActuator(MockActuator):
+        def key_down(self,key):
+            super().key_down(key)
+            entered_key_down.set()
+            assert allow_key_down.wait(2.0)
+
+    now=[30.05]
+    scheduler=Scheduler(BlockingActuator(),clock=lambda:now[0])
+    scheduler.update_context(30.05,True,True)
+    scheduler.armed=True
+    action=Action('atomic-uid','S','hold',30.1,.01,30.5)
+    assert scheduler.offer(action)
+
+    now[0]=30.1
+    poller=threading.Thread(target=scheduler.poll)
+    poller.start()
+    assert entered_key_down.wait(1.0)
+
+    def query():
+        query_started.set()
+        query_result.append(scheduler.uid_state_flags(action.uid))
+        query_done.set()
+
+    reader=threading.Thread(target=query)
+    reader.start()
+    assert query_started.wait(1.0)
+    assert not query_done.wait(.02)
+    allow_key_down.set()
+    poller.join(1.0);reader.join(1.0)
+    assert not poller.is_alive() and not reader.is_alive()
+    assert query_result==[(True,True,False,True)]
+
+    assert scheduler.release_hold(action.uid)
+    assert scheduler.uid_state_flags(action.uid)==(True,True,False,False)
 
 
 def test_engine_reuses_pending_key_when_current_lane_evidence_differs():

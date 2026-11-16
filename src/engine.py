@@ -108,7 +108,6 @@ class Engine:
         No new detection, deadline or action is invented here.
         """
         labels=self.perception.last_labels
-        if labels is None:return
         snapshot=self.scheduler.snapshot();t=frame.captured_at
         used=set(snapshot['pending'])|set(snapshot['consumed'])|{a.uid for a in snapshot['held'].values()}
         notes=list(self.tracker.notes.values())
@@ -132,6 +131,11 @@ class Engine:
                 tail=self.tracker.caps.get(old.tail_uid)
                 if (tail is None or tail.full_tail_observations<2 or t-tail.samples[-1][0]>.06 or
                         tail.detection.kind!='hold_tail' or tail.terminal_owner_uid!=old.uid):continue
+                if labels is None:
+                    ensure_labels=getattr(self.perception,'ensure_last_labels',None)
+                    if ensure_labels is None:continue
+                    labels=ensure_labels()
+                    if labels is None:continue
                 x,y,w,h=old.detection.bbox
                 region=labels[max(0,y):min(labels.shape[0],y+h),max(0,x):min(labels.shape[1],x+w)]
                 positive=region[region>0]
@@ -395,7 +399,7 @@ class Engine:
         return dict(frame=frame,image=image,playing=playing,notes=notes,detections=ds,
                     cpu_ms=(time.perf_counter()-started)*1000,profile={**profile,**provider_profile})
 
-    def decide(self,observation,processed_at=None):
+    def decide(self,observation,processed_at=None,record_decisions=True):
         decision_started=time.perf_counter();decision_profile={}
         s=self.scheduler;frame=observation['frame']
         now=s.clock() if processed_at is None else processed_at
@@ -424,7 +428,7 @@ class Engine:
         stage_started=time.perf_counter()
         slowest_note_ms=0.;slowest_note_uid='';slowest_note_reason=''
         slowest_note_sections=({name:{'ms':0.,'uid':'','reason':''} for name in
-                               ('row_build','action_logic','scheduler_snapshot','finalize')}
+                               ('row_build','action_logic','uid_state_lookup','finalize')}
                               if self.profile_note_iterations else None)
         for n in sorted(observation['notes'],key=lambda n:(-n.head[-1][1],n.uid)):
             note_started=time.perf_counter() if self.profile_note_iterations else None
@@ -435,7 +439,9 @@ class Engine:
                 n.identity_state='COMMITTED'
             else:
                 n.identity_state=n.visibility_state
-            row=dict(sequence=frame.sequence,capture_timestamp=frame.captured_at,note_uid=n.uid,
+            row=None
+            if record_decisions:
+                row=dict(sequence=frame.sequence,capture_timestamp=frame.captured_at,note_uid=n.uid,
                      kind=n.kind,kind_locked=n.kind_locked,color=n.color,bbox=list(self.geometry.native_bbox(n.detection.bbox)),
                      keys='|'.join(n.detection.keys),last_observation=n.last_seen,observations=n.observations,
                      state=n.state,reason=n.reason,crossing_at='',press_at='',release_at='',uncertainty='',
@@ -456,9 +462,9 @@ class Engine:
                      last_verified_full_face_at=(n.last_verified_full_face_at
                          if math.isfinite(n.last_verified_full_face_at) else None),
                      semantic_evidence='|'.join(n.semantic_evidence))
-            row.update(tap_occlusion_authorized=False,tap_visibility_reason='not_an_occlusion_action')
+            if row is not None:row.update(tap_occlusion_authorized=False,tap_visibility_reason='not_an_occlusion_action')
             cap=self.tracker.caps.get(n.tail_uid)
-            row.update(tail_last_kind=n.tail_last_kind,tail_last_observation=n.tail[-1][0] if n.tail else None,
+            if row is not None:row.update(tail_last_kind=n.tail_last_kind,tail_last_observation=n.tail[-1][0] if n.tail else None,
                        tail_bbox=list(self.geometry.native_bbox(cap.detection.bbox)) if cap else None,
                        tail_y=n.tail[-1][1] if n.tail else None,
                        tail_prediction_reason='',tail_crossing_at=None,tail_uncertainty=None,
@@ -481,17 +487,17 @@ class Engine:
                 tail_fresh=bool(cap and n.tail and tail_age<=.06 and unique_tail_owner)
                 tail_visible_now=bool(cap and cap.samples and cap.samples[-1][0]==frame.captured_at and
                     unique_tail_owner)
-                row['tail_visibility_state']=('CONFIRMED_VISIBLE' if tail_visible_now else 'TAIL_OCCLUDED')
-                row['tail_visibility_reason']=('current_owned_endpoint_pixels' if tail_visible_now else
+                if row is not None:row['tail_visibility_state']=('CONFIRMED_VISIBLE' if tail_visible_now else 'TAIL_OCCLUDED')
+                if row is not None:row['tail_visibility_reason']=('current_owned_endpoint_pixels' if tail_visible_now else
                     'no_current_owned_endpoint_pixels;last_reliable_tail_age_ms='+
                     (f'{tail_age*1000:.1f}' if math.isfinite(tail_age) else 'unknown'))
-                row.update(tail_prediction_reason=tail.reason,tail_crossing_at=tail.crossing_at,
+                if row is not None:row.update(tail_prediction_reason=tail.reason,tail_crossing_at=tail.crossing_at,
                            tail_uncertainty=tail.uncertainty)
                 full_tail=(cap is not None and cap.detection.bbox[3]>=6 and tail_visible_now and
                            cap.full_tail_observations>=2)
                 if len(n.tail)>=4 and full_tail and n.tail[-1][1]>=self.geometry.hit_y:
                     result=s.release_hold(n.uid)
-                    row['release_update_reason']=result.reason
+                    if row is not None:row['release_update_reason']=result.reason
                     if result:n.release_at=now
                     n.reason='tail_observed_crossing' if result else result.reason
                 elif tail_fresh and (tail.reason=='ready' or (
@@ -504,7 +510,7 @@ class Engine:
                     # hiding the endpoint alone cannot authorize an up.
                     end=tail.crossing_at+tail.uncertainty+self.timing.release_guard
                     result=s.update_release(n.uid,end)
-                    row['release_update_reason']=result.reason
+                    if row is not None:row['release_update_reason']=result.reason
                     if result:n.release_at=end
                     n.reason=('tail_prediction' if tail.reason=='ready' else 'verified_terminal_upper_bound') if result else result.reason
                 else:
@@ -519,7 +525,7 @@ class Engine:
             elif (n.kind=='tap' and n.uid not in snapshot['pending'] and
                   self._tap_identity_gate(n,frame.captured_at)):
                 n.reason='confirmed_tap_observation_lost' if n.last_seen<frame.captured_at else 'tap_face_not_visible'
-                row['tap_occlusion_authorized']=False
+                if row is not None:row['tap_occlusion_authorized']=False
             elif not observation['playing']:
                 n.reason='not_playing'
             elif (n.kind=='hold' and n.uid not in snapshot['pending'] and
@@ -534,8 +540,9 @@ class Engine:
                 n.reason='late_hold_head_without_identity'
             else:
                 if n.kind=='tap' and n.last_seen<frame.captured_at:
-                    row['tap_occlusion_authorized']=True
-                    row['tap_visibility_reason']='confirmed_identity_short_occlusion_within_120ms'
+                    if row is not None:
+                        row['tap_occlusion_authorized']=True
+                        row['tap_visibility_reason']='confirmed_identity_short_occlusion_within_120ms'
                 estimate=self.timing.predict(n.head,frame.captured_at,kind=n.kind)
                 n.crossing_at=estimate.crossing_at;n.uncertainty=estimate.uncertainty
                 n.reason=estimate.reason
@@ -582,7 +589,7 @@ class Engine:
                             if result:
                                 n.key=key;n.press_at=press;n.release_at=end;n.state='SCHEDULED'
                                 break
-            row.update(state=n.state,reason=n.reason,key=n.key,crossing_at=n.crossing_at,
+            if row is not None:row.update(state=n.state,reason=n.reason,key=n.key,crossing_at=n.crossing_at,
                        press_at=n.press_at,release_at=n.release_at,uncertainty=n.uncertainty,
                        tail_uid=n.tail_uid,tail_observations=len(n.tail),aliases='|'.join(n.aliases))
             if note_section_started is not None:
@@ -590,20 +597,22 @@ class Engine:
                 if section_ms>slowest_note_sections['action_logic']['ms']:
                     slowest_note_sections['action_logic']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
                 note_section_started=time.perf_counter()
-            snapshot_started=time.perf_counter() if note_started is not None else None
-            latest_snapshot=s.snapshot()
-            if snapshot_started is not None:
-                section_ms=(time.perf_counter()-snapshot_started)*1000
-                if section_ms>slowest_note_sections['scheduler_snapshot']['ms']:
-                    slowest_note_sections['scheduler_snapshot']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
+            uid_state_started=time.perf_counter() if note_started is not None else None
+            latest_state=s.uid_state_flags(n.uid)
+            if uid_state_started is not None:
+                section_ms=(time.perf_counter()-uid_state_started)*1000
+                if section_ms>slowest_note_sections['uid_state_lookup']['ms']:
+                    slowest_note_sections['uid_state_lookup']={'ms':section_ms,'uid':n.uid,'reason':n.reason}
                 note_section_started=time.perf_counter()
-            if n.uid in latest_snapshot['fired'] or n.uid in latest_snapshot['consumed'] or n.state=='DONE':
+            latest_fired,latest_consumed,latest_pending,latest_held=latest_state
+            if latest_fired or latest_consumed or n.state=='DONE':
                 n.identity_state='CONSUMED'
-            elif n.uid in latest_snapshot['pending'] or n.uid in latest_snapshot['held']:
+            elif latest_pending or latest_held:
                 n.identity_state='COMMITTED'
             else:n.identity_state=n.visibility_state
-            row['identity_state']=n.identity_state
-            self.decisions.append(row)
+            if row is not None:
+                row['identity_state']=n.identity_state
+                self.decisions.append(row)
             if note_started is not None:
                 section_ms=(time.perf_counter()-note_section_started)*1000
                 if section_ms>slowest_note_sections['finalize']['ms']:
@@ -630,7 +639,7 @@ class Engine:
                   detections=len(observation['detections']),tracks=len(observation['notes']),
                   armed=s.armed,status=('INPUT PAUSED' if s.snapshot()['paused'] else 'ASSIST ARMED') if s.armed else 'INPUT OFF')
         decision_profile['note_count']=len(observation['notes'])
-        decision_profile['decision_row_count']=len(self.decisions)
+        decision_profile['decision_row_count']=len(observation['notes'])
         decision_profile['total_decide_ms']=(time.perf_counter()-decision_started)*1000
         self.last_decision_profile=decision_profile
         return info,self.decisions

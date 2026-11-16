@@ -48,7 +48,7 @@ def indexed_frames(run_dir,limit=None):
 
 
 def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=None,
-                      profile_v85_decision_notes=False):
+                      profile_v85_decision_notes=False,performance_only=False):
     index=read_index(run_dir/"live_video_index.csv")
     geometry=Geometry(ROOT/"config/geometry_live_assist.json")
     state=make_state(provider,Geometry(geometry.path),ROOT/"config/reference_timing.json",0.,birth_zone_end_y=birth_zone_end_y)
@@ -56,10 +56,10 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
     iterator=iter(indexed_frames(run_dir,limit));current=next(iterator,None);pending_future=None
     stale_pauses=stale_timeouts=0
     if current is None:return state,{"decoded_frames":0,"processed_frames":0,"dropped_frames":0,
-        "stale_pause_events":0,"stale_timeout_disarms":0}
+        "stale_pause_events":0,"stale_timeout_disarms":0,"decision_rows_total":0}
     first_acquired=float(current[2]["acquired_timestamp"])
     state["now"][0]=first_acquired;state["next_poll"]=first_acquired+.002
-    decoded=0;processed=0;dropped=0;first_capture=float(current[2]["capture_timestamp"])
+    decoded=0;processed=0;dropped=0;decision_rows_total=0;first_capture=float(current[2]["capture_timestamp"])
     while current is not None:
         seq,image,row=current;decoded=max(decoded,seq+1)
         captured=float(row["capture_timestamp"]);acquired=float(row["acquired_timestamp"])
@@ -75,7 +75,8 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
         observe_ms=(after_observe-wall_start)*1000
         decision_at=start+(after_observe-wall_start)
         poll_to(state,decision_at,inclusive=False)
-        info,decisions=state["engine"].decide(observation,processed_at=decision_at)
+        info,decisions=state["engine"].decide(observation,processed_at=decision_at,
+            record_decisions=not performance_only)
         after_decide=time.perf_counter()
         decision_ms=(after_decide-after_observe)*1000
         finish=decision_at+(after_decide-after_observe)
@@ -99,9 +100,11 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
             "processing_ms":compute_ms,"observe_wall_ms":observe_ms,"decision_wall_ms":decision_ms,
             "capture_age_ms":(finish-captured)*1000})
         state["profile"].append(profile)
-        for decision in decisions:
-            state["decisions"].append({"provider":provider,"latency_ms":"MEASURED",
-                "run_id":run_dir.name,"video_frame":seq,"physical_note_id":"UNKNOWN",**decision})
+        decision_rows_total+=state["engine"].last_decision_profile["decision_row_count"]
+        if not performance_only:
+            for decision in decisions:
+                state["decisions"].append({"provider":provider,"latency_ms":"MEASURED",
+                    "run_id":run_dir.name,"video_frame":seq,"physical_note_id":"UNKNOWN",**decision})
         relative=captured-first_capture
         if arm_window and not state["arm_triggered"] and relative>=arm_window[0] and info["playing"] and focused and roi_valid:
             state["scheduler"].toggle();state["arm_triggered"]=True
@@ -136,7 +139,8 @@ def simulate_provider(run_dir,provider,arm_window,limit=None,birth_zone_end_y=No
                        for event in state["event_log"]]
     state["decoded_frames"]=decoded;state["dropped_frames"]=dropped
     return state,{"decoded_frames":decoded,"processed_frames":processed,"dropped_frames":dropped,
-        "stale_pause_events":stale_pauses,"stale_timeout_disarms":stale_timeouts}
+        "stale_pause_events":stale_pauses,"stale_timeout_disarms":stale_timeouts,
+        "decision_rows_total":decision_rows_total}
 
 
 def write_rows(path,rows):
@@ -157,6 +161,8 @@ def main():
     ap.add_argument("--birth-zone-end-y",type=float,default=None)
     ap.add_argument("--profile-v85-decision-notes",action="store_true",
                     help="add per-note timing instrumentation; diagnostic only and not performance-A/B eligible")
+    ap.add_argument("--performance-only",action="store_true",
+                    help="compute every decision but retain only the scalar row total; omit per-note decision CSV/history")
     args=ap.parse_args();run_dir=args.run_dir.resolve();out=args.out.resolve()/run_dir.name;out.mkdir(parents=True,exist_ok=True)
     providers=("legacy","segmented","v85") if args.mode=="compare" else (args.mode,)
     reference=[];ref_path=run_dir/"player_key_events.csv"
@@ -165,18 +171,21 @@ def main():
     summaries=[];actions=[];decisions=[];profiles=[];aggregates=[];admission=[]
     for provider in providers:
         state,counts=simulate_provider(run_dir,provider,args.simulated_arm_window,args.limit_frames,
-            args.birth_zone_end_y,profile_v85_decision_notes=args.profile_v85_decision_notes)
+            args.birth_zone_end_y,profile_v85_decision_notes=args.profile_v85_decision_notes,
+            performance_only=args.performance_only)
         summaries.extend({"provider":provider,**r} for r in state["summary"])
         actions.extend(state["actions"]);decisions.extend(state["decisions"])
         profiles.extend({"provider":provider,**r} for r in state["profile"])
         metric=action_metrics(state,reference,args.reference_tolerance_ms/1000)
         presses=[r for r in state["actions"] if r["event"]=="pressed"]
         accepts=[r for r in state["actions"] if r["event"]=="accepted"]
-        aggregates.append({"provider":provider,**counts,"decision_rows":len(state["decisions"]),
+        aggregates.append({"provider":provider,**counts,"decision_rows":counts["decision_rows_total"],
+            "performance_only":args.performance_only,
             "compute_ms_mean":float(np.mean(state["wall_ms"])) if state["wall_ms"] else None,
             "compute_ms_p90":float(np.percentile(state["wall_ms"],90)) if state["wall_ms"] else None,
             "scheduler_accepts":len(accepts),"mock_pressed":len(presses),**metric})
-        admission.append({"provider":provider,**counts,"admission_policy":"latest acquired frame at inference completion",
+        admission.append({"provider":provider,**counts,"performance_only":args.performance_only,
+            "admission_policy":"latest acquired frame at inference completion",
             "decode_and_render_in_compute_cost":False})
     write_rows(out/"frame_summary.csv",summaries);write_rows(out/"mock_actions.csv",actions)
     write_rows(out/"physical_note_decisions.csv",decisions);write_rows(out/"stage_profile_by_frame.csv",profiles)
@@ -188,6 +197,12 @@ def main():
         "dropped_frame_counts_are_provider_specific":True,"decode_io_excluded_from_processing_cost":True,
         "v85_birth_zone_end_y":args.birth_zone_end_y,
         "v85_conversion_trace_enabled":False,
+        "recording_mode":"performance_only" if args.performance_only else "detailed",
+        "performance_only":args.performance_only,
+        "per_note_output_history_retained":not args.performance_only,
+        "physical_note_decisions_csv_written":bool(not args.performance_only and decisions),
+        "physical_note_attribution_available":not args.performance_only,
+        "decision_rows_total":sum(row["decision_rows_total"] for row in aggregates),
         "v85_decision_note_profiling_enabled":args.profile_v85_decision_notes,
         "performance_a_b_eligible":not args.profile_v85_decision_notes,
         "video_encoding_included":False,"actuator":"in-memory MockActuator","OS_keyboard_injection":False,

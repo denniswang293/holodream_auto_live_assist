@@ -1,6 +1,104 @@
 # V8.6 Offline Evaluation
 
-## Latest runtime candidate - iteration 0049; visual validation - iteration 0050 (OFFLINE_NOT_PASSED)
+## Latest iteration 0088 — Hold group extent and provenance repair
+
+Iteration **0088** fixes a confirmed V85 adapter defect at Assist video frame 894/source frame 1086 (~14.9s): green Hold head component 26, group 25, previously reported `above=68, below=80` because the global Hold-mask union included the overlapping yellow body from group 47. The adapter now measures only the endpoint's exact same-frame group ROI and preserves endpoint ambiguity evidence; the source frame reports `above=68, below=0`. Segmentation thresholds/masks and all Tracker, Timing, Scheduler, and Live safety behavior remain unchanged.
+
+The first implementation encoded each Hold row as Python run tuples and was rejected: full measured V85 P90 rose to 47.37ms, 104 frames dropped, 1,083 stale pauses. The final implementation stores the already-materialized local Boolean ROI by connection group, without copying a full frame. Full suite: **103 passed**. Full fixed 14ms A/B processed 3,159 frames and produced 342/294/259 Legacy/Segmented/V85 Mock presses with zero hard safety counters. Only one V85 Hold release changed versus the 0086 fixed baseline, moving 4ms earlier; presses did not change.
+
+Two separate full measured-time repeats processed all 3,159 frames with no drops and 226 stale pauses for each provider. V85 compute P90 was 25.67/27.02ms versus 28.44/28.56ms in 0084 repeats; V85 Mock downs were 242/237 and are host-sensitive simulator outputs, not accuracy. Current action-loss attribution still has 122 `TRACK_ASSOCIATION_UNVERIFIED` rows. Physical-note labels remain UNKNOWN; V85 remains offline and Live remains Legacy. Detailed report and evidence: `output/analysis_v86_autoloop/iteration_0088_hold_group_extent_repair/iteration_report.md` and `iteration_manifest.json`. Paired source-indexed previews, masks, and clips are in that directory's `case_windows/`; matching prior windows are in `iteration_0087_current_case_windows/`.
+
+## Latest provisional visual windows - iteration 0087
+
+Rendered 26 source-indexed continuous windows from current 0086 attribution/Replay and the required Assist run. All 26 have a preview, clip, and timeline; the Assist previews map frame 294?294, 360?360, and 894?1086 (video frame?source frame). The ~4.9 s top-clipped green object remains unresolved; the ~6.0 s green ribbon is connected in the current mask but endpoint ownership and persistent identity remain unproven; the ~14.9 s overlap/flash case still has broad effect contamination and no certified Hold ownership. These are provisional observations only: physical-note truth UNKNOWN, no recall/hit score, and status **OFFLINE_NOT_PASSED**. Artifacts: `output/analysis_v86_autoloop/iteration_0087_current_case_windows/`.
+
+## Latest exact-frame Tracker diagnostic - iteration 0086 (not performance eligible)
+
+The complete fixed 14 ms compare replay processed all 3,159 indexed frames with a sparse Tracker trace at the 116 unique reference frames from iteration 0085. Its 342/294/259 Legacy/Segmented/V85 actions and six semantic outputs are byte-identical to 0084. The trace logged 166,890 association rows across the three providers; hard Mock safety counters stayed zero and OS input was disabled. Timing from this instrumented replay is not used as performance evidence.
+
+The generic attribution still has 122 `TRACK_ASSOCIATION_UNVERIFIED` rows. A supplemental exact-frame join preserves that label while reporting the nearest spatial evidence: 65 components were non-action `effect_or_artifact`/`hold_body` observations; 35 accepted components were assigned to a different provider-local tracker UID; 20 were left `ambiguous_unassigned`; and 2 had no spatial component. Among the 55 accepted components, 41 have explicit association-edge evidence (13 lost global assignment competition, 17 ambiguous, 11 rejected by vertical/motion guards) and 14 have no edge for the trajectory-matched UID. These are processing facts, not proof that the spatial component is the same physical note as the Legacy action. No ID switch or physical-note miss is asserted.
+
+The first all-frame trace attempt was stopped after about 10 minutes at approximately 6.5 GiB resident memory; sparse frame tracing completed at approximately 1.61 GiB observed resident memory. Latest measured matrix and full suite remain 0084; status remains **OFFLINE_NOT_PASSED**. See `output/analysis_v86_autoloop/iteration_0086_tracker_trace/`.
+
+## Latest current-source attribution - iteration 0085 (analysis only)
+
+The 0085 attribution pass reused the complete iteration 0084 fixed 14 ms Replay and the immutable indexed source run. It produced one row per 342 Legacy Mock downs using same-frame geometry, lane/key/color and motion; provider UIDs remain local. Categories: 123 same-key auxiliary V85 action pairings, 25 wrong-key pairings, 122 track-association-unverified, 18 not active at the exact reference frame, 16 Engine eligibility, 13 type pending, 9 association ambiguous, 4 timing insufficient observations, 3 Timing, 3 scheduled-action unresolved, 2 after-tracking unresolved, 2 Scheduler rejects, and 2 UNKNOWN. All 342 evidence paths resolve to 300 unique source-aligned multi-panel frames.
+
+The 122 association-unverified rows are not force-labelled as a cause: exact-frame detection-to-track identity evidence is missing. The 80 ms action-event proximity is only a post-hoc aid, not a hit/recall score, and action totals cannot be interpreted as 83 distinct physical-note losses. Physical truth and calibration remain UNKNOWN; status remains **OFFLINE_NOT_PASSED**. Gzip CSV reading passed 20 focused tests; the last full suite was 100 passed in 0084 and was not repeated for this analysis-only reader change. Details: `output/analysis_v86_autoloop/iteration_0085_current_action_attribution/`.
+
+## Latest measured microtrial - iteration 0084 (OFFLINE_NOT_PASSED)
+
+The cyan tiled pass now prunes a proposal before density and HSV calculations when its final observed-pixel bbox is already covered by a known cyan Tap face under the existing 0.55 overlap rule. No morphology, ROI, threshold, mask, or scheduler behavior changed. On the 32 source frames selected in iteration 0083, role-mask hashes, ordered component hashes, and component counts all matched exactly. The full fixed 14ms replay preserved the 342/294/259 Legacy/Segmented/V85 Mock actions and all seven semantic artifacts from iteration 0075.
+
+Two counterbalanced fresh-process measured repeats covered all three providers and all 3,159 frames with exact timestamp joins, no drops, and zero hard-safety failures. V85 P90 was 28.437/28.560ms. After subtracting the same-repeat Legacy control shift, the improvement against iteration 0082 is 0.682/0.342ms. Tap recovery mean/P90 improved 0.225/0.198ms and 0.454/0.513ms. This is a small compute saving, not improved visual recall. Performance-only output has no note attribution; measured Mock counts are not accuracy evidence. Physical labels remain UNKNOWN, stale pauses persist, Live remains Legacy, and status remains **OFFLINE_NOT_PASSED**. Full suite: **100 passed**. Evidence: `output/analysis_v86_autoloop/iteration_0084_cyan_duplicate_prefilter/`.
+
+The delegated worker reported one accidental read-only `git diff`, contrary to the no-Git instruction; it reported no Git state change. The primary agent ran no Git commands.
+
+
+## Latest analysis diagnostic - iteration 0083 Tap recovery profile (not an A/B)
+
+Iteration 0083 selected 24 high `class_component_loop_ms` frames and 8 controls from the two iteration 0082 V85 measured profiles, then sequentially decoded all 3,159 indexed frames. Tap timers/counters were opt-in and `cProfile` was enabled; the resulting timings are diagnostic and not comparable as A/B performance evidence. Yellow mean/P90 was 0.652/1.088ms (150 proposals, 14 geometry-qualified, 13 accepted, 1 duplicate rejection); cyan_global was 0.955/1.548ms (642, 66, 64, 2); cyan_tiled was 2.016/2.900ms (744, 84, 39, 45). The tiled pass accepted 39 faces in this 32-frame sample, so its removal is unsupported. The full sequential cyan-mask census found 0/3,159 empty masks; pixel-count P50/P90/P99/max was 22,100/40,024/52,538/66,790. No useful empty-mask fast path is indicated for this recording. Duplicate efficiency remains unproven.
+
+No source changes, tests, or full replay were performed. Keep iteration 0082 as latest full fixed/measured replay and latest full suite (99 passed); iteration 0083 is latest analysis only. Runtime candidate remains 0075. Physical labels remain UNKNOWN, Live remains Legacy, and status remains **OFFLINE_NOT_PASSED**. Artifacts: `output/analysis_v86_autoloop/iteration_0083_tap_recovery_profile/`.
+## Latest current-source measured optimization - iteration 0081 (OFFLINE_NOT_PASSED)
+
+Iteration 0081 skips output-only per-note decision-row dictionaries when `Engine.decide(record_decisions=False)` is requested. Decision branches, Note/identity updates, Scheduler operations, and scalar decision-row counting remain active. The default detailed mode keeps its existing rows and schema. This reduces instrumentation/serialization cost; it does not change perception or establish note accuracy.
+
+The fixed 14ms replay processed all 3,159 indexed frames. Seven semantic outputs are byte-identical to iteration 0075: candidate trace, frame summary, Mock actions, safety audit, per-note decisions, posthoc reference actions, and replay manifest. Timing aggregates and stage profile are expected to differ.
+
+Two counterbalanced fresh-process measured repeats covered baseline, Segmented, and V8.5 in performance-only mode. All six processed 3,159/3,159 frames with verified capture/acquisition timestamp joins; video decode/output encoding were excluded and no OS keyboard input occurred.
+
+| Repeat | V8.5 decision-loop mean, 0079 to 0081 | Change | V8.5 processing P90, 0079 to 0081 | Change | Stale pauses / timeout disarms (0081) | Mock downs (0081) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 5.588 to 1.228ms | -78.0% | 36.643 to 31.114ms | -15.1% | 231 / 0 | 222 |
+| 2 | 5.662 to 1.253ms | -77.9% | 36.486 to 31.101ms | -14.8% | 232 / 0 | 225 |
+
+Both measured gates passed in each repeat. The matrix is host and wall-clock dependent: V8.5 scalar decision-row totals changed from 207,583/207,535 in 0079 to 207,275/207,275, and measured Mock downs varied. Performance-only runs omit per-note rows, so they cannot support note-level attribution. These results are not perception gains, physical-note accuracy, game hits, or recall evidence. Hard safety counters were zero. Physical-note labels remain UNKNOWN; stale pauses persist; V8.6 remains **OFFLINE_NOT_PASSED** and Live uses Legacy. Full suite: **98 passed**. Details and hashes: `output/analysis_v86_autoloop/iteration_0081_decision_row_opt/`.
+
+## Latest current-source A/B - fixed and measured iteration 0075 (retained runtime candidate; OFFLINE_NOT_PASSED)
+
+## Retained current-source change - iteration 0075
+
+Iteration 0075 defers EarlyPixelProvider's exact full-frame connected-component labels until Hold recovery reaches a parent-region comparison. Raw identity trace still explicitly materializes labels. Full fixed 14ms action/decision/safety outputs match current-source baseline hashes; downs remain 342/294/259 and all safety counters are zero. Source hashes are pinned in `output/analysis_v86_autoloop/iteration_0075_lazy_labels/source_manifest.json`.
+
+| Repeat | Provider | Processing P90 / P99 baseline → candidate (ms) | Capture-age P90 baseline → candidate (ms) | Drops baseline → candidate | Stale pauses baseline → candidate | Timeout disarms | Mock downs baseline → candidate |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 1 | V8.5 | 38.66 / 46.02 → 37.90 / 45.08 | 59.51 → 57.75 | 20 → 18 | 448 → 369 | 0 → 0 | 205 → 211 |
+| 2 | V8.5 | 38.28 / 46.40 → 37.76 / 45.55 | 58.88 → 57.64 | 19 → 16 | 393 → 361 | 1 → 1 | 206 → 214 |
+
+V8.5 perception mean fell by 0.481/0.475ms; per-note decision work did not materially change. Legacy and Segmented controls moved less and inconsistently, supporting a narrow gain beyond host drift. Capture-age P90 still exceeds the source interval P90 of 41.22ms; 16–18 dropped frames, 361–369 stale pauses, and a timeout disarm remain. Mock action totals are diagnostic only. Full suite: **97 passed**; compileall passed. Keep this narrow change, but status remains **OFFLINE_NOT_PASSED**.
+
+### Iteration 0074 unmodified current-source measured baseline
+
+Iteration 0073 ran the normal full 14ms compare over 3,159 indexed frames using the current source. A read-only line trace counted label-region checks; frame-summary and Mock-action hashes matched iteration 0061 exactly. The trace run is not used for timing. Iteration 0074 then ran two counterbalanced fresh-process measured repeats on current source, with identical geometry/timing hashes, arm window 1–124s, birth boundary 176.75, per-processed-row timestamp verification, and video encoding excluded. Exact code hashes and run parameters are in `output/analysis_v86_autoloop/iteration_0074_current_source_baseline/source_manifest.json`.
+
+| Provider | Fixed 14ms Mock downs | Measured processing P90 / P99 (repeat 1 / 2, ms) | Capture-age P90 / P99 (ms) | Drops | Stale pauses | Timeout disarms | Measured Mock downs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Legacy | 342 | 23.76 / 24.34; 31.41 / 31.06 | 42.69 / 43.52; 50.98 / 50.80 | 4 / 3 | 232 / 232 | 0 / 0 | 333 / 336 |
+| V8.4 Segmented | 294 | 31.62 / 32.02; 37.58 / 38.11 | 50.66 / 50.88; 57.54 / 58.56 | 3 / 3 | 243 / 240 | 0 / 0 | 253 / 257 |
+| V8.5 | 259 | 38.66 / 38.28; 46.02 / 46.40 | 59.51 / 58.88; 86.11 / 86.20 | 20 / 19 | 448 / 393 | 0 / 1 | 205 / 206 |
+
+All measured processed rows have capture/acquired timestamp verification; every provider has zero illegal keys, duplicate press UIDs, unreleased presses, and key-up failures. V8.5 remains slower than both comparators, drops 19–20 frames, and has 393–448 stale pauses plus one timeout disarm in the second repeat. Its capture-age P90 exceeds the source frame interval P90 of 41.22ms. These action counts remain Mock output, not physical-note recall or game-hit rate. Status is **OFFLINE_NOT_PASSED**.
+
+### Historical iteration 0061 artifact (source provenance incomplete)
+
+Iteration 0061 remains useful historical context, but its manifest explicitly says invocation-time source hashes were **not** captured; its later recorded `current_source_sha256` for `src/lane_segmentation.py` differs from the current file. Do not treat that matrix as current-source timing. Its fixed-delay and measured-time modes used the same 3,159-row index, geometry hash `7462e360...db35a`, timing calibration hash `0f89988e...cc034`, 1–124s arm window, and birth boundary 176.75; measured timing excluded encoding.
+
+| Provider | Fixed 14ms Mock downs | Measured P90 processing (repeat 1 / 2, ms) | Capture-age P90 (ms) | Drops | Stale pauses | Timeout disarms | Measured Mock downs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Legacy | 342 | 25.11 / 26.16 | 44.03 / 45.14 | 4 / 3 | 235 / 234 | 0 / 0 | 334 / 334 |
+| V8.4 Segmented | 294 | 30.36 / 31.01 | 49.32 / 50.06 | 3 / 3 | 238 / 239 | 0 / 0 | 259 / 259 |
+| V8.5 | 259 | 37.58 / 37.22 | 57.43 / 56.93 | 21 / 17 | 356 / 353 | 1 / 1 | 213 / 212 |
+
+The fixed Replay has zero illegal Mock keys, duplicate press IDs, unreleased presses, and key-up failures. Its 80ms action proximity columns are auxiliary comparisons against recorded human key events and are not physical-note recall or game hit rate. Measured P90 V8.5 compute remains below the source capture-interval P90 of 41.22ms, but capture-age tails, 17–21 dropped frames, 353–356 stale pauses, and a stale-timeout disarm each run mean the practical freshness gate fails. The V8.5 action totals are not comparable to the fixed-delay totals as quality scores. Full artifacts: `output/analysis_v86_autoloop/iteration_0061/`.
+
+### Performance experiments after iteration 0061
+
+Iterations 0067–0074 were diagnostics or rejected optimization trials. Iteration 0075 is the first later performance change retained: it defers one full-frame CCL call until the Hold recovery path reaches a real parent-region comparison. Iteration 0073 counted zero such comparisons in the full fixed replay. The 0075 change preserved fixed-replay semantic outputs and yielded lower whole V8.5 processing P90 and stale pauses in both current-source measured repeats. Detailed reports and paired data are under each iteration directory.
+
+The current retained source passes **97 tests** and compileall. The 0075 candidate also completed a full fixed replay and two-repeat measured matrix; those show a narrow performance gain but do not clear freshness gates. Physical-note ground truth remains UNKNOWN: the cross-session queue has 11 clips but no human-reviewed labels, so Tap/Hold recall, precision, Hold endpoint ownership accuracy, and game hit rate remain unevaluable. Status remains **OFFLINE_NOT_PASSED**; Live defaults to Legacy.
+
+The cache cleanup script `tools/cleanup_generated_caches.bat` removed six Python/pytest cache directories on 2026-11-16 and returned exit code 0. Exact paths are recorded in `output/analysis_v86_autoloop/cache_cleanup_manifest_20261116.csv`; later Python execution can recreate caches.
 
 Iteration 0048 corrected the segmented outer-edge cyan window omission: source frame 373 now has separate Tap-face pixel masks `[0,286,120,31]` and `[238,286,119,31]`, with no Tap pixels in the 984-pixel bridge. This is provisional source-mask evidence; the immediate-parent renderer hash is unavailable and a continuous before/after video was not produced.
 
@@ -382,3 +480,71 @@ Added a per-frame `connection_group_id` shared by each source hold connected reg
 ## Iteration 0047 - stale track component lineage diagnostic
 
 The 228 rows previously marked `TRACK_ASSOCIATION_UNVERIFIED` now resolve to unique exact last-observed pixel components in the 0046 trace (91/91 Segmented; 137/137 V8.5). Role counts: Tap face 94, UNKNOWN 85, Hold head 27, Hold body 22. This does not prove cross-provider physical identity. Frame 373 provides a provisional mask failure candidate: outer-lane panels remain within one screen-wide UNKNOWN cyan component and are not separately recovered as Tap faces. No runtime/action behavior changed, no physical-note metric is claimed, and status is `OFFLINE_NOT_PASSED`. See `output/analysis_v86_autoloop/iteration_0047/iteration_report.md`.
+
+
+## Iterations 0076-0077: profiling and rejected microtrial
+
+Iteration 0076 profiled 24 hot and 8 control frames with cProfile. `terminal_cap` accounted for 0.034s cumulative over 668 calls; NumPy median was 0.018s inclusive over 479 calls; connected-components calls totaled 0.095s. This did not explain the rare ~200ms class-loop stalls: frame 3008 was 216.999ms in the 0075 measured repeat and 15.871ms in the instrumented 0076 diagnostic. Root cause remains UNKNOWN. The profile is diagnostic only.
+
+Iteration 0077 tested removal of one sorted-list copy in `terminal_cap`. Exact masks and ordered component records matched across 32 frames and 12 interleaved pairs per frame, but the -0.1702ms/frame mean difference had a 95% paired interval [-0.5519,+0.2116]ms, including zero. The trial was rejected and source restored to saved baseline SHA256 `F5D03A6F20C1E7F0F424A7DD8EEE88D313AE93851E54B0C705BB9A8A39915DB9`. No full Replay/tests were run. Runtime remains retained 0075; status remains `OFFLINE_NOT_PASSED`, and human physical-note labels remain UNKNOWN. Evidence: `output/analysis_v86_autoloop/iteration_0076_terminal_cap_profile/` and `output/analysis_v86_autoloop/iteration_0077_terminal_cap_trial/`.
+
+
+## Iteration 0078 - bounded GC stall diagnostic
+
+Attempt 2 processed 3,139/3,159 frames (20 drops); its eight largest Engine intervals over 70ms overlapped same-thread generation-2 collections lasting 39-182ms (zero objects collected), with allocated blocks growing about 163k to 2.81m. One GC-disabled attempt processed 3,153 frames (6 drops), had no updates over 70ms, and reduced max 206.46 to 57.50ms; P90 was 40.31 to 40.21ms. This supports Gen2 collection as a proximate pause cost in this diagnostic harness, but does not explain the tracked heap. Admissions/actions differ from the measured repeats; no production or semantic-equivalence claim. Runtime remains 0075; OFFLINE_NOT_PASSED. See `iteration_0078_stall_causes/attempt_2/` and `attempt_3_gc_disabled/`.
+
+## Iteration 0079 - compact measured recording mode
+
+Added performance-only recording to the measured replay tools. Every Engine decision row is still computed and counted, while copied per-note output dictionaries/history and `physical_note_decisions.csv` are omitted. Detailed recording remains available. Two 100-frame V85 smoke runs matched at 1,421 decisions and identical Mock action signatures. The full two-repeat matrix used six fresh processes and verified all processed timestamps; every hard Mock safety counter was zero. V85 compact P90 was 36.64/36.49ms, P99 43.03/42.90ms, capture-age P90 55.86/55.70ms, drops 0/1, stale pauses 300/300, timeouts 0/0. This is a measurement-harness correction, not a perception gain; per-note attribution is unavailable. Runtime remains retained 0075, physical labels UNKNOWN, OFFLINE_NOT_PASSED. Latest full suite: 97 passed in 1.22s. See `iteration_0079_compact_measured_matrix/`.
+
+
+## Iteration 0080 - stale-pause boundary alignment
+
+A read-only join of the two 0079 compact V85 runs aligns all 600 `input_paused` events to `stale_capture` near or beyond the unchanged 60ms Scheduler `max_age`. Decision-age min/P50/P90/max was 60.003/60.994/61.980/114.122ms and 60.003/60.995/61.978/106.645ms. In each repeat, 151/300 pauses occurred within 5ms of the next source acquisition (median delta 4.836ms). The following frame had not yet passed Perception, so this does not justify relaxing the safety bound or establish hit truth. Runtime remains 0075; physical labels UNKNOWN; `OFFLINE_NOT_PASSED`. See `output/analysis_v86_autoloop/iteration_0080_stale_pause_alignment/analysis_report.md`, `summary.json`, and `stale_pause_event_alignment.csv`.
+
+## Latest performance-only trial - iteration 0082 (OFFLINE_NOT_PASSED)
+
+The V85 Replay provider skips polygon construction only when created by `make_state`; default and rendering paths retain polygons. Regression coverage confirms equal masks, ordered component data apart from polygon payloads, identical provider detections, and default polygon retention. The full fixed 14 ms replay processed 3,159 frames; seven semantic artifacts match 0075 byte-for-byte, and Mock downs remain 342/294/259 with all hard safety counters zero.
+
+| Repeat | V85 processing P90 | Capture-age P90 | Stale pauses / timeout disarms | Mock downs | Class-component-loop mean / P90 | Segmentation mean / P90 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 28.743 ms | 47.560 ms | 226 / 0 | 228 | 5.904 / 8.817 ms | 11.894 / 15.772 ms |
+| 2 | 28.706 ms | 47.460 ms | 227 / 0 | 229 | 5.862 / 8.735 ms | 11.797 / 15.776 ms |
+
+Two counterbalanced fresh-process repeats covered baseline, Segmented, and V85; all six runs timestamp-verified 3,159/3,159 frames. Video encoding and OS input were excluded. Relative to 0081, raw V85 P90 fell 7.6/7.7%, while baseline controls shifted faster 0.973/0.290 ms. The conservative control-adjusted candidate deltas are 1.40/2.11 ms; host and wall-clock effects prevent attributing the full raw difference to the trial. Stage class-component-loop mean/P90 was 6.672/10.185 and 6.707/10.354 ms in 0081; segmentation was 13.272/18.013 and 13.373/18.159 ms.
+
+Performance-only output omits per-note attribution. Mock downs are not physical-note hits or recall. Physical-note truth remains UNKNOWN, stale pauses persist, runtime candidate remains 0075, Live remains Legacy, and status remains **OFFLINE_NOT_PASSED**. Full suite: **99 passed**. Evidence and hashes: `output/analysis_v86_autoloop/iteration_0082_skip_polygons/`.
+
+## Iteration 0089 — Scheduler safety boundary tests
+
+Added five deterministic Mock-only tests for unfocused arm rejection, key release/disarm on live focus loss, key release/disarm through `stop_hotkey`, rejection beyond the 9-second Hold limit, and stale-capture release plus the existing 200 ms disarm. No Scheduler/Live code changed and no OS input was sent. Focused suite: 5 passed; full suite: 108 passed; compileall passed. This adds safety regression coverage, not perception or Active evidence. Physical-note labels remain UNKNOWN, the 122 cross-provider associations remain unverified, and acceptance remains OFFLINE_NOT_PASSED. Details: `output/analysis_v86_autoloop/iteration_0089_safety_boundary_tests/iteration_report.md`.
+
+## Iteration 0090 — post-cleanup Replay smoke
+
+After retiring obsolete cleanup helpers, the full fixed-delay compare Replay processed all 3,159 indexed frames using the same 14 ms synthetic delay, arm window, timestamp source, geometry/calibration, and Engine/Tracker/Timing/Scheduler. Mock downs stayed 342/294/259 and all hard safety counters were zero. Six semantic outputs were byte-identical to iteration 0088; wall-time columns differed and are not a measured-time claim. The full test suite passed 108 tests; both Replay CLI help commands and core import smoke passed. Raw video/index hashes match saved manifests. V85 remains OFFLINE_NOT_PASSED with human physical-note labels UNKNOWN; measured-time results are still the 0088 repeats. Details: `output/analysis_v86_autoloop/iteration_0090_cleanup_audit/iteration_report.md`.
+
+## Iteration 0091 — current exact-trace attribution for unverified rows
+
+The 0086 tracker trace was revalidated against the current full 0090 trace: the decompressed trace SHA-256 is identical, and all 122 current `TRACK_ASSOCIATION_UNVERIFIED` rows exactly join to the trace refinement by case ID, video frame, Legacy key/bbox, and selected V85 local trajectory UID. Trace-visible evidence is 65 evidence-only nearest components (33 effect/artifact, 32 Hold body), 35 accepted components assigned to another V85-local UID, 20 ambiguous/unassigned components, and 2 frames with no spatial component. For the 55 accepted components, the target-trajectory trace dispositions are 13 global-assignment competition, 17 ambiguous detection, 11 edge rejected, and 14 no edge. These are Tracker observations, not proven cross-provider physical ownership; all 122 original causes remain unverified. No source or root-cause stage changed. See `output/analysis_v86_autoloop/iteration_0091_tracker_rebase/`.
+
+## Iteration 0092 — foreign-UID spatial trajectory audit
+
+A read-only exact-frame join of the 35 cases whose accepted V85 component was assigned to a different provider-local Tracker UID found: 34/35 components included the Legacy key, 30/35 matched Tap/Hold kind, and 30/35 overlapped at least half the Legacy box's smaller area. Across 228 fresh framewise spatial comparisons in the reference frame and eight preceding frames, the exact-assigned UID ranked among the top spatial candidates 73 times versus 36 for the UID selected by the original trajectory matcher; the exact-assigned UID ranked ahead in 16/35 cases. This supports a Tracker identity/assignment ambiguity mechanism, but does not prove physical ownership.
+
+The exact-assigned UID emitted a same-key V85 Mock down within the auxiliary 80 ms window in 8/35 cases; any V85 UID did so in 12/35. These events were not attributed to the physical note and are not hit or recall evidence. Case `legacy_action_0009` illustrates a reference-frame Tap component assigned to `note:185` while the old matcher selects `note:141`; `note:185` is spatially aligned at the reference frame but remains unconfirmed with `insufficient_motion_or_late_origin`. Physical ownership remains UNKNOWN, and all 35 original rows stay `TRACK_ASSOCIATION_UNVERIFIED`. No source, policy, or Live behavior changed. Details and hashes: `output/analysis_v86_autoloop/iteration_0092_tracker_assignment_diagnostic/`.
+
+## Iteration 0093 — exact association-edge decisions
+
+The 55 accepted components among the 122 association-unverified rows were joined by exact provider/frame/component ID to the sparse Tracker edge trace. The original target trajectory UID had a feasible edge that lost global assignment in 13 cases, a feasible edge left ambiguous in 11, a gate-rejected edge with an ambiguous detection outcome in 6, a rejected edge in 11, and no recorded edge in 14. The trace contains feasible edges for 53/55 components and competing feasible edges for 46/55. These counts prove the Tracker processing branch but not physical identity.
+
+For `legacy_action_0009` at frame 191, the target UID `note:141` has no association edge. The visible spatial component has three feasible edges: `note:185` is selected at cost 0.1713, `note:179` loses global assignment at 0.5357, and `note:186` loses at 0.9813. The detection is assigned to `note:185` but remains unconfirmed. A sequential source/mask contact sheet covers frames 187–195 and overlays those provider-local IDs; the visual label remains provisional and physical identity UNKNOWN. This makes the Tracker identity competition explicit while leaving physical ownership UNKNOWN. No attribution stage or runtime behavior changed. Details and hashes: `output/analysis_v86_autoloop/iteration_0093_tracker_edge_audit/`.
+
+## Iteration 0094 — spatially missing cases inspected
+
+The two rows without an exact-frame spatial component were replayed through the current pixel segmenter from sequential source frames. For frame 1787's 25×4 rectified Legacy L/Hold ROI, all 100 pixels are explicitly UNKNOWN and no Tap/Hold role pixel is present. For frame 2715's 70×20 Legacy K/Tap ROI, the segmenter assigns 396 pixels UNKNOWN and 1,050 to the lane mask, with no Tap/Hold/effect role. It emits no action-role component in that ROI. The selected V85 trajectory UID at frame 2715 is a completed D-key fragment at a distant bbox, so that cross-provider pairing does not establish physical identity. Nine-frame contact sheets and hash-bearing manifests are in `output/analysis_v86_autoloop/iteration_0094_spatial_missing_audit/`.
+
+The second source window contains a cyan panel near the judgment area, but the available image does not settle whether it is the corresponding Tap, a Hold part, or overlapping material. The current masks explicitly abstain; no recovery threshold was changed. Both rows remain UNKNOWN, V85 remains offline, and Live remains Legacy.
+
+## Iteration 0095 — focused human-review packet
+
+Prepared a six-case queue containing the three Assist windows (4.9s, 6.0s, 14.9s), the frame-191 identity-competition case, and spatially missing frames 1787 and 2715. The CSV keeps all physical labels UNKNOWN and links each row to source/mask media; `README.md` defines reviewer-entered values and cautions that UIDs and 80ms proximity are diagnostic only. `review_manifest.json` contains hashes for the queue and all 12 media references. No labels were promoted. See `output/analysis_v86_autoloop/iteration_0095_human_review_packet/`.

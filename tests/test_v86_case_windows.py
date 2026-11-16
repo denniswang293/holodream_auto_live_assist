@@ -1,6 +1,20 @@
 import json
+import gzip
 
 from tools import v86_case_windows as cases
+
+
+def test_read_csv_uses_gzip_sibling_only_when_plain_file_is_missing(tmp_path):
+    plain = tmp_path / "candidate_trace.csv"
+    compressed = tmp_path / "candidate_trace.csv.gz"
+    with gzip.open(compressed, "wt", encoding="utf-8", newline="") as handle:
+        handle.write("provider,video_frame\nv85,7\n")
+
+    assert cases.read_csv(plain) == [{"provider": "v85", "video_frame": "7"}]
+
+    plain.write_text("provider,video_frame\nv85,8\n", encoding="utf-8")
+    assert cases.read_csv(plain) == [{"provider": "v85", "video_frame": "8"}]
+    assert cases.read_csv(tmp_path / "missing.csv") == []
 
 
 def test_selection_uses_indexed_action_categories_slowest_and_first_gap():

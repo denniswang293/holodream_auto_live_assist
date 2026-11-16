@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import ast
 import csv
+import gzip
 import hashlib
 import json
 from collections import defaultdict,Counter
@@ -40,7 +41,18 @@ ACTION_EVENT_PROXIMITY_WINDOW_SECONDS = 0.080
 
 
 def read_csv(path):
-    with path.open(encoding="utf-8-sig",newline="") as f:return list(csv.DictReader(f))
+    # Replay cleanup may retain large CSV artifacts in lossless gzip form.
+    # Prefer the exact requested path so existing callers and precedence stay
+    # unchanged; use the compressed sibling only when the plain file is absent.
+    if path.exists():
+        stream = path.open("r", encoding="utf-8-sig", newline="")
+    else:
+        compressed_path = path.with_name(path.name + ".gz")
+        if not compressed_path.exists():
+            raise FileNotFoundError(path)
+        stream = gzip.open(compressed_path, "rt", encoding="utf-8-sig", newline="")
+    with stream as f:
+        return list(csv.DictReader(f))
 
 
 def box(value):

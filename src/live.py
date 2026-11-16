@@ -171,7 +171,7 @@ def run_live(args):
             live_frame = Frame(frame.sequence, game_image, frame.captured_at,
                                frame.acquired_at, focused, roi_valid)
             observation = engine.observe(live_frame)
-            info, notes = engine.decide(observation)
+            info, notes = engine.decide(observation,record_decisions=diagnostics.out is not None)
             raw_trace=(raw_identity_trace(engine,observation) if
                        args.identity_trace and diagnostics.out is not None and observation['playing'] else None)
             info['capture_rectangle']=list(region.bounds)

@@ -51,6 +51,8 @@ V85 Tap occlusion can pass the face-visibility gate only for a confirmed, kind-l
 
 Head and tail remain different cap observations. The segmentation masks separate head, continuous body, and tail pixels only when they occur in the current frame; each component carries its evidence and source frame. Tail association retains the existing connected-color path and `terminal_owner_uid` ownership checks. The Engine reports `TAIL_OCCLUDED` when there are no current owned endpoint pixels.
 
+The V85 adapter measures each endpoint's `above`/`below` extent only from the exact local Boolean ROI of its same-frame `connection_group_id`; it does not query the union of all Hold groups. `Detection.evidence` preserves component evidence, positive, negative, and ambiguity tokens, including `physical_owner_not_confirmed_across_frames`. The group ID is frame-local geometric lineage only; it does not prove persistent physical ownership.
+
 For an already held Hold, a new release-time update requires a unique tail owner and a reliable endpoint observation no older than 60ms. Without that evidence no release deadline is extended or invented; an already valid Scheduler deadline remains subject to its existing freeze and update limits, and the Scheduler hard Hold timeout remains the final bound. A head alone never determines Hold duration.
 
 ## Safety boundary

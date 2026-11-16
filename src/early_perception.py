@@ -17,9 +17,11 @@ class EarlyPixelProvider:
     geometry midpoint and records that the zone is provisional.
     """
     def __init__(self, geometry, *, birth_zone_end_y: float | None = None,
-                 record_conversion_trace: bool = False):
+                 record_conversion_trace: bool = False,
+                 include_polygons: bool = True):
         self.geometry = geometry
         self.segmenter = LanePixelSegmenter()
+        self.include_polygons = bool(include_polygons)
         self.birth_zone_end_y = (float(birth_zone_end_y) if birth_zone_end_y is not None
                                  else geometry.top_y + .5*(geometry.hit_y-geometry.top_y))
         self.birth_zone_source = 'multi_run_candidate_audit' if birth_zone_end_y is not None else 'provisional_geometry_midpoint'
@@ -32,19 +34,26 @@ class EarlyPixelProvider:
         self.conversion_trace = []
         self.frame_index = 0
 
+    def ensure_last_labels(self):
+        """Materialize exact full-frame Hold-path labels on first real use."""
+        if self.last_labels is None and self.last_path is not None:
+            _,self.last_labels=cv2.connectedComponents(self.last_path,8)
+        return self.last_labels
+
     def detect(self, normalized_bgr):
         started = time.perf_counter()
         rectified = self.geometry.rectify(normalized_bgr)
         rectify_ms = (time.perf_counter()-started)*1000
         segment_start=time.perf_counter()
-        result=self.segmenter.segment(rectified,self.geometry,frame_index=self.frame_index)
+        result=self.segmenter.segment(rectified,self.geometry,frame_index=self.frame_index,
+                                      include_polygons=self.include_polygons)
         segmentation_ms=(time.perf_counter()-segment_start)*1000
         self.last_result=result;self.last_rect=rectified
         self.last_path=np.zeros(rectified.shape[:2],np.uint8)
         for name in ('hold_head','hold_body','hold_tail'):
             self.last_path|=result.masks[name]
-        _,self.last_labels=cv2.connectedComponents(self.last_path,8)
-        path_binary=self.last_path>0
+        self.last_labels=None
+        group_masks=result.connection_group_masks
         observations=[];drop_count=0
         drop_reasons=[] if self.record_conversion_trace else None
         trace=[] if self.record_conversion_trace else None
@@ -116,12 +125,24 @@ class EarlyPixelProvider:
                 continue
             above=below=0.
             if kind in ('hold_head','hold_tail'):
+                group_data=group_masks.get(component.connection_group_id)
+                left=max(0,x);right=min(rectified.shape[1],x+w)
+                threshold=max(2,.12*w)
+                def group_overlap(yy):
+                    if group_data is None:return 0
+                    gx,gy,gw,gh=group_data[0]
+                    local_y=yy-gy
+                    local_left=max(left,gx)-gx
+                    local_right=min(right,gx+gw)-gx
+                    if local_y<0 or local_y>=gh or local_right<=local_left:return 0
+                    return np.count_nonzero(group_data[1][local_y,local_left:local_right])
                 for step in range(4,85,4):
                     yy=y-step
-                    if yy>=0 and np.count_nonzero(path_binary[yy,max(0,x):min(path_binary.shape[1],x+w)])>=max(2,.12*w):above=step
+                    if yy>=0 and group_overlap(yy)>=threshold:above=step
                     yy=y+h+step
-                    if yy<path_binary.shape[0] and np.count_nonzero(path_binary[yy,max(0,x):min(path_binary.shape[1],x+w)])>=max(2,.12*w):below=step
+                    if yy<rectified.shape[0] and group_overlap(yy)>=threshold:below=step
             evidence=tuple(dict.fromkeys(('v85_early_provider',*component.evidence,*component.positive,
+                *component.negative,*component.ambiguity,
                 'birth_zone' if self.geometry.top_y<=y<=self.birth_zone_end_y else 'below_birth_zone')))
             observations.append(Detection(tuple(map(int,component.bbox)),component.color,kind,keys,
                 min(1.,max(0.,quality)),component.component_id,above,below,

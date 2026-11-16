@@ -1,8 +1,20 @@
+import gzip
+
 from tools.attribute_lane_action_losses import (
     cross_score, linked_component, classify_case, classify_at_reference_frame,
-    nearest_action_event, find_alternate_same_key_action,
+    nearest_action_event, find_alternate_same_key_action, read_csv,
     classify_with_association_collision,
 )
+
+
+def test_read_csv_uses_compressed_sibling_when_plain_csv_is_missing(tmp_path):
+    compressed = tmp_path / "decisions.csv.gz"
+    with gzip.open(compressed, "wt", encoding="utf-8", newline="") as stream:
+        stream.write("video_frame,note_uid\n17,track-1\n")
+
+    assert read_csv(tmp_path / "decisions.csv") == [
+        {"video_frame": "17", "note_uid": "track-1"}
+    ]
 
 
 def test_wrong_key_event_within_auxiliary_window_is_paired():

@@ -109,3 +109,54 @@ The incomplete first-run MP4 at `output/analysis_v86_autoloop/iteration_0051/edg
 ## User-requested cleanup retry and BAT handoff
 
 On 2026-11-15, a second exact-target removal attempt was again rejected by execution policy before execution. Following the user's newer request, `tools/cleanup_iteration_0050_draft.bat` was added as an explicit manual handoff for this single derived folder. Its default mode previews; `--execute` requires typing `Y`, validates workspace markers and the manifest, and refuses unless the target contains exactly the four listed files and no subdirectories. Its preview reported `WOULD_REMOVE`. Execute mode was not run by Codex. The draft therefore remains pending user-run cleanup. No raw recording, Assist, fixture, source, calibration, or corrected evidence path is targeted.
+
+
+## Iteration 0069 generated trial-file cleanup (2026-11-16)
+
+After the 95-test full suite, removed only the empty `placeholder.txt`, the single generated `__pycache__/lane_segmentation_baseline.cpython-312.pyc`, and the now-empty `__pycache__/` directory under `output/analysis_v86_autoloop/iteration_0069_ccl_trial/`. Exact original byte sizes and SHA-256 hashes are in `output/analysis_v86_autoloop/iteration_0069_ccl_trial/cleanup_manifest.csv`. The paired timing CSV, harness, baseline source copy, and trial report remain for reproducibility. Raw recordings were not changed.
+
+
+## Iteration 0070 generated benchmark cache cleanup (2026-11-16)
+
+After the trial was rejected and the full project suite had passed on the restored source, removed only `output/analysis_v86_autoloop/iteration_0070_hsv_views/__pycache__/lane_segmentation_baseline.cpython-312.pyc` and its now-empty cache directory. The exact file size and SHA-256 are recorded in `output/analysis_v86_autoloop/iteration_0070_hsv_views/cleanup_manifest.csv`. The paired benchmark, per-frame results, baseline source, and report remain.
+On 2026-11-16, the user again requested cleanup. `tools/cleanup_v85_candidates.bat --execute` removed `.pytest_cache/`, `src/__pycache__/`, `tests/__pycache__/`, and `tools/__pycache__/`; its preview had listed only those four allowlisted cache directories. Follow-up `Test-Path` checks returned false for all four. Subsequent checks/tests used `python -B` and `-p no:cacheprovider`. No recording, Assist, fixture, source, calibration, or analysis evidence was removed.
+A final evidence-hash audit used plain Python imports and recreated the same four regenerable caches. The approved `tools/cleanup_v85_candidates.bat --execute` was rerun on 2026-11-16; it removed `.pytest_cache/`, `src/__pycache__/`, `tests/__pycache__/`, and `tools/__pycache__/` again. No source, output analysis, recording, Assist, fixture, calibration, or evidence files were deleted. The final filesystem verification confirmed all four paths absent.
+
+## Current exact-path cleanup re-audit after the user requested cleanup (2026-11-16)
+
+The six REMOVE_PENDING analysis-output candidates listed in the inventory are now absent: `output/analysis_v85_early_identity/profile_smoke/`, `birth_audit/`, `visual_before/`, `visual_after/`, `output/analysis_lane_filter_v84_rework/measured_realtime_partial600/`, and `multi_latency_partial_600/`; filesystem checks found no matching directories. No removal was performed for those entries in this pass because they were already absent. The preserved replacements/canonical data remain in their separate current paths.
+
+The two exact derived-render cleanup BAT previews were also run: `tools/cleanup_iteration_0050_draft.bat` reported the old `source_window_361_385/` draft ABSENT, and `tools/cleanup_iteration_0051_failed_render.bat` reported the incomplete `edge_recovery_ab_361_385/` folder ABSENT. The corrected 0050 window and complete 0051 render directories are retained. No removal was performed for these absent targets.
+
+After the final evidence audit recreated only the four cache directories, `tools/cleanup_v85_candidates.bat --execute` removed exactly `.pytest_cache/`, `src/__pycache__/`, `tests/__pycache__/`, and `tools/__pycache__/`; all four were verified absent. The recording and Assist source video/index SHA-256 values still match their manifests. No raw recording, Assist, calibration, fixture, or unique replay evidence was removed.
+
+## User-requested large duplicate cleanup review (2026-11-16)
+
+The user asked to clean the large files discussed in the GitHub push-size review. Two files in `output/analysis_v86_autoloop/iteration_0088_hold_group_extent_repair/fixed_14ms/run_20261106T164049_800126Z/` are byte-identical by SHA-256 to the copies in the report-designated `fixed_14ms_final/` run: `candidate_trace.csv` (139,238,637 bytes; `D1ED7B633C62D21DE52798EA7DA6A2424FD6E6A7DBEA18CEA4B092CD8F30CE82`) and `physical_note_decisions.csv` (306,489,584 bytes; `A48349681D9345437F84D4E4BCA6D5DC916F3B129939B31C8CDF7E0695316F46`). A direct exact-path deletion was rejected by the local execution policy, so no file was deleted. The user had previously requested a BAT handoff if direct cleanup could not be completed; `tools/cleanup_iteration_0088_duplicate_replays.bat` was added for these two files only. Its default preview verified both hashes and listed only these duplicates. Execute mode rechecks each candidate against its SHA-256, verifies the retained counterpart, requires interactive `Y`, and uses file-level deletion. The `fixed_14ms_final/` copies are retained. Large raw recording videos were not touched.
+
+## Cache cleanup after iteration 0089 (2026-11-16)
+
+After adding and running the 0089 safety-boundary tests, `tools/cleanup_v85_candidates.bat --execute` exited 0. It removed exactly `src/__pycache__/`, `tests/__pycache__/`, and `tools/__pycache__/`; `.pytest_cache/` was already absent. Follow-up checks found all four allowlisted cache paths absent. The two 0088 duplicate CSV candidates and all Replay evidence were not targeted in this cleanup pass; raw recording and Assist data remain untouched.
+
+## Cleanup-helper re-audit after iteration 0089 (2026-11-16)
+
+Exact target rechecks confirmed the 0050 draft folder, 0051 failed-render folder, and both 0054 debug-rerun folders are absent. Their corresponding manual BAT helpers have been removed because they no longer have a target; the historical reports retain their original preview/cleanup outcomes. `cleanup_oversized_run_artifacts.bat` and `.ps1` were also removed: they enumerated every file of at least 50 MiB under `output/assist/run_*`, which conflicts with this plan's explicit preservation of all Assist-run material. No Assist or Replay data files were deleted by those helpers. These five helper files were removed after reference checks; their byte sizes were not recorded before removal. No Git command was run. `cleanup_v85_candidates.bat`, `cleanup_generated_caches.bat`, and the hash-guarded 0088 duplicate-file handoff remain.
+
+Current exact-path status for the former manual targets: `output/analysis_v86_autoloop/iteration_0050/source_window_361_385/` ABSENT; `output/analysis_v86_autoloop/iteration_0051/edge_recovery_ab_361_385/` ABSENT; `output/analysis_v86_autoloop/iteration_0054/assist_v85_debug/` and `assist_v85_debug2/` ABSENT. Raw recordings and Assist runs remain preserved.
+
+After iteration 0090 regenerated a complete fixed Replay, the exact-hash duplicate handoff `tools/cleanup_iteration_0088_duplicate_replays.bat` was updated. Its default preview verified the following four files against the retained `iteration_0088_hold_group_extent_repair/fixed_14ms_final/` copies, and would remove only these duplicates:
+
+| Duplicate path suffix | Bytes per copy | SHA-256 | Status |
+|---|---:|---|---|
+| `candidate_trace.csv` in 0088 `fixed_14ms/` and 0090 `fixed_14ms/` | 139,238,637 | `D1ED7B633C62D21DE52798EA7DA6A2424FD6E6A7DBEA18CEA4B092CD8F30CE82` | Preview verified; not removed |
+| `physical_note_decisions.csv` in 0088 `fixed_14ms/` and 0090 `fixed_14ms/` | 306,489,584 | `A48349681D9345437F84D4E4BCA6D5DC916F3B129939B31C8CDF7E0695316F46` | Preview verified; not removed |
+
+The canonical 0088 `fixed_14ms_final/` copies and all nonduplicate 0090 Replay summaries are retained. The cleanup BAT execute mode was not run after direct exact-path deletion was rejected by local policy. The extra outputs are under ignored `output/` paths; this local cleanup does not remove Git history or establish push eligibility.
+
+## User-requested duplicate cleanup recheck (2026-11-16)
+
+The hash-guarded cleanup BAT preview was rerun after the user's cleanup request. All four duplicate targets under 0088 `fixed_14ms/` and 0090 `fixed_14ms/` reported ABSENT, so this pass removed no data. The retained 0088 `fixed_14ms_final/` files remain present and match the recorded SHA-256 values: `candidate_trace.csv` (139,238,637 bytes; `D1ED7B633C62D21DE52798EA7DA6A2424FD6E6A7DBEA18CEA4B092CD8F30CE82`) and `physical_note_decisions.csv` (306,489,584 bytes; `A48349681D9345437F84D4E4BCA6D5DC916F3B129939B31C8CDF7E0695316F46`). The older “preview verified; not removed” entry above describes the prior state; the current target state is absent. Raw recording and Assist source paths were not inspected for deletion or modified.
+
+## Cache cleanup after current V85 evidence/documentation audit (2026-11-16)
+
+`tools/cleanup_v85_candidates.bat` preview listed only `src/__pycache__/` as present; `.pytest_cache/`, `tests/__pycache__/`, and `tools/__pycache__/` were absent. Execute mode removed `src/__pycache__/` and exited successfully. Follow-up `Test-Path` checks confirmed all four allowlisted cache directories are absent. No source, output evidence, recording, Assist, fixture, or calibration path was targeted.

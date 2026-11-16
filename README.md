@@ -1,4 +1,4 @@
-# HoloDream Assist
+﻿# HoloDream Assist
 
 > **警告：目前工具仍在測試階段，結果不穩定，Tap／Hold 仍可能漏按、早按、晚按或放鍵不準，尚不適合完全無人看管使用。**
 
@@ -95,7 +95,17 @@ python tools/replay_lane_filter.py --run-dir output/recording/run_20261106T16404
 python tools/replay_lane_filter_measured.py --run-dir output/recording/run_20261106T164049_800126Z --out output/analysis_v85_early_identity/measured_realtime --mode compare --simulated-arm-window 1 124 --birth-zone-end-y 176.75
 ```
 
+Regenerate the candidate confirmation / first-commit summary from the existing metrics CSV (no Replay runs):
+
+```powershell
+python tools/summarize_v85_early_stages.py
+```
+
 候選影片與遮罩只保存像素結果；`review_queue.csv` 尚未由真人審核的標籤均為 UNKNOWN。80ms 人工按鍵鄰近度僅為事後輔助診斷，不是遊戲命中率或物理音符召回率。
+
+目前固定／實測 A/B 對照總表在 `output/analysis_v85_early_identity/baseline_vs_candidate.csv`；六個優先連續片段的人工審核包在 `output/analysis_v86_autoloop/iteration_0095_human_review_packet/`。V8.5 驗收仍為 OFFLINE_NOT_PASSED，Live 維持 Legacy。
+
+早期候選確認／first-commit 自動軌跡分組統計見 `output/analysis_v85_early_identity/early_confirmation_stage_metrics.csv`；此表不是人工真值或真音符召回率。
 
 ### V8.6 離線回歸流程
 
@@ -108,3 +118,7 @@ python tools/v86_autoloop.py --quick
 ```
 
 `--full` 會跑完整 fixed 14ms A/B、兩次 measured-time A/B、action attribution、所有完整本機 Run 的自動候選掃描與來源對齊片段；候選掃描可能耗時較長。詳細結果與未通過項目見 `docs/V86_AUTONOMOUS_RESULT.md`、`docs/V86_EVALUATION.md`。完整 replay 輸出集中於 `output/analysis_v86_autoloop/`；原始 Run 唯讀，模型候選及視覺審核佇列不能當作人工真值。
+
+
+
+

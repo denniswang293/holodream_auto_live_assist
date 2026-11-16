@@ -1,4 +1,4 @@
-# V8.5 Evaluation
+﻿# V8.5 Evaluation
 
 Date: 2026-11-15. All replay output is offline and uses `MockActuator`; no OS input was sent. Original `output/recording/run_*` and `output/assist/run_*` files were read-only.
 
@@ -61,3 +61,19 @@ The candidate-to-confirm tables report per-run, color, and semantic hint. They d
 - Historical 4.9s, 6.0s, and 14.9s assist windows are represented in the offline review/render output; automated masks alone do not establish note truth.
 
 Reproduce with the fixed and measured commands in `README.md`; use the exact birth-zone argument for byte-for-byte comparable configuration. For action attribution, run `tools/attribute_lane_action_losses.py --candidate-provider v85` against the corresponding fixed replay folder.
+
+## Current consolidated comparison and attribution follow-up (2026-11-16)
+
+`baseline_vs_candidate.csv` at this directory's root consolidates the post-optimization fixed-delay and measured-time A/B rows while keeping their clocks separate. Fixed-delay uses a shared 14ms logical delay and processes all 3,159 frames; measured-time uses measured processing, latest-frame admission, and records drops/stale pauses. Its 80ms human-key proximity field is posthoc diagnostic only, not physical-note recall or game hit rate. Per-mode source CSVs and `replay_summary.json` remain the detailed evidence.
+
+Iterations 0091–0094 refined the 122 action-attribution rows that remain `TRACK_ASSOCIATION_UNVERIFIED`: exact trace evidence separates effects/Hold-body pixels, cross-UID Tracker assignments, ambiguous or rejected edges, and two frames with no action-role component. These are processing-stage findings; they do not establish physical note ownership. The case-level evidence and limits are documented in `docs/V86_EVALUATION.md` and `output/analysis_v86_autoloop/iteration_0091_tracker_rebase/` through `iteration_0094_spatial_missing_audit/`.
+
+Iteration 0095 provides a six-case source/mask review packet covering Assist 4.9s, 6.0s, 14.9s and three Tracker/loss cases. All physical labels and owners remain UNKNOWN pending review; see `output/analysis_v86_autoloop/iteration_0095_human_review_packet/`. Therefore physical-note recall, ID-switch correctness, Tap/Hold confusion, and Hold head/tail owner accuracy remain `NOT_EVALUABLE`; V8.5 remains `OFFLINE_NOT_PASSED`, with Live on Legacy.
+
+## Candidate-to-confirmation and first-commit timing (2026-11-16)
+
+`early_confirmation_stage_metrics.csv` adds per-run/color/type-hint candidate counts, exact replay-UID joins, confirmation counts, candidate-to-confirmation elapsed-time and y-delta percentiles, and replay-log first-commit elapsed-time percentiles. It is derived from automatically generated candidates, not reviewed physical notes: all rows remain `NOT_EVALUABLE_AUTOMATIC_TRACKS_ONLY`. `commit_at` in the source is the minimum decision capture timestamp across rows whose state is `SCHEDULED`/`HELD`/`PRESSED`/`DONE` or whose identity is `COMMITTED`/`CONSUMED`; this summary therefore calls it a first-commit timestamp and does not claim it is the earliest scheduler-accepted moment. The source does not retain the commit-position value needed for candidate-to-schedule spatial displacement, so `schedule_commit_spatial_delta_status` is `NOT_AVAILABLE_IN_METRICS`. Totals across the four scans are 13,128 candidates, 2,966 confirmed automatic tracks, 4,802 exact replay UID joins, and 202 rows with a first-commit timestamp. These are detector/tracker statistics only, not true-note recall.
+
+The summary is reproducible with `python tools/summarize_v85_early_stages.py`. Its synthetic unit coverage passed: `python -B -m pytest -q -p no:cacheprovider tests/test_summarize_v85_early_stages.py` (3 passed). A second CLI run reproduced the existing output byte-for-byte. This validates the report generator and CSV derivation, not perception quality or physical-note identity.
+
+After adding the report generator tests, the complete test suite passed: `python -B -m pytest -q -p no:cacheprovider` (111 passed). This validates code/fixture regressions, but does not change the UNKNOWN human-review labels or V8.5 acceptance status. Live remains on Legacy and the Scheduler limits are unchanged.

@@ -40,3 +40,21 @@ def test_trace_records_gate_rejection_and_new_cap_birth_without_relabeling_it():
     assert any("lane_center_gate" in reason for reason in reasons)
     assert "born_new_cap" in outcomes
 
+
+def test_per_detection_gate_trace_preserves_rejected_color_evidence():
+    tracker=Tracker(Geometry("config/geometry_live_assist.json",plane_width=360))
+    tracker.update([_tap(y=60)],3.0)
+    tracker.trace_associations=True
+    pink=Detection((42,67,40,14),"pink","tap",("D",),.9,
+        component=3,plane_width=360,evidence=("test_real_pixel",),
+        semantic_candidate="tap",face_quality=.9,full_face=True,birth_zone=True)
+
+    tracker.update([_tap(y=67,component=2),pink],3.03)
+
+    edges={row["detection_index"]:row for row in tracker.association_trace
+           if row.get("trace_type")=="association_edge" and row.get("cap_uid")=="cap:1"}
+    assert edges[0]["edge_reason"]=="feasible_edge"
+    assert edges[0]["assignment_status"]=="selected"
+    assert edges[1]["edge_reason"]=="color_incompatible"
+    assert edges[1]["assignment_status"]=="edge_rejected"
+
