@@ -646,17 +646,7 @@ class Engine:
 
     @staticmethod
     def _tap_identity_gate(note, captured_at):
-        """Keep Legacy behavior; permit only short, proven V85 face occlusion."""
-        v85=bool(note.birth_info and 'v85_early_provider' in note.birth_info.evidence)
-        if not v85:
-            return (note.detection.kind!='tap' and not
-                    (note.detection.kind=='plate_fragment' and
-                     0<=captured_at-note.last_full_tap_at<=.14))
-        observed_now=note.last_seen==captured_at and note.detection.kind=='tap'
-        if observed_now:return False
-        age=captured_at-note.last_seen
-        face_age=captured_at-note.last_verified_full_face_at
-        return not (note.confirmed and note.kind_locked and
-                    note.visibility_state=='CONFIRMED_OCCLUDED' and
-                    0<=age<=.12 and 0<=face_age<=.12 and
-                    note.birth_info.birth_zone and math.isfinite(note.last_verified_full_face_at))
+        """Reject ambiguous tap identities, allowing only brief plate fragments."""
+        return (note.detection.kind!='tap' and not
+                (note.detection.kind=='plate_fragment' and
+                 0<=captured_at-note.last_full_tap_at<=.14))

@@ -35,8 +35,8 @@ class Tracker:
     def __init__(self,geometry):
         self.geometry=geometry;self.next_id=1;self.caps={};self.notes={};self.retired=deque(maxlen=128)
         self.last_timestamp=float('-inf');self.audit=[]
-        # Opt-in offline diagnostics only. The default hot path allocates no
-        # association trace rows and all matching gates remain unchanged.
+        # Opt-in association diagnostics. The default hot path allocates no
+        # trace rows and all matching gates remain unchanged.
         self.trace_associations=False;self.association_trace=[]
 
     def reset(self):
@@ -491,10 +491,7 @@ class Tracker:
             elif note.color=='green' and cap.votes.get('hold_head',0)>=2:note.kind='hold'
         points=list(note.head)
         span=max(p[1] for p in points)-min(p[1] for p in points)
-        repeated_face=("v85_early_provider" in c.evidence and c.full_face and
-            ((note.kind=='tap' and cap.votes.get('tap',0)>=2) or
-             (note.kind=='hold' and c.connected_ribbon and note.full_head_observations>=2)))
-        enough_observations=(len(points)>=3 or (len(points)>=2 and repeated_face))
+        enough_observations=len(points)>=3
         note.confirmed=bool(note.confirmed or (enough_observations and points[-1][0]-points[0][0]>=.045 and span>=5 and
                         note.origin_y<=self.geometry.hit_y-45 and
                         np.mean(np.diff([p[1] for p in points])>=-2)>=.8))

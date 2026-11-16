@@ -3,58 +3,13 @@ from __future__ import annotations
 
 import csv
 import copy
-import base64
-from dataclasses import asdict
 import json
 import queue
 import threading
-import zlib
 from pathlib import Path
 
 import cv2
 import numpy as np
-
-
-def raw_identity_trace(engine,observation):
-    """Copy mutable pixels only; encoding belongs to the bounded writer."""
-    ensure_labels=getattr(engine.perception,'ensure_last_labels',None)
-    if ensure_labels is not None:ensure_labels()
-    planes={name:np.array(value,copy=True) for name,value in
-            [('labels',engine.perception.last_labels),('path',engine.perception.last_path)] if value is not None}
-    return dict(schema=1,tracker='one_to_one',
-                detections=tuple(observation['detections']),planes=planes,
-                ownership_events=copy.deepcopy(engine.tracker.audit))
-
-
-def pack_identity_trace(raw):
-    """Lossless diagnostic payload, never passed through display truncation."""
-    planes={}
-    for name,value in raw['planes'].items():
-        planes[name]=dict(shape=list(value.shape),dtype=value.dtype.str,
-                          zlib_b64=base64.b64encode(zlib.compress(value.tobytes(),1)).decode('ascii'))
-    return dict(schema=raw['schema'],tracker=raw['tracker'],
-                candidates=[asdict(d) for d in raw['detections']],
-                ownership_events=raw['ownership_events'],planes=planes,
-                association_recording='recompute_offline_from_raw_candidates')
-
-
-def trace_planes(trace, shape):
-    """Decode bounded current-frame arrays; reject incomplete/mismatched traces."""
-    result={}
-    for name,item in trace.get('planes',{}).items():
-        if name not in ('labels','path') or tuple(item['shape'])!=tuple(shape):
-            raise ValueError('Identity trace shape/name mismatch')
-        dtype=np.dtype(item['dtype'])
-        if dtype not in (np.dtype('int32'),np.dtype('uint8')):
-            raise ValueError('Unsupported identity trace array type')
-        size=int(np.prod(shape))*dtype.itemsize
-        decoder=zlib.decompressobj()
-        raw=decoder.decompress(base64.b64decode(item['zlib_b64'],validate=True),size+1)
-        if len(raw)!=size or not decoder.eof or decoder.unused_data:
-            raise ValueError('Incomplete/oversized identity trace')
-        result[name]=np.frombuffer(raw,dtype=dtype).reshape(shape).copy()
-    if set(result)!={'labels','path'}:raise ValueError('Missing current-frame identity planes')
-    return result
 
 
 class Diagnostics:
@@ -104,10 +59,10 @@ class Diagnostics:
             self._error = RuntimeError("Diagnostics action queue overflow (4096 rows)")
             return False
 
-    def frame(self, image, info: dict, notes: list[dict], *, raw_trace=None):
+    def frame(self, image, info: dict, notes: list[dict]):
         if self.out is None: return False
         if self._error: return False
-        packet = (np.array(image, copy=True), _display_copy(info), _display_copy(notes),raw_trace)
+        packet = (np.array(image, copy=True), _display_copy(info), _display_copy(notes))
         with self._condition:
             if self._closing: return False
             if self._latest is not None: self._frame_overwrites += 1
@@ -146,8 +101,7 @@ class Diagnostics:
                                            "payload_json": self._json({k: v for k, v in row.items() if k not in standard})})
                     self._action_count += 1
                 if packet is not None:
-                    image, info, notes,raw_trace = packet
-                    if raw_trace is not None:info['identity_trace']=pack_identity_trace(raw_trace)
+                    image, info, notes = packet
                     if image.shape != (404, 720, 3): raise ValueError("Diagnostics frames must be 720x404 BGR")
                     if frame_csv is None:
                         frame_csv = self._csv("frames.csv", ["encoded_frame", "source_frame", "captured_at", "acquired_at", "info_json", "notes_json"]); files.append(frame_csv[0])

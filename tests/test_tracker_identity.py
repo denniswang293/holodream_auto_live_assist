@@ -8,12 +8,10 @@ from src.tracking import Tracker
 from src.timing import Estimate
 
 
-def _tap(y, *, t=0.0, pending=False):
-    return Detection((42, y, 40, 14), 'neutral' if pending else 'cyan',
-        'plate_fragment' if pending else 'tap', ('D',), .9, plane_width=360,
-        evidence=('v85_early_provider', 'neutral_full_face_candidate') if pending else
-                 ('v85_early_provider', 'current_frame_hsv_chroma'),
-        semantic_candidate='pending' if pending else 'tap', face_quality=.9,
+def _tap(y):
+    return Detection((42, y, 40, 14), 'cyan', 'tap', ('D',), .9, plane_width=360,
+        evidence=('legacy_perception', 'current_frame_hsv_chroma'),
+        semantic_candidate='tap', face_quality=.9,
         full_face=True, birth_zone=True)
 
 
@@ -62,43 +60,6 @@ def test_birth_identity_is_immutable_and_occlusion_never_becomes_observation():
     tracker.update([],10.23,image_path,image_path)
     assert note.visibility_state=='AMBIGUOUS_ASSOCIATION'
     assert note.last_seen==10.06
-
-
-def test_neutral_full_face_stays_type_pending_without_positive_tap_evidence():
-    tracker=Tracker(Geometry('config/geometry_live_assist.json',plane_width=360))
-    for t,y in ((20.0,60),(20.03,67),(20.06,75)):
-        tracker.update([_tap(y,pending=True)],t)
-    note=next(iter(tracker.notes.values()))
-    assert note.confirmed
-    assert note.kind=='pending'
-    assert note.identity_state=='CANDIDATE'
-    tracker.update([_tap(83,pending=True)],20.09)
-    assert note.kind=='pending'
-    assert not note.kind_locked
-    assert note.confirmed
-
-
-def test_engine_never_offers_an_unresolved_type_pending_note():
-    geometry=Geometry('config/geometry_live_assist.json',plane_width=360)
-    actuator=MockActuator();scheduler=Scheduler(actuator,clock=lambda:30.0)
-    engine=Engine(geometry,scheduler,'config/reference_timing.json')
-    engine.profile_note_iterations=True
-    note=Note('note:pending','pending','neutral',_tap(75,pending=True))
-    note.head.append((30.,82.,.1,.22));note.confirmed=True
-    engine.tracker.notes[note.uid]=note
-    frame=Frame(1,np.zeros((720,1280,3),np.uint8),30.,30.)
-    info,decisions=engine.decide({'frame':frame,'playing':True,'notes':[note],
-        'detections':[],'cpu_ms':0.,'image':frame.image},processed_at=30.)
-    assert decisions[0]['reason']=='type_pending'
-    assert engine.last_decision_profile['note_count']==1
-    assert engine.last_decision_profile['decision_row_count']==1
-    assert engine.last_decision_profile['total_decide_ms']>=engine.last_decision_profile['per_note_decision_loop_ms']
-    assert engine.last_decision_profile['slowest_note_row_build_ms']>=0
-    assert engine.last_decision_profile['slowest_note_action_logic_ms']>=0
-    assert engine.last_decision_profile['slowest_note_uid_state_lookup_ms']>=0
-    assert engine.last_decision_profile['slowest_note_finalize_ms']>=0
-    assert not scheduler.pending
-    assert not actuator.calls
 
 
 def test_scheduler_uid_state_flags_match_full_snapshot_without_exposing_history():

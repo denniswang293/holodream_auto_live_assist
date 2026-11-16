@@ -57,22 +57,16 @@ python -m src.live --help
 
 一般紀錄包含 `actions.csv`、`frames.csv`、`note_decisions.csv`、`session.json` 與 `summary.json`；開啟錄影時另保存 `live_source.mp4`、`live_overlay.mp4` 及 `live_video_index.csv`。影片時間以 index 中的 capture timestamp 為準，不能以影格編號除以標稱 FPS 代替。
 
-需要額外的原始候選與色帶量測時：
-
-```powershell
-python -m src.live --record-overlay --identity-trace
-```
-
-Trace 由背景執行緒編碼，會增加紀錄量；一般啟動器不預設開啟。`--no-logs` 會停用所有檔案輸出。程式送出 key-down／key-up 不等於遊戲成功命中，命中率需以可確認的遊戲判定驗證。
+`--no-logs` 會停用所有檔案輸出。程式送出 key-down／key-up 不等於遊戲成功命中，命中率需以可確認的遊戲判定驗證。
 
 ## 專案結構
 
 ```text
 config/       幾何與時間設定
 src/          唯一 Assist 核心
-tests/        Tap、Hold、診斷格式與安全回歸測試
+tests/        執行核心的 Tap、Hold、追蹤與安全回歸測試
 tools/        一般與無紀錄啟動器
-output/       本機錄影、執行紀錄與既有分析資料
+output/       保留的原始錄影；Assist 紀錄於執行時建立
 ```
 
 核心流程：`live → capture → perception → tracking → timing → engine → scheduler → Windows input`。`diagnostics` 在背景保存可選紀錄；幾何及共享資料型別由 `model` 管理。
@@ -86,39 +80,7 @@ python -B -m pytest -q -p no:cacheprovider
 
 測試使用 Mock 輸入及小型真實影格 fixture，不會操作遊戲，也不依賴 `output/` 中的歷史資料。
 
-## V8.5 離線候選評估
+## 離線實驗資料
 
-V8.5 EarlyPixelProvider 僅供離線實驗，Live 預設仍使用 Legacy Perception。完整結果、未知案例與限制見 `docs/V85_IMPLEMENTATION_RESULT.md` 和 `docs/V85_EVALUATION.md`。固定模擬延遲與實測即時處理是兩個不同實驗：
-
-```powershell
-python tools/replay_lane_filter.py --run-dir output/recording/run_20261106T164049_800126Z --out output/analysis_v85_early_identity/fixed_14ms --mode compare --latency-ms 14 --simulated-arm-window 1 124 --birth-zone-end-y 176.75
-python tools/replay_lane_filter_measured.py --run-dir output/recording/run_20261106T164049_800126Z --out output/analysis_v85_early_identity/measured_realtime --mode compare --simulated-arm-window 1 124 --birth-zone-end-y 176.75
-```
-
-Regenerate the candidate confirmation / first-commit summary from the existing metrics CSV (no Replay runs):
-
-```powershell
-python tools/summarize_v85_early_stages.py
-```
-
-候選影片與遮罩只保存像素結果；`review_queue.csv` 尚未由真人審核的標籤均為 UNKNOWN。80ms 人工按鍵鄰近度僅為事後輔助診斷，不是遊戲命中率或物理音符召回率。
-
-目前固定／實測 A/B 對照總表在 `output/analysis_v85_early_identity/baseline_vs_candidate.csv`；六個優先連續片段的人工審核包在 `output/analysis_v86_autoloop/iteration_0095_human_review_packet/`。V8.5 驗收仍為 OFFLINE_NOT_PASSED，Live 維持 Legacy。
-
-早期候選確認／first-commit 自動軌跡分組統計見 `output/analysis_v85_early_identity/early_confirmation_stage_metrics.csv`；此表不是人工真值或真音符召回率。
-
-### V8.6 離線回歸流程
-
-V8.6 用於因果 Replay、逐動作損失歸因、來源 index 對齊的審核片段與效能摘要；不會切換 Live Perception，也不會送出 OS 按鍵。先用 `--dry-run` 檢查選中的 Run 和輸出命令：
-
-```powershell
-python tools/v86_autoloop.py --quick --dry-run
-python tools/v86_autoloop.py --full --dry-run
-python tools/v86_autoloop.py --quick
-```
-
-`--full` 會跑完整 fixed 14ms A/B、兩次 measured-time A/B、action attribution、所有完整本機 Run 的自動候選掃描與來源對齊片段；候選掃描可能耗時較長。詳細結果與未通過項目見 `docs/V86_AUTONOMOUS_RESULT.md`、`docs/V86_EVALUATION.md`。完整 replay 輸出集中於 `output/analysis_v86_autoloop/`；原始 Run 唯讀，模型候選及視覺審核佇列不能當作人工真值。
-
-
-
+V8.4–V8.6 的 Replay、候選 Perception、分割器、歸因與 Profiling 工具，以及其專用測試、fixtures 和歷史報告已清除。Live 使用 `src/perception.py` 的 Legacy Perception；此專案保留的是執行 Assist 所需程式與核心回歸測試。清理範圍記錄於 `docs/PROJECT_CLEANUP_MANIFEST.md`。
 
