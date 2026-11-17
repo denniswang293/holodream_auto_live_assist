@@ -16,6 +16,7 @@ live = [
   "mss>=9.0; sys_platform == 'win32'",
   "dxcam>=0.0.5; sys_platform == 'win32'",
 ]
+geometry-video = ["av>=16,<17"]
 
 [tool.setuptools.packages.find]
 include = ["src*"]

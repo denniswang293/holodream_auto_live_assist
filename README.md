@@ -1,4 +1,4 @@
-﻿# HoloDream Assist
+# HoloDream Assist
 
 > **警告：目前工具仍在測試階段，結果不穩定，Tap／Hold 仍可能漏按、早按、晚按或放鍵不準，尚不適合完全無人看管使用。**
 
@@ -44,6 +44,24 @@ python -m src.live --list-windows
 python -m src.live --help
 ```
 
+## Geometry Scene V2 — 離線純幾何重建
+
+目前 8 場完整結果位於 `output/geometry_scene_v2/runs/<run_id>/`。請先看 [`docs/GEOMETRY_SCENE_V2_RESULT.md`](docs/GEOMETRY_SCENE_V2_RESULT.md)；狀態為 `REVIEW_REQUIRED`，Scene 分類及校準仍屬 provisional。來源錄影保持唯讀；幾何 renderer 只讀 Scene JSON 和時間索引，不連接 Live、Scheduler 或鍵盤。
+
+每個 Run 的 `geometry.mp4` 是純幾何畫面；`comparison.mp4` 左側是原片，右側是重建。重跑來源觀測和 Scene 重建：
+
+```powershell
+python -B -m tools.geometry_scene_observe --recording-root output/recording --inventory output/geometry_scene_v2/inventory.csv --frame-index output/geometry_scene_v2/frame_index.csv --out output/geometry_scene_v2/runs
+```
+
+從既有 Scene 與 frame index 重渲染單一 Run（不開啟原片）：
+
+```powershell
+python -B -m tools.geometry_scene_cli render-timeline --scene output/geometry_scene_v2/runs/<run_id>/scene.json --frame-index output/geometry_scene_v2/frame_index.csv --run-id <run_id> --out output/geometry_scene_v2/runs/<run_id>/geometry.mp4
+```
+
+影片時間採來源 index 的 acquired timestamp。完整影片輸出需要安裝 `geometry-video` optional dependency（PyAV）。
+
 ## 設定與紀錄
 
 | 位置 | 用途 |
@@ -65,8 +83,8 @@ python -m src.live --help
 config/       幾何與時間設定
 src/          唯一 Assist 核心
 tests/        執行核心的 Tap、Hold、追蹤與安全回歸測試
-tools/        一般與無紀錄啟動器
-output/       保留的原始錄影；Assist 紀錄於執行時建立
+tools/        Assist launchers and isolated Geometry Scene V2 reconstruction tools
+output/       Raw recordings, Assist logs, and Geometry Scene V2 artifacts
 ```
 
 核心流程：`live → capture → perception → tracking → timing → engine → scheduler → Windows input`。`diagnostics` 在背景保存可選紀錄；幾何及共享資料型別由 `model` 管理。
